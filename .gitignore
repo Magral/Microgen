@@ -1,0 +1,6 @@
+.godot/
+build/
+*.keystore
+*.log
+__pycache__/
+*.pyc

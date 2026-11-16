@@ -1,0 +1,141 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Test source importer
+        run: python3 -m unittest discover -s ci -p 'test_import_source.py' -v
+
+      - name: Import uploaded source archive
+        id: source
+        run: python3 ci/import_source.py --root . --report "$RUNNER_TEMP/microgen-import.json"
+
+      - name: Waiting for source
+        if: steps.source.outputs.ready != 'true'
+        run: |
+          echo '## Ожидание исходников' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Загрузите Microgen-0.1.0-source.zip в корень репозитория. Следующий запуск импортирует проект и соберёт APK.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Save imported project in repository
+        if: steps.source.outputs.imported == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          printf '\n__pycache__/\n*.pyc\n' >> .gitignore
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add --all
+          if [ -f tools/development.keystore ]; then
+            git add -f tools/development.keystore
+          fi
+          git commit -m 'Import original Microgen source archive'
+          git push origin HEAD:main
+
+      - name: Set up Java 17
+        if: steps.source.outputs.ready == 'true'
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install official Godot and Android templates
+        if: steps.source.outputs.ready == 'true'
+        run: python3 ci/setup_godot.py
+
+      - name: Prepare graphical tests
+        if: steps.source.outputs.ready == 'true'
+        run: |
+          if ! command -v xvfb-run >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y xvfb
+          fi
+
+      - name: Import Godot resources
+        if: steps.source.outputs.ready == 'true'
+        run: |
+          mkdir -p build/logs
+          godot --headless --editor --path . --import --quit 2>&1 | tee build/logs/import.log
+
+      - name: Configure Android SDK
+        if: steps.source.outputs.ready == 'true'
+        run: python3 ci/configure_android.py
+
+      - name: Test game and native touch input
+        if: steps.source.outputs.ready == 'true'
+        run: python3 ci/run_tests.py
+
+      - name: Build signed test APK
+        if: steps.source.outputs.ready == 'true'
+        run: |
+          godot --headless --path . --export-debug Android build/Microgen.apk 2>&1 | tee build/logs/export.log
+          test -s build/Microgen.apk
+          if grep -Eq 'SCRIPT ERROR:|ERROR:' build/logs/export.log; then
+            exit 1
+          fi
+          "$ANDROID_HOME/build-tools/35.0.1/apksigner" verify --verbose build/Microgen.apk
+          "$ANDROID_HOME/build-tools/35.0.1/aapt" dump badging build/Microgen.apk > build/APK_METADATA.txt
+          "$ANDROID_HOME/build-tools/35.0.1/aapt" dump permissions build/Microgen.apk > build/APK_PERMISSIONS.txt
+          if grep -Eq 'android.permission.(INTERNET|ACCESS_NETWORK_STATE)' build/APK_PERMISSIONS.txt; then
+            echo 'Unexpected network permission in offline game'
+            exit 1
+          fi
+          git rev-parse HEAD > build/SOURCE_COMMIT.txt
+          git archive --format=zip --prefix=Microgen/ -o build/Microgen-source.zip HEAD
+          cd build
+          sha256sum Microgen.apk Microgen-source.zip > SHA256SUMS.txt
+
+      - name: Upload APK and sources
+        if: steps.source.outputs.ready == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Microgen-android-${{ github.run_number }}
+          path: |
+            build/Microgen.apk
+            build/Microgen-source.zip
+            build/SHA256SUMS.txt
+            build/SOURCE_COMMIT.txt
+            build/APK_METADATA.txt
+            build/APK_PERMISSIONS.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish test release
+        if: steps.source.outputs.ready == 'true' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="test-$GITHUB_RUN_NUMBER-$GITHUB_RUN_ATTEMPT"
+          gh release create "$tag" build/Microgen.apk build/Microgen-source.zip build/SHA256SUMS.txt \
+            --target "$(git rev-parse HEAD)" \
+            --title "Микроген · тестовая сборка $GITHUB_RUN_NUMBER" \
+            --notes 'Автоматическая тестовая сборка. Номер версии указан в приложении. Проверки и подпись выполнены в GitHub Actions; физический Android-телефон не проверялся.' \
+            --prerelease
+          echo '## APK собран' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Скачайте APK в разделе Releases или артефактах этого запуска.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload diagnostic logs
+        if: always() && steps.source.outputs.ready == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Microgen-logs-${{ github.run_number }}
+          path: build/logs
+          if-no-files-found: warn
+          retention-days: 14
