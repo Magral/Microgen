@@ -1,12 +1,22 @@
-# Микроген — первая игровая версия 0.1.0
+# Микроген — первая игровая версия 0.2.0
 
-Офлайн-игра для Android: управляй амёбой, поглощай ДНК и собирай синергии органов. Название рабочее. Графика временная; художественные эскизы обсуждаются отдельно.
+Офлайн-игра для Android: управляй амёбой, поглощай ДНК и собирай синергии органов. Название рабочее. Внешность создаётся игровым генератором из отдельных частей. Это первое внедрение направления B+C; детализация проще концепт-иллюстраций.
 
 ## Установка
 
-Установить `Microgen-0.1.0.apk` на Android 7.0 и новее, 64-битный ARM (arm64-v8a). На телефоне при необходимости разрешить установку из выбранного браузера или файлового менеджера. Интернет, аккаунт и системные разрешения не нужны. Данные сохраняются внутри приложения.
+Установить `Microgen-0.2.0.apk` на Android 7.0 и новее, 64-битный ARM (arm64-v8a). На телефоне при необходимости разрешить установку из выбранного браузера или файлового менеджера. Интернет, аккаунт и системные разрешения не нужны. Данные сохраняются внутри приложения.
 
 Это подписанная тестовая сборка. Она не публиковалась в Google Play. На физическом Tecno POVA 5 ещё не проверялась; плавность и удобство требуют проверки на устройстве.
+
+## Новое в 0.2.0
+
+Шесть семейств тел, восемь палитр, разные ядра и мембраны смешиваются с органами. Органы соответствуют установленным способностям.
+Противники получают до трёх дополнительных мутаций: оболочку, скорость, регенерацию, токсичные железы и споры. Сочетания ограничены в начале забега.
+В меню добавлена «Случайные формы · коллекция»: 12 организмов и кнопка «Смешать ещё».
+
+Обновление поддерживает постоянный геном и текущие забеги версии 0.1.0. Для старых организмов внешность достраивается по seed; подпись APK и package name сохранены.
+
+[Скачать APK](https://github.com/Magral/Microgen/releases) · [Проверки и сборки](https://github.com/Magral/Microgen/actions)
 
 ## Что уже есть
 
@@ -39,6 +49,7 @@ Godot 4.6.3 Standard, GDScript. Открыть `project.godot`, дождатьс
 ```bash
 godot --headless --editor --path . --import --quit
 godot --headless --path . --script tests/test_core.gd
+godot --headless --path . --script tests/test_genome.gd
 godot --headless --path . --script tests/test_simulation.gd
 godot --headless --path . --script tests/test_ui.gd
 godot --path . --script tests/test_touch.gd
@@ -54,10 +65,10 @@ godot --path . --script tests/test_touch.gd
 
 ```bash
 mkdir -p build
-godot --headless --path . --export-debug Android build/Microgen-0.1.0.apk
+godot --headless --path . --export-debug Android build/Microgen-0.2.0.apk
 ```
 
-Проверка подписи: `apksigner verify --verbose build/Microgen-0.1.0.apk`.
+Проверка подписи: `apksigner verify --verbose build/Microgen-0.2.0.apk`.
 
 Официальные источники по экспорту: https://docs.godotengine.org/en/4.6/tutorials/export/exporting_for_android.html и https://docs.godotengine.org/en/4.6/classes/class_editorexportplatformandroid.html .
 

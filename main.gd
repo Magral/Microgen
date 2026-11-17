@@ -5,6 +5,9 @@ const HUD = preload("res://ui/hud.gd")
 const Save = preload("res://core/save_store.gd")
 const Catalog = preload("res://core/catalog.gd")
 const Map = preload("res://ui/minimap.gd")
+const Genome = preload("res://core/genome.gd")
+const Specimen = preload("res://ui/specimen_view.gd")
+const Painter = preload("res://game/organism_painter.gd")
 var store = Save.new()
 var sim
 var view
@@ -26,6 +29,8 @@ var capture_path = ""
 var capture_mode = ""
 var capture_elapsed = 0.0
 var sound_enabled = true
+var gallery_seed = 1729
+var gallery_painter
 var sound_player: AudioStreamPlayer
 
 func _ready():
@@ -47,6 +52,9 @@ func _ready():
 		if argument.begins_with("--capture="): capture_path = argument.trim_prefix("--capture=")
 		if argument.begins_with("--preview="): capture_mode = argument.trim_prefix("--preview=")
 	if capture_mode != "":
+		if capture_mode=="gallery":
+			show_gallery()
+			return
 		start_run(448221)
 		if capture_mode == "game":
 			for id in ["acid","spikes","pulse","trail"]: sim.build.apply(id)
@@ -144,7 +152,7 @@ func show_menu():
 	sim.paused = true
 	view.sim = sim
 	hud.game_visible(false)
-	var box = hud.open("МИКРОГЕН", "Маленькая жизнь. Непредсказуемая эволюция.\nТестовая версия 0.1.0 · офлайн",740)
+	var box = hud.open("МИКРОГЕН", "Маленькая жизнь. Непредсказуемая эволюция.\nТестовая версия 0.2.0 · офлайн",740)
 	box.add_child(hud.label("Собери организм, который сможет выжить.",25,Color("9ce3cf"),true))
 	box.add_child(hud.label("Исследуй случайный микромир, поглощай ДНК и соединяй мутации. Атаки автоматические — управляй только движением.",20,Color("a3bfc0"),true))
 	if not store.profile.checkpoint.is_empty(): box.add_child(hud.button("Продолжить забег",continue_run,true))
@@ -156,7 +164,41 @@ func show_menu():
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(b)
 	box.add_child(hud.label("Ядра наследия: %d   ·   Забеги: %d   ·   Победы: %d" % [store.profile.cores,store.profile.runs,store.profile.wins],18,Color("ccb2e7")))
-	box.add_child(hud.label("Прототип: 2 области · 8 органов · 4 синергии · босс на 10-й минуте",16,Color("78989f"),true))
+	box.add_child(hud.button("Случайные формы · коллекция",show_gallery))
+	box.add_child(hud.label("2 области · 8 органов · 4 синергии · процедурные организмы",16,Color("78989f"),true))
+
+func show_gallery():
+	set_stage("gallery")
+	hud.game_visible(false)
+	var box = hud.open("Жизнь не повторяется", "Тела, мембраны, ядра и органы смешиваются игровым генератором. Лист можно прокручивать.")
+	var controls = hud.row()
+	box.add_child(controls)
+	controls.add_child(hud.button("Смешать ещё",func(): gallery_seed+=982451; show_gallery(),true))
+	controls.add_child(hud.button("В меню",show_menu))
+	var grid = GridContainer.new()
+	grid.columns = 3
+	grid.add_theme_constant_override("h_separation",12)
+	grid.add_theme_constant_override("v_separation",12)
+	box.add_child(grid)
+	if gallery_painter==null: gallery_painter = Painter.new()
+	var rng = RandomNumberGenerator.new()
+	rng.seed = gallery_seed
+	for i in range(12):
+		var specimen = Specimen.new()
+		specimen.recipe = Genome.create(gallery_seed,i,"specimen",i%2)
+		specimen.number = i+1
+		specimen.painter = gallery_painter
+		specimen.organs = {}
+		var pool = Catalog.ORGANS.keys()
+		for j in range(rng.randi_range(2,4)):
+			var idx = rng.randi_range(0,pool.size()-1)
+			specimen.organs[pool[idx]] = rng.randi_range(1,3)
+			pool.remove_at(idx)
+		if rng.randf()<0.45: specimen.organs.armor = 1
+		if rng.randf()<0.4: specimen.organs.regen = 1
+		specimen.custom_minimum_size = Vector2(280,185)
+		specimen.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		grid.add_child(specimen)
 
 func show_start():
 	set_stage("start")
@@ -204,7 +246,7 @@ func continue_run():
 	if sim.pending_levels>0: show_level()
 
 func save_run():
-	if sim==null or stage in ["menu","start","genome","atlas","help","results"]: return
+	if sim==null or stage in ["menu","start","genome","atlas","help","results","gallery"]: return
 	var next = store.profile.duplicate(true)
 	next.checkpoint = sim.snapshot()
 	for id in sim.build.organs:
@@ -431,7 +473,7 @@ func buy_shop(index: int):
 	show_shop()
 
 func show_pause():
-	if stage in ["menu","start","genome","atlas","help","results"]: return
+	if stage in ["menu","start","genome","atlas","help","results","gallery"]: return
 	set_stage("pause")
 	save_run()
 	var box = hud.open("Пауза", "Организм ждёт. Бой и время остановлены.",700)
@@ -530,7 +572,7 @@ func _notification(what):
 	elif what==NOTIFICATION_WM_GO_BACK_REQUEST:
 		if stage=="game": show_pause()
 		elif stage in ["pause","map","shop"]: resume_game()
-		elif stage in ["genome","atlas","help","start"]: show_menu()
+		elif stage in ["genome","atlas","help","start","gallery"]: show_menu()
 	elif what==NOTIFICATION_WM_CLOSE_REQUEST:
 		save_run()
 		get_tree().quit()

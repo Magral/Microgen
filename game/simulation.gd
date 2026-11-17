@@ -2,6 +2,8 @@ extends RefCounted
 const World = preload("res://game/world.gd")
 const Build = preload("res://core/build_model.gd")
 const Catalog = preload("res://core/catalog.gd")
+const Genome = preload("res://core/genome.gd")
+var player_genome: Dictionary = {}
 var world = World.new()
 var build = Build.new()
 var rng = RandomNumberGenerator.new()
@@ -38,6 +40,7 @@ var last_tile = Vector2i(-100,-100)
 func new_run(seed_value: int, unlocked: Array = Catalog.base_unlocked(), permanent: Dictionary = {}, selected_branch: String = "predator"):
 	rng.seed = seed_value
 	world.generate(seed_value)
+	player_genome = Genome.create(seed_value,0,"player",0)
 	build = Build.new()
 	build.unlocked = unlocked.duplicate()
 	build.branch = selected_branch
@@ -148,9 +151,11 @@ func spawn_enemy(p: Vector2,kind: String):
 	var boss = kind == "boss"
 	var prey = kind == "prey"
 	var variant = rng.randi_range(0,3)
+	var traits = Genome.traits(world.seed_value,next_id,elapsed,kind)
 	var health = (8.0 if prey else 22.0+elapsed*0.13)*(1.4 if variant == 1 else 1.0)
 	if boss: health = 1600.0
-	enemies.append({"pos":p,"kind":kind,"hp":health,"max_hp":health,"r":12.0 if prey else (66.0 if boss else 23.0+rng.randf()*6),"speed":58.0 if prey else (66.0 if boss else 65.0+minf(60,elapsed*0.08)+(25 if variant==2 else 0)),"phase":rng.randf()*TAU,"variant":variant,"infect":0.0,"slow":0.0,"shot_cd":2.5,"id":next_id,"biome":world.biome(p)})
+	if "shell" in traits: health *= 1.3
+	enemies.append({"pos":p,"kind":kind,"hp":health,"max_hp":health,"r":12.0 if prey else (66.0 if boss else 23.0+rng.randf()*6),"speed":58.0 if prey else (66.0 if boss else 65.0+minf(60,elapsed*0.08)+(25 if variant==2 else 0)),"phase":rng.randf()*TAU,"variant":variant,"infect":0.0,"slow":0.0,"shot_cd":2.5,"id":next_id,"biome":world.biome(p),"genome":Genome.create(world.seed_value,next_id,kind,world.biome(p)),"traits":traits,"emission_cd":rng.randf_range(1.0,3.0)})
 	next_id += 1
 
 func _update_enemies(dt: float):
@@ -163,6 +168,12 @@ func _update_enemies(dt: float):
 		if e.infect>0:
 			e.infect -= dt
 			e.hp -= (4.0+build.rank("infection")*3.0)*dt
+		if "regen" in e.get("traits",[]): e.hp = minf(e.max_hp,e.hp+e.max_hp*0.012*dt)
+		if "toxic" in e.get("traits",[]):
+			e.emission_cd -= dt
+			if e.emission_cd<=0:
+				e.emission_cd = 2.5
+				_field(e.pos,48,6.0,2.8,"enemy_toxin",true)
 		var offset = player-e.pos
 		var dist = offset.length()
 		if dist>1600 and e.kind != "boss":
@@ -176,7 +187,7 @@ func _update_enemies(dt: float):
 		if e.kind == "prey": dir = -dir if dist<180 else dir.rotated(e.phase)
 		if e.kind == "spitter" and dist<300: dir = -dir*0.3
 		if _safe_zone(player) and e.kind != "prey": dir = -dir
-		e.pos = world.move_body(e.pos,dir*e.speed*dt*(0.35 if e.slow>0 else 1.0),e.r*0.6)
+		e.pos = world.move_body(e.pos,dir*e.speed*dt*(0.35 if e.slow>0 else 1.0)*(1.2 if "swift" in e.get("traits",[]) else 1.0),e.r*0.6)
 		if e.kind=="boss": boss_marker = e.pos
 		if e.kind == "spitter" or e.kind == "boss":
 			e.shot_cd -= dt
@@ -196,6 +207,7 @@ func _die(index: int,absorbed: bool):
 	var e = enemies[index]
 	enemies.remove_at(index)
 	kills += 1
+	if "spores" in e.get("traits",[]): _field(e.pos,75,8.0,2.5,"enemy_spore",true)
 	if absorbed:
 		gain_xp(4 if e.kind=="prey" else 6)
 		build.biomass += 1 if e.kind=="prey" else 3
@@ -330,16 +342,19 @@ func _update_shots(dt: float):
 							hit = true
 		if hit or shot.life<=0 or not world.walkable(shot.pos): shots.remove_at(i)
 
-func _field(p: Vector2,radius: float,damage: float,life: float,kind: String):
+func _field(p: Vector2,radius: float,damage: float,life: float,kind: String,hostile: bool=false):
 	if fields.size()>=80: fields.pop_front()
-	fields.append({"pos":p,"r":radius,"damage":damage,"life":life,"max":life,"kind":kind})
+	fields.append({"pos":p,"r":radius,"damage":damage,"life":life,"max":life,"kind":kind,"hostile":hostile})
 
 func _update_fields(dt: float):
 	for i in range(fields.size()-1,-1,-1):
 		var f = fields[i]
 		f.life -= dt
-		for e in enemies:
-			if f.pos.distance_squared_to(e.pos)<pow(f.r+e.r*0.5,2): e.hp -= f.damage*dt
+		if f.get("hostile",false):
+			if f.pos.distance_squared_to(player)<pow(f.r+18,2) and not _safe_zone(player): hp -= f.damage*dt*(1-build.rank("armor")*0.12)
+		else:
+			for e in enemies:
+				if f.pos.distance_squared_to(e.pos)<pow(f.r+e.r*0.5,2): e.hp -= f.damage*dt
 		if f.life<=0: fields.remove_at(i)
 
 func _collect(dt: float):
@@ -380,13 +395,15 @@ func nearby_colony() -> int:
 	return -1
 
 func snapshot() -> Dictionary:
-	return {"version":1,"outcome":outcome,"events":_pack(events),"seed":world.seed_value,"rng_state":str(rng.state),"run_id":run_id,"player":_vec(player),"hp":hp,"max_hp":max_hp,"elapsed":elapsed,"xp":xp,"level":level,"pending_levels":pending_levels,"build":build.to_dict(),"enemies":_pack(enemies),"pickups":_pack(pickups),"colonies":_pack(world.colonies),"nests":_pack(world.nests),"explored":explored.keys(),"boss_spawned":boss_spawned,"kills":kills,"cores_found":cores_found,"next_id":next_id,"upgrades":upgrades,"cooldowns":cooldowns.duplicate(),"offers":current_offers.duplicate(),"rerolls":rerolls,"fields":_pack(fields),"shots":_pack(shots)}
+	return {"version":1,"player_genome":player_genome.duplicate(true),"outcome":outcome,"events":_pack(events),"seed":world.seed_value,"rng_state":str(rng.state),"run_id":run_id,"player":_vec(player),"hp":hp,"max_hp":max_hp,"elapsed":elapsed,"xp":xp,"level":level,"pending_levels":pending_levels,"build":build.to_dict(),"enemies":_pack(enemies),"pickups":_pack(pickups),"colonies":_pack(world.colonies),"nests":_pack(world.nests),"explored":explored.keys(),"boss_spawned":boss_spawned,"kills":kills,"cores_found":cores_found,"next_id":next_id,"upgrades":upgrades,"cooldowns":cooldowns.duplicate(),"offers":current_offers.duplicate(),"rerolls":rerolls,"fields":_pack(fields),"shots":_pack(shots)}
 
 func restore(data: Dictionary) -> bool:
 	if data.get("version",0) != 1 or not data.get("player",null) is Array: return false
 	for key in ["enemies","pickups","colonies","nests","explored"]:
 		if not data.get(key,null) is Array: return false
 	world.generate(int(data.get("seed",0)))
+	player_genome = data.get("player_genome",{})
+	if not Genome.validate(player_genome): player_genome = Genome.create(world.seed_value,0,"player",0)
 	rng.seed = int(data.seed)
 	rng.state = int(data.get("rng_state","0"))
 	player = Vector2(data.player[0],data.player[1])
@@ -401,6 +418,10 @@ func restore(data: Dictionary) -> bool:
 	pending_levels = int(data.get("pending_levels",0))
 	build.from_dict(data.get("build",{}))
 	enemies = _unpack(data.enemies)
+	for enemy in enemies:
+		if not Genome.validate(enemy.get("genome",{})): enemy.genome = Genome.create(world.seed_value,int(enemy.id),str(enemy.kind),int(enemy.biome))
+		if not enemy.get("traits",null) is Array: enemy.traits = []
+		if not enemy.has("emission_cd"): enemy.emission_cd = 2.5
 	pickups = _unpack(data.pickups)
 	world.colonies = _unpack(data.colonies)
 	world.nests = _unpack(data.nests)

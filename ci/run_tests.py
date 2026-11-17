@@ -27,5 +27,11 @@ def main():
         run("touch", ["xvfb-run", "-a", "godot", "--path", ".",
                       "--audio-driver", "Dummy", "--script", "tests/test_touch.gd"])
 
+    if Path("core/genome.gd").is_file():
+        for mode in ["game", "gallery"]:
+            target = str(Path("build/Microgen-" + mode + ".png").resolve())
+            run("render-" + mode, ["xvfb-run", "-a", "godot", "--path", ".",
+                "--audio-driver", "Dummy", "--", "--preview=" + mode, "--capture=" + target])
+
 if __name__ == "__main__":
     main()

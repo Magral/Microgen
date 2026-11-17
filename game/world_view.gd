@@ -1,6 +1,8 @@
 extends Node2D
 const Catalog = preload("res://core/catalog.gd")
 const World = preload("res://game/world.gd")
+const Painter = preload("res://game/organism_painter.gd")
+var painter = Painter.new()
 var sim
 var visual_time = 0.0
 var menu = false
@@ -62,7 +64,7 @@ func _draw():
 		draw_string(font,p+Vector2(-55,80),"КОЛОНИЯ",HORIZONTAL_ALIGNMENT_LEFT,-1,15,Color("83cdbd"))
 	for f in sim.fields:
 		if not area.has_point(f.pos): continue
-		var col = Color("b684da") if f.kind == "spore" else Color("97ba53")
+		var col = Color("c67688") if f.get("hostile",false) else (Color("b684da") if f.kind == "spore" else Color("97ba53"))
 		_blob(screen(f.pos),f.r,Color(col,0.12*f.life/f.max),f.pos.x*0.2,0.5,false)
 		draw_arc(screen(f.pos),f.r*0.8,0,TAU,24,Color(col,0.17),1,true)
 	for pickup in sim.pickups:
@@ -80,22 +82,16 @@ func _draw():
 		else: draw_circle(p,4,col)
 	for e in sim.enemies:
 		if not area.has_point(e.pos): continue
-		var color = Color("e8ba82") if e.kind=="prey" else (Color("ba83c6") if e.kind=="spitter" else Color("db858b"))
-		if e.kind == "boss": color = Color("cf657c")
-		if e.variant == 1: color = color.darkened(0.2)
-		if e.infect>0: color = Color("9ebd5f")
-		_blob(screen(e.pos),e.r,color,e.phase,0.5,true)
-		if e.variant==1 and e.kind!="prey": draw_arc(screen(e.pos),e.r+4,0,TAU,24,Color(color.lightened(0.25),0.5),2,true)
-		if e.kind == "boss":
-			for i in range(9):
-				var dir = Vector2.from_angle(i*TAU/9+e.phase)
-				draw_line(screen(e.pos)+dir*e.r*0.7,screen(e.pos)+dir*(e.r+22),Color("e7a1b0"),4,true)
+		var organs = enemy_organs(e)
+		painter.paint(self,screen(e.pos),e.r*1.17,e.genome,organs,visual_time,e.kind,e.kind=="boss" or (e.r>20 and sim.enemies.size()<90))
+		if e.infect>0: draw_arc(screen(e.pos),e.r+6,0,TAU,20,Color("b3d47c",0.5),1.4,true)
 		if e.hp<e.max_hp:
-			var p = screen(e.pos)+Vector2(-e.r,-e.r-12)
+			var p = screen(e.pos)+Vector2(-e.r,-e.r*1.5-10)
 			draw_line(p,p+Vector2(e.r*2,0),Color(0.1,0.1,0.15,0.8),3,true)
 			draw_line(p,p+Vector2(e.r*2*maxf(0,e.hp/e.max_hp),0),Color("e9a5ad"),3,true)
 	if sim.build.rank("division")>0:
-		for p in sim.clone_positions(): _blob(screen(p),14,Color("a59bdd"),p.x,0.6,true)
+		for p in sim.clone_positions():
+			painter.paint(self,screen(p),17,sim.player_genome,{"trail":sim.build.rank("trail")},visual_time+1,"clone",false)
 	_draw_player()
 	for shot in sim.shots:
 		var p = screen(shot.pos)
@@ -126,31 +122,27 @@ func _draw_player():
 	var p = screen(sim.player)
 	var rank_sum = 0
 	for rank in sim.build.organs.values(): rank_sum += rank
-	var radius = minf(39,26+rank_sum*0.35)
-	var color = Color("70d4c1")
-	if sim.invuln>0 and int(visual_time*15)%2==0: color = Color("f1c3be")
+	var radius = minf(44,34+rank_sum*0.36)
 	if sim.build.rank("acid")>0:
-		_blob(p,75+sim.build.rank("acid")*9,Color(0.55,0.83,0.3,0.06),2,0.3,false)
-		draw_arc(p,75+sim.build.rank("acid")*9,0,TAU,48,Color(0.6,0.85,0.4,0.14),1.5,true)
-	_blob(p,radius,color,0.8,0.7,true)
-	if sim.build.rank("armor")>0: draw_arc(p,radius+7,0,TAU,40,Color(0.6,0.8,0.9,0.4),2+sim.build.rank("armor"),true)
-	if sim.build.rank("spikes")>0:
-		for i in range(6+sim.build.rank("spikes")):
-			var a = i*TAU/(6+sim.build.rank("spikes"))+0.4
-			var dir = Vector2.from_angle(a)
-			var normal = dir.orthogonal()
-			draw_colored_polygon(PackedVector2Array([p+dir*(radius-3)+normal*4,p+dir*(radius+15),p+dir*(radius-3)-normal*4]),Color("d7c190"))
-	if sim.build.rank("tentacle")>0:
-		for side in [-1,1]:
-			var points = PackedVector2Array()
-			for i in range(18):
-				var t = i/17.0
-				points.append(p+Vector2(side*(15+t*45),-10-t*35+sin(t*5+visual_time*2)*t*15))
-			draw_polyline(points,Color("75cfbd"),4,true)
-	if sim.build.rank("infection")>0:
-		for i in range(3):
-			var q = p+Vector2.from_angle(i*TAU/3)*radius*0.7
-			draw_circle(q,6,Color("aecb63"))
+		draw_circle(p,75+sim.build.rank("acid")*9,Color(0.55,0.83,0.3,0.04))
+		draw_arc(p,75+sim.build.rank("acid")*9,0,TAU,48,Color(0.6,0.85,0.4,0.14),1.0,true)
+	var anatomy = sim.build.organs.duplicate()
+	anatomy.merge(sim.build.adaptations,true)
+	painter.paint(self,p,radius,sim.player_genome,anatomy,visual_time,"player",true)
+	if sim.invuln>0: draw_arc(p,radius*1.4,0,TAU,40,Color("f2c3d1",0.2+0.2*sin(visual_time*24)),2,true)
+
+func enemy_organs(e: Dictionary) -> Dictionary:
+	var organs = {}
+	if e.kind=="spitter": organs.infection = 1
+	if e.kind=="boss":
+		organs.tentacle = 2
+		organs.spikes = 2
+	if int(e.variant)==1: organs.armor = 1
+	if int(e.variant)==2: organs.speed = 1
+	for mutation in e.get("traits",[]):
+		var id = {"shell":"armor","swift":"speed","regen":"regen","toxic":"acid","spores":"infection"}.get(mutation,"")
+		if id!="": organs[id] = 2
+	return organs
 
 func _blob(p: Vector2,radius: float,color: Color,phase: float,lobes: float,nucleus: bool):
 	var points = PackedVector2Array()
