@@ -1,3 +1,7 @@
+## 0.9.0
+
+Aquatic caustics and layered parallax matter, rounded directional organism lighting, recessed anatomy, detailed procedural tissue terrain. Single indexed mesh per terrain chunk; bounded palette/density/optical caches; staggered particle currents. Safe triangulated fallback for damaged nonradial jelly contours; corrected per-depth haze transforms. Native static QA and paired long-run evidence in docs/performance/0.9.0.md. No videos.
+
 ## 0.8.0
 
 Quieter bounded combat audio; ten explicit synergy visuals; ten organ/six passive ranks with 3/6/10 numeric and visual milestones; larger UI text and accessible actions. Cached native terrain chunks and exploration texture; cached infection anatomy, reduced field/infection draw work; valid wound scars at all health levels. Restored checkpoint impulse vectors. Comparative sustained-play evidence in docs/performance/0.8.0.md.

@@ -115,6 +115,7 @@ jobs:
             build/APK_METADATA.txt
             build/APK_PERMISSIONS.txt
             build/Microgen-game.png
+            build/Microgen-habitat.png
             build/Microgen-gallery.png
             build/Microgen-development.png
           if-no-files-found: error
@@ -126,7 +127,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="test-$GITHUB_RUN_NUMBER-$GITHUB_RUN_ATTEMPT"
-          gh release create "$tag" build/Microgen.apk build/Microgen-source.zip build/SHA256SUMS.txt build/Microgen-game.png build/Microgen-gallery.png build/Microgen-development.png \
+          gh release create "$tag" build/Microgen.apk build/Microgen-source.zip build/SHA256SUMS.txt build/Microgen-game.png build/Microgen-habitat.png build/Microgen-gallery.png build/Microgen-development.png \
             --target "$(git rev-parse HEAD)" \
             --title "Микроген · тестовая сборка $GITHUB_RUN_NUMBER" \
             --notes-file RELEASE_NOTES.md \

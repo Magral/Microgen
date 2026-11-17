@@ -11,6 +11,7 @@ const Terrain=preload("res://game/terrain_view.gd")
 var terrain=Terrain.new()
 var painter = Painter.new()
 var fluid = Fluid.new()
+var water_surface=Fluid.Surface.new()
 var motions = {}
 var tracked_sim
 var feeding: Array=[]
@@ -24,6 +25,8 @@ func _ready():
 	add_child(fluid)
 	terrain.show_behind_parent=true
 	add_child(terrain)
+	water_surface.fluid=fluid
+	add_child(water_surface)
 
 func _motion(key,position: Vector2,recipe: Dictionary,dt: float,radius: float):
 	if not motions.has(key):
@@ -60,6 +63,7 @@ func _process(dt):
 			previous_build=str(sim.build.organs)
 			reaction=0.0
 			zoom=sim.view_zoom()
+			fluid.zoom=zoom
 			fluid.reset(sim.world.seed_value,sim.player,get_viewport_rect().size)
 		if not sim.paused:zoom=lerpf(zoom,sim.view_zoom(),1.0-exp(-dt*2.0))
 		fluid.update(dt,sim,get_viewport_rect().size,zoom)
@@ -105,6 +109,7 @@ func _process(dt):
 				clone_index += 1
 		for key in motions.keys():
 			if not alive.has(key): motions.erase(key)
+	water_surface.queue_redraw()
 	queue_redraw()
 
 func screen(p: Vector2) -> Vector2:

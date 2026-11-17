@@ -4,3 +4,5 @@
 - Size ratio is the primary combat rule. All attraction is continuous; never reposition a foe instantly on attack.
 - The amoeba and organs must read as one living mutating tissue. Preserve contact-driven animated digestion and cumulative pigment state.
 - Profile before claiming optimization. Desktop stress measurements do not establish Android FPS.
+
+- Every release must include a concrete optimization and measured long-run comparison; visual quality and readable builds remain the priorities.

@@ -4,6 +4,10 @@ const Absorption = preload("res://game/absorption.gd")
 const Genome = preload("res://core/genome.gd")
 const TissueDamage = preload("res://game/tissue_damage.gd")
 const MouthShape = preload("res://game/mouth_shape.gd")
+const OrganicVolume = preload("res://game/organic_volume.gd")
+var volume=OrganicVolume.new()
+var _tissue_basis=PackedVector2Array()
+var _tissue_indices=PackedInt32Array()
 var cache: Dictionary = {}
 var glow: GradientTexture2D
 var _anchor_contour=PackedVector2Array()
@@ -18,6 +22,9 @@ static func visual_stage(rank: int) -> int:
 	return 0
 
 func _init():
+	for i in range(12):
+		_tissue_basis.append(Vector2.from_angle(i*TAU/12.0))
+		_tissue_indices.append_array(PackedInt32Array([0,1+i,1+(i+1)%12]))
 	var gradient = Gradient.new()
 	gradient.offsets = PackedFloat32Array([0.0,0.32,0.7,1.0])
 	gradient.colors = PackedColorArray([Color(1,1,1,0.9),Color(1,1,1,0.7),Color(1,1,1,0.22),Color(1,1,1,0)])
@@ -105,10 +112,7 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 		for i in range(count): _tendril(canvas,p,contour,radius,i*TAU/count+phase,time+phase+i,0.27,Color(edge,0.6),0.8)
 	var outer = _transform(contour,p,radius*breathe)
 	if detail:canvas.draw_colored_polygon(_transform(contour,p+Vector2(2,4),radius*1.025*breathe),Color(0.0,0.02,0.035,0.35))
-	canvas.draw_colored_polygon(outer,Color(body,0.66))
-	canvas.draw_colored_polygon(_transform(contour,p,radius*0.94*breathe),Color(shadow,0.48))
-	if detail:canvas.draw_colored_polygon(_transform(contour,p+Vector2(-radius*0.035,-radius*0.045),radius*0.85*breathe),Color(body,0.31))
-	if detail:canvas.draw_texture_rect(glow,Rect2(p-Vector2.ONE*radius*0.55,Vector2.ONE*radius*1.1),false,Color(body.lightened(0.12),0.28))
+	volume.paint(canvas,contour,p,radius*breathe,body,edge,shadow,detail,base_phase)
 	for entry in feeding: _inclusion(canvas,p,radius,entry,body,edge,time)
 	if reaction>0.01:
 		for i in range(5):
@@ -116,6 +120,15 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 			var q=p+_anchor(contour,a)*radius*(0.45+reaction*0.2)
 			canvas.draw_circle(q,radius*(0.07+reaction*0.09),Color(accent,0.18*reaction))
 	if detail:
+		for fold_index in range(5):
+			var fold=PackedVector2Array()
+			for j in range(13):
+				var u=j/12.0
+				var sample=posmod(int(fold_index*contour.size()/5.0+j*contour.size()/90.0),contour.size())
+				var point=contour[sample]*(0.30+u*0.49)
+				fold.append(p+point*radius*breathe)
+			canvas.draw_polyline(fold,Color(shadow,0.16),maxf(1.2,radius*0.035),true)
+			canvas.draw_polyline(fold,Color(edge,0.16),maxf(0.6,radius*0.012),true)
 		for vein in data.veins:
 			var a = p+_tissue_point(vein[0],wounds,motion,base_phase)*radius*breathe
 			var b = p+_tissue_point(vein[1],wounds,motion,base_phase)*radius*breathe
@@ -127,15 +140,25 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 		for particle in data.particles:
 			var point = p+_tissue_point(particle.pos,wounds,motion,base_phase)*radius*breathe
 			var color = accent if particle.type==0 else edge
-			_soft_tissue(canvas,point,particle.size*radius*0.62,Color(color,0.12),float(particle.type)*2.1+point.x*0.01)
+			_soft_tissue(canvas,point,particle.size*radius*1.15,Color(color,0.22),float(particle.type)*2.1+point.x*0.01)
 	var n = 0
 	for nucleus in data.nuclei:
-		_nucleus(canvas,p+_tissue_point(nucleus,wounds,motion,base_phase)*radius,radius*0.135*(1.0+distress*0.06*sin(time*(4.5+distress*2.0)+n*2.3)),core.lerp(shadow,distress*0.35),edge,time+phase+n,detail)
+		_nucleus(canvas,p+_tissue_point(nucleus,wounds,motion,base_phase)*radius,radius*0.205*(1.0+distress*0.06*sin(time*(4.5+distress*2.0)+n*2.3)),core.lerp(shadow,distress*0.35),edge,time+phase+n,detail)
 		n += 1
 	if distress>(0.001 if detail else 0.55): _wounds(canvas,p,contour,radius*breathe,wounds,turn,time,body,edge,shadow,detail)
 	var loop = outer.duplicate()
 	loop.append(loop[0])
-	canvas.draw_polyline(loop,Color(edge,0.72+stage*0.055),(1.8+stage*0.45) if detail else 1.2,true)
+	canvas.draw_polyline(loop,Color(edge,0.43+stage*0.045),(1.8+stage*0.45) if detail else 1.2,true)
+	# Directional wet membrane catches upper-left light; underside stays thick.
+	var wet_rim=PackedVector2Array()
+	for i in range(contour.size()+1):
+		var index=i%contour.size()
+		if contour[index].normalized().dot(OrganicVolume.LIGHT)>0.30:
+			wet_rim.append(p+contour[index]*radius*breathe*0.958)
+		else:
+			if wet_rim.size()>1: canvas.draw_polyline(wet_rim,Color(edge.lightened(0.22),0.59),maxf(0.7,radius*0.018),true)
+			wet_rim=PackedVector2Array()
+	if wet_rim.size()>1: canvas.draw_polyline(wet_rim,Color(edge.lightened(0.22),0.59),maxf(0.7,radius*0.018),true)
 	if role=="player" and stage>0 and detail:
 		# Broad pigmented membrane folds stay part of the same continuous body.
 		for fold_index in range(3):
@@ -327,36 +350,45 @@ func _anchor(contour: PackedVector2Array,angle: float) -> Vector2:
 # Irregular translucent layers merge with living tissue instead of looking like
 # separate glass marbles or inventory icons floating inside the cell.
 func _soft_tissue(canvas: CanvasItem,p: Vector2,radius: float,color: Color,phase: float):
-	var points=PackedVector2Array()
+	# One pre-triangulated soft patch: no polygon triangulation or trigonometry
+	# for every organelle. Dark lower edge gives inclusions optical thickness.
+	var points=PackedVector2Array([p])
+	var colors=PackedColorArray([Color(color.lightened(0.15),color.a)])
 	for i in range(12):
-		var a=i*TAU/12.0
-		var ripple=1.0+sin(a*3.0+phase)*0.13+cos(a*5.0-phase)*0.055
-		points.append(p+Vector2(cos(a)*1.18,sin(a)*0.82)*radius*ripple)
-	canvas.draw_colored_polygon(points,color)
+		var basis: Vector2=_tissue_basis[i]
+		var ripple=1.0+sin(i*TAU/4.0+phase)*0.11
+		points.append(p+basis*Vector2(1.18,0.82)*radius*ripple)
+		var light=basis.dot(OrganicVolume.LIGHT)
+		colors.append(Color(color.lightened(maxf(0.0,light)*0.20).darkened(maxf(0.0,-light)*0.37),color.a*0.12))
+	RenderingServer.canvas_item_add_triangle_array(canvas.get_canvas_item(),_tissue_indices,points,colors)
 
 func _nucleus(canvas: CanvasItem,p: Vector2,radius: float,color: Color,edge: Color,time: float,detail: bool):
-	_soft_tissue(canvas,p,radius*1.3,Color(color.darkened(0.3),0.12),time*0.08)
-	_soft_tissue(canvas,p,radius,Color(color,0.25),time*0.08)
-	_soft_tissue(canvas,p-Vector2(radius*0.15,radius*0.1),radius*0.72,Color(edge,0.09),time*0.08+1.4)
+	var phase=time*0.08
+	# A broad recessed organ: lower bright wall, upper occlusion and visible
+	# tangled chromatin share the body palette and remain beneath the wet film.
+	_soft_tissue(canvas,p+Vector2(radius*0.16,radius*0.23),radius*1.52,Color(edge,0.26),phase)
+	_soft_tissue(canvas,p-Vector2(radius*0.07,radius*0.09),radius*1.28,Color(color.darkened(0.65),0.76),phase)
+	_soft_tissue(canvas,p,radius,Color(color,0.70),phase)
+	_soft_tissue(canvas,p-Vector2(radius*0.28,radius*0.31),radius*0.52,Color(edge,0.25),phase+1.4)
 	if detail:
-		var strand=PackedVector2Array()
-		for i in range(17):
-			var u=i/16.0
-			strand.append(p+Vector2((u-0.5)*1.35,sin(u*TAU*1.5+time*0.04)*0.19)*radius)
-		canvas.draw_polyline(strand,Color(color.darkened(0.45),0.26),maxf(0.6,radius*0.09),true)
+		for strand_index in range(3):
+			var strand=PackedVector2Array()
+			for i in range(17):
+				var u=i/16.0
+				strand.append(p+Vector2((u-0.5)*1.6,sin(u*TAU*1.5+phase+strand_index)*0.23+(strand_index-1)*0.25)*radius)
+			canvas.draw_polyline(strand,Color(color.darkened(0.65),0.52),maxf(0.65,radius*0.09),true)
+		_soft_tissue(canvas,p+Vector2(radius*0.18,-radius*0.05),radius*0.30,Color(color.darkened(0.65),0.85),phase)
 
 func _vesicle(canvas: CanvasItem,p: Vector2,radius: float,color: Color,detail: bool):
-	if not detail:
-		_soft_tissue(canvas,p,radius,Color(color,0.34),0.7)
-		return
-	_soft_tissue(canvas,p,radius,Color(color.darkened(0.25),0.24),p.x*0.1)
-	_soft_tissue(canvas,p-Vector2(radius*0.06,radius*0.12),radius*0.68,Color(color,0.22),p.x*0.1+0.6)
-	if detail:
-		var fold=PackedVector2Array()
-		for i in range(10):
-			var a=0.3+i*0.24
-			fold.append(p+Vector2(cos(a),sin(a)*0.65)*radius*0.8)
-		canvas.draw_polyline(fold,Color(color.lightened(0.25),0.35),0.9,true)
+	_soft_tissue(canvas,p+Vector2(0,radius*0.12),radius*1.2,Color(color.lightened(0.26),0.29),p.x*0.1)
+	_soft_tissue(canvas,p,radius,Color(color.darkened(0.40),0.48),p.x*0.1)
+	if not detail: return
+	_soft_tissue(canvas,p-Vector2(radius*0.12,radius*0.16),radius*0.70,Color(color,0.48),p.x*0.1+0.6)
+	var fold=PackedVector2Array()
+	for i in range(10):
+		var a=0.3+i*0.24
+		fold.append(p+Vector2(cos(a),sin(a)*0.65)*radius*0.8)
+	canvas.draw_polyline(fold,Color(color.lightened(0.25),0.35),0.9,true)
 
 func _mouth(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,radius: float,heading: float,time: float,body: Color,edge: Color,shadow: Color,bite: float,feeding: float,rank: int,detail: bool):
 	var shape=MouthShape.pose(contour,heading,bite,feeding)

@@ -75,6 +75,21 @@ func _ready():
 			for i in range(16): sim.spawn_enemy(sim.player+Vector2.from_angle(i*TAU/16)*randf_range(160,440),"hunter" if i%3 else "prey")
 			for i in range(18): sim.step(0.016,Vector2.ZERO)
 			sim.paused = true
+		elif capture_mode == "habitat":
+			sim.level=8
+			sim.build.organs={"tentacle":3,"acid":3,"devour":3,"barrier":3,"electric":3}
+			for y in range(8,30):
+				var found=false
+				for x in range(10,25):
+					var p=Vector2(x+0.5,y+0.5)*110
+					if sim.world.walkable(p,40) and not sim.world.walkable(p+Vector2(110,0),40):
+						sim.player=p;sim.previous_player=p;found=true;break
+				if found:break
+			for i in range(6):
+				var p=sim.player+Vector2.from_angle(i*TAU/6)*200
+				if sim.world.walkable(p,25):sim.spawn_enemy(p,"hunter" if i%2 else "prey")
+			sim.effects.clear();sim.paused=true
+			hud.message.text="Свет, глубина и живая ткань"
 		elif capture_mode == "organic":
 			organic_preview=load("res://tests/organic_preview.gd").new()
 			organic_preview.setup(sim)
@@ -217,7 +232,7 @@ func show_menu():
 	sim.paused = true
 	view.sim = sim
 	hud.game_visible(false)
-	var box = hud.open("МИКРОГЕН", "Маленькая жизнь. Непредсказуемая эволюция.\nТестовая версия 0.8.0 · офлайн",740)
+	var box = hud.open("МИКРОГЕН", "Маленькая жизнь. Непредсказуемая эволюция.\nТестовая версия 0.9.0 · офлайн",740)
 	box.add_child(hud.label("Собери организм, который сможет выжить.",25,Color("9ce3cf"),true))
 	box.add_child(hud.label("Исследуй случайный микромир, поглощай ДНК и соединяй мутации. Атаки автоматические — управляй только движением.",20,Color("a3bfc0"),true))
 	if not store.profile.checkpoint.is_empty(): box.add_child(hud.button("Продолжить забег",continue_run,true))
