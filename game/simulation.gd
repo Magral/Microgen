@@ -402,7 +402,8 @@ func restore(data: Dictionary) -> bool:
 	for key in ["enemies","pickups","colonies","nests","explored"]:
 		if not data.get(key,null) is Array: return false
 	world.generate(int(data.get("seed",0)))
-	player_genome = data.get("player_genome",{})
+	var saved_recipe = data.get("player_genome",{})
+	player_genome = saved_recipe if saved_recipe is Dictionary else {}
 	if not Genome.validate(player_genome): player_genome = Genome.create(world.seed_value,0,"player",0)
 	rng.seed = int(data.seed)
 	rng.state = int(data.get("rng_state","0"))
@@ -419,7 +420,8 @@ func restore(data: Dictionary) -> bool:
 	build.from_dict(data.get("build",{}))
 	enemies = _unpack(data.enemies)
 	for enemy in enemies:
-		if not Genome.validate(enemy.get("genome",{})): enemy.genome = Genome.create(world.seed_value,int(enemy.id),str(enemy.kind),int(enemy.biome))
+		var saved_enemy_recipe = enemy.get("genome",{})
+		if not (saved_enemy_recipe is Dictionary) or not Genome.validate(saved_enemy_recipe): enemy.genome = Genome.create(world.seed_value,int(enemy.id),str(enemy.kind),int(enemy.biome))
 		if not enemy.get("traits",null) is Array: enemy.traits = []
 		if not enemy.has("emission_cd"): enemy.emission_cd = 2.5
 	pickups = _unpack(data.pickups)

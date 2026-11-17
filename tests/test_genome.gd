@@ -66,6 +66,12 @@ func _initialize():
 		var recovered = Sim.new()
 		check(recovered.restore(damaged),"malformed phenotype checkpoint accepted")
 		check(Genome.validate(recovered.player_genome) and Genome.validate(recovered.enemies[0].genome),"malformed phenotype regenerated")
+	for malformed_enemy in [null, [], "broken", 12]:
+		var damaged_enemy = sim.snapshot()
+		damaged_enemy.enemies[0].genome = malformed_enemy
+		var recovered_enemy = Sim.new()
+		check(recovered_enemy.restore(damaged_enemy),"malformed enemy recipe accepted")
+		check(Genome.validate(recovered_enemy.enemies[0].genome),"enemy recipe regenerated")
 	var regen = Sim.new()
 	regen.new_run(82)
 	regen.spawn_enemy(regen.player+Vector2(250,0),"hunter")
