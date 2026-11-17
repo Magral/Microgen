@@ -7,6 +7,8 @@ const Absorption = preload("res://game/absorption.gd")
 const OrganicFX = preload("res://game/organic_fx.gd")
 const Jelly = preload("res://game/jelly_motion.gd")
 const Fluid = preload("res://game/fluid_view.gd")
+const EvolutionRules=preload("res://game/evolution_rules.gd")
+const EvolutionAnatomy=preload("res://game/evolution_anatomy.gd")
 const RewardArt=preload("res://game/reward_art.gd")
 const Terrain=preload("res://game/terrain_view.gd")
 var terrain=Terrain.new()
@@ -17,6 +19,7 @@ var motions = {}
 var tracked_sim
 var feeding: Array=[]
 var reaction=0.0
+var evolution_growth: Dictionary={}
 var previous_build=0
 var previous_traits: Dictionary={}
 var player_anatomy: Dictionary={}
@@ -72,6 +75,8 @@ func _process(dt):
 			previous_build=hash([sim.build.organs,sim.build.adaptations,sim.build.qualities,sim.build.stats.evolutions])
 			_anatomy_key=0
 			previous_traits=_mutation_traits()
+			evolution_growth={}
+			for id in sim.build.stats.evolutions:evolution_growth[id]=1.0
 			reaction=0.0
 			zoom=sim.view_zoom()
 			fluid.zoom=zoom
@@ -97,6 +102,11 @@ func _process(dt):
 						break
 				previous_traits=changed
 				sim._effect({"type":"mutation","pos":sim.player,"r":sim.body_radius()*2,"color":tint,"text":title,"life":1.8,"max":1.8})
+		for id in sim.build.stats.evolutions:
+			if not evolution_growth.has(id):evolution_growth[id]=0.0
+			if not sim.paused:evolution_growth[id]=minf(1.0,float(evolution_growth[id])+dt/2.2)
+		for id in evolution_growth.keys():
+			if not sim.build.evolved(id):evolution_growth.erase(id)
 		var anatomy_key=hash([sim.build.organs,sim.build.adaptations])
 		if anatomy_key!=_anatomy_key or player_anatomy.is_empty():
 			player_anatomy=sim.build.organs.merged(sim.build.adaptations,true)
@@ -114,6 +124,7 @@ func _process(dt):
 		var alive = {"player":true}
 		_motion("player",sim.player,sim.player_genome,dt,sim.body_radius())
 		var physical=TissueDamage.contour(painter.anatomy(sim.player_genome).contour,sim.player_genome,sim.hp/sim.max_hp)
+		physical=EvolutionAnatomy.shape(physical,sim.build.stats.evolutions,visual_time,float(sim.player_genome.phase),evolution_growth)
 		physical=motion_for("player").deform_points(physical,float(sim.player_genome.phase))
 		_prepare_feeding()
 		for entry in feeding:
@@ -309,6 +320,7 @@ func _prepare_feeding():
 	var radius=player_radius()
 	var contour=TissueDamage.contour(painter.anatomy(sim.player_genome).contour,sim.player_genome,sim.hp/sim.max_hp)
 	var motion=motion_for("player")
+	contour=EvolutionAnatomy.shape(contour,sim.build.stats.evolutions,visual_time,float(sim.player_genome.phase),evolution_growth)
 	if motion!=null: contour=motion.deform_points(contour,float(sim.player_genome.phase))
 	for fragment in sim.remains:
 		if not fragment.get("captured",false): continue
@@ -336,11 +348,18 @@ func _draw_player():
 		draw_circle(p,(75+sim.build.rank("acid")*9)*sim.ability_scale(),Color(0.55,0.83,0.3,0.04))
 		draw_arc(p,(75+sim.build.rank("acid")*9)*sim.ability_scale(),0,TAU,48,Color(0.6,0.85,0.4,0.14),1.0,true)
 	var anatomy = player_anatomy if not player_anatomy.is_empty() else sim.build.organs.merged(sim.build.adaptations,true)
-	var appearance={"qualities":sim.build.qualities,"evolved":sim.build.stats.evolutions,"lashes":{}}
+	var appearance={"qualities":sim.build.qualities,"evolved":sim.build.stats.evolutions,"growth":evolution_growth,"spore_charge":sim.spore_charge,"mantle_flash":0.0,"lashes":{}}
 	for effect in sim.effects:
+		if effect.type=="mantle":appearance.mantle_flash=sin(PI*(1-float(effect.life)/float(effect.max)))
 		if effect.type=="lash":
 			var age=1.0-float(effect.life)/float(effect.max)
 			appearance.lashes[int(effect.get("limb",0))]={"tip":effect.end-sim.player,"extension":sin(PI*smoothstep(0.0,1.0,age))}
+	for enemy in sim.enemies:
+		if float(enemy.get("crown_time",0))<=0 or not sim.build.evolved("tentacle") or not EvolutionRules.crown_eligible(radius,enemy,sim.build.rank("magnet")):continue
+		var extension=smoothstep(0,0.18,float(enemy.get("crown_age",0)))*smoothstep(0,0.18,float(enemy.crown_time))
+		for value in enemy.get("crown_limbs",[]):
+			var limb=int(value)
+			appearance.lashes[limb]={"tip":EvolutionRules.crown_tip(enemy.pos-sim.player,enemy.r,-1.0 if limb%2==0 else 1.0,visual_time+limb),"extension":extension}
 	painter.paint(self,p,radius,sim.player_genome,anatomy,visual_time,"player",true,motion_for("player"),feeding,sim.body_color(),reaction,sim.hp/sim.max_hp,sim.bite_flash,appearance)
 	if sim.invuln>0: draw_arc(p,radius*1.4,0,TAU,40,Color("f2c3d1",0.2+0.2*sin(visual_time*24)),2,true)
 

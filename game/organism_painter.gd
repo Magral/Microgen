@@ -1,4 +1,5 @@
 extends RefCounted
+const EvolutionAnatomy=preload("res://game/evolution_anatomy.gd")
 const Catalog = preload("res://core/catalog.gd")
 const Rewards = preload("res://core/rewards.gd")
 const Pigment = preload("res://core/pigment.gd")
@@ -98,6 +99,7 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 	var facing = float(recipe.rotation)+turn
 	var breathe = 1+sin(time*1.7+phase)*0.025+reaction*0.055
 	var contour = TissueDamage.contour(data.contour if detail else data.contour_lod,recipe,health_ratio)
+	contour=EvolutionAnatomy.shape(contour,appearance.get("evolved",{}),time,base_phase,appearance.get("growth",{}))
 	if motion != null: contour = motion.deform_points(contour,base_phase)
 	for entry in feeding:
 		var pose=entry.pose.duplicate()
@@ -182,7 +184,11 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 		var count = Catalog.tentacle_count(int(organs.tentacle))
 		for i in range(count):
 			var strike=appearance.get("lashes",{}).get(i,{})
-			_tendril(canvas,p,contour,radius,phase+i*TAU/count,time+phase+i,0.9+visual_stage(int(organs.tentacle))*0.20,_organ_color("tentacle",edge,appearance),(3.0 if detail else 2.0)+visual_stage(int(organs.tentacle))*0.65,strike.get("tip"),float(strike.get("extension",0)))
+			var tentacle_color=_organ_color("tentacle",edge,appearance)
+			if bool(appearance.get("evolved",{}).get("tentacle",false)):
+				if int(organs.get("acid",0))>0:tentacle_color=tentacle_color.lerp(Color("bbec76"),0.35)
+				if int(organs.get("infection",0))>0:tentacle_color=tentacle_color.lerp(Color("ec9bd5"),0.25)
+			_tendril(canvas,p,contour,radius,phase+i*TAU/count,time+phase+i,0.9+visual_stage(int(organs.tentacle))*0.20,tentacle_color,(3.0 if detail else 2.0)+visual_stage(int(organs.tentacle))*0.65,strike.get("tip"),float(strike.get("extension",0)))
 	if int(organs.get("cilia",0))>0 and detail:
 		for i in range(8):_tendril(canvas,p,contour,radius,facing-1.2+i*0.34,time+i,0.20+visual_stage(int(organs.cilia))*0.065+sin(time*5+i*0.3)*0.06,_organ_color("cilia",edge,appearance),0.7+visual_stage(int(organs.cilia))*0.35)
 	if int(organs.get("enzymes",0))>0:
@@ -220,6 +226,7 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 			_soft_tissue(canvas,bud,radius*(0.19+0.02*sin(time*2+i)),Color(_organ_color("division",body,appearance),0.82),phase+i)
 			_soft_tissue(canvas,bud-Vector2.ONE*radius*0.015,radius*0.14,Color(edge,0.14),phase+i)
 			_nucleus(canvas,bud,radius*0.08,core,edge,time+i,false)
+	if role=="player" and detail:_evolved_organs(canvas,p,contour,radius,organs,time,phase,body,edge,appearance)
 	if role=="player" and detail:_living_marks(canvas,p,contour,radius,organs,time,phase,body,edge,appearance)
 	if role=="player":
 		canvas.draw_arc(p,radius*1.48,0.35,2.8,22,Color("d4fff2",0.33),1.2,true)
@@ -531,3 +538,47 @@ func _living_marks(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,rad
 		if evolved:
 			for j in range(points.size()):points[j]=p+(points[j]-p)*0.92
 			canvas.draw_polyline(points,Color(col,0.85),maxf(0.8,radius*0.018),true)
+
+func _evolved_organs(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,radius: float,organs: Dictionary,time: float,phase: float,body: Color,edge: Color,appearance: Dictionary):
+	var evolved=appearance.get("evolved",{})
+	if evolved.get("tentacle",false):
+		var growing=float(appearance.get("growth",{}).get("tentacle",1.0))
+		var col=_organ_color("tentacle",edge,appearance)
+		# Thick perfused collar joins every tentacle root to the membrane.
+		var collar=_transform(contour,p,radius*0.92);collar.append(collar[0])
+		canvas.draw_polyline(collar,Color(body.lerp(col,0.30),0.58),maxf(0.1,radius*0.13*growing),true)
+		canvas.draw_polyline(collar,Color(col,0.65),maxf(1,radius*0.023),true)
+		for i in range(Catalog.tentacle_count(int(organs.get("tentacle",0)))):
+			var a=phase+i*TAU/Catalog.tentacle_count(int(organs.tentacle))
+			var root=p+_anchor(contour,a)*radius*0.90
+			var direction=(root-p).normalized()
+			for side in [-1,1]:
+				var end=root+direction.rotated(side*0.45)*radius*(0.23+sin(time*2+i)*0.025)*growing
+				canvas.draw_line(root,end,Color(col,0.7),maxf(1,radius*0.028),true)
+			var strike=appearance.get("lashes",{}).get(i,{})
+			if int(organs.get("infection",0))>0 and strike.has("tip"):
+				var q=root.lerp(p+Vector2(strike.tip),float(strike.get("extension",0)))
+				_soft_tissue(canvas,q,radius*0.055,Color("e4a4d1",0.65),time+i)
+	if evolved.get("acid",false):
+		var contraction=float(appearance.get("mantle_flash",0))
+		var growing=float(appearance.get("growth",{}).get("acid",1.0))
+		var col=_organ_color("acid",body.lerp(Color("c3e97e"),0.5),appearance)
+		for i in range(6):
+			var fold=PackedVector2Array()
+			for j in range(9):
+				var a=phase+i*TAU/6+(j/8.0-0.5)*0.48
+				fold.append(p+_anchor(contour,a)*radius*(0.83+sin(j/8.0*PI)*(0.08-contraction*0.055)))
+			canvas.draw_polyline(fold,Color(col.darkened(0.4),0.75),maxf(0.1,radius*0.10*growing),true)
+			canvas.draw_polyline(fold,Color(col.lightened(0.15),0.65),radius*0.028,true)
+	if evolved.get("infection",false):
+		var charge=clampi(int(appearance.get("spore_charge",0)),0,2)
+		var growing=float(appearance.get("growth",{}).get("infection",1.0))
+		var col=_organ_color("infection",Color("d990c6"),appearance)
+		for i in range(3):
+			var a=phase+0.6+i*TAU/3
+			var q=p+_anchor(contour,a)*radius*0.68
+			var fullness=1.0 if i<charge else 0.65
+			var r=maxf(0.1,radius*(0.25+0.035*sin(time*2.8+i))*fullness*growing)
+			canvas.draw_line(p+(q-p)*0.22,q,Color(col,0.4),radius*0.045,true)
+			_vesicle(canvas,q,r,body.lerp(col,fullness*0.75),true)
+			if i<charge:_soft_tissue(canvas,q,r*0.35,Color(col.lightened(0.45),0.8),time+i)

@@ -59,6 +59,10 @@ static func effect_text(build, id: String, scale: float = 1.0,tempo: float = 1.0
 		_: return Catalog.item(id).get("desc", "")
 	if id in ["tentacle","spikes","pulse"]:interval*=tempo
 	damage = Catalog.scaled_damage(damage,r)*mult
+	if build.evolved("acid") and id=="acid":details+="; ответная кислота %.2f DPS, 1,2 с, радиус %.1f, раз в 2 с" % [Catalog.scaled_damage(3+r*1.5,r)*mult,34*scale*0.8]
+	if build.evolved("infection") and id=="infection":details+="; споры %.2f DPS, 2,4 с, радиус %.1f за 3 порции" % [Catalog.scaled_damage(4+r*2,r)*mult,34*scale*2.3]
+	if build.evolved("tentacle") and id=="tentacle" and build.rank("acid")>0:details+="; удерживающая кислота %.2f DPS на цель" % (Catalog.scaled_damage(1+build.rank("acid"),build.rank("acid"))*build.power("acid")*(1+build.passive("catalysis")))
+	if build.evolved(id):details+="; "+str(Catalog.EVOLUTIONS.get(id,{}).get("behavior","Урон эволюции ×1,30"))
 	if continuous: return "Урон %.2f/с (DPS)" % damage + details
 	return "Урон %.2f; DPS %.2f; интервал %.2f с" % [damage,damage/interval,interval] + details
 

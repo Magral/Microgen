@@ -840,7 +840,7 @@ func show_reward():
 			var column = VBoxContainer.new()
 			card.add_child(column)
 			if option.kind=="evolution":
-				column.add_child(hud.label("Эволюция · "+Catalog.item(option.id).name,23,Color("e5c591"),true))
+				column.add_child(hud.label(Catalog.EVOLUTIONS[option.id].name+" · "+Catalog.item(option.id).name,23,Color("e5c591"),true))
 				column.add_child(hud.button("Эволюционировать",func(): claim_reward(i),true))
 				column.add_child(hud.label("Урон органа ×1,30. Требования выполнены.\n"+Development.evolution_preview(sim.build,option.id,sim.ability_scale(),sim.cooldown_factor()),20,Color("bcdacf"),true))
 			else:

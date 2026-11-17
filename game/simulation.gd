@@ -6,6 +6,11 @@ const Genome = preload("res://core/genome.gd")
 const TissueDamage=preload("res://game/tissue_damage.gd")
 const CombatTissue=preload("res://core/combat_tissue.gd")
 const CombatStats=preload("res://core/combat_stats.gd")
+const MouthShape=preload("res://game/mouth_shape.gd")
+var _cached_contact_unit=PackedVector2Array()
+const EvolutionAnatomy=preload("res://game/evolution_anatomy.gd")
+const EvolutionRules=preload("res://game/evolution_rules.gd")
+var spore_charge=0
 const Rewards=preload("res://core/rewards.gd")
 var combat_stats: Dictionary=CombatStats.create()
 var last_damage: Dictionary={}
@@ -72,6 +77,7 @@ var boss_marker = Vector2.ZERO
 var last_tile = Vector2i(-100,-100)
 
 func new_run(seed_value: int, unlocked: Array = Catalog.base_unlocked(), permanent: Dictionary = {}, selected_branch: String = "predator"):
+	spore_charge=0
 	combat_stats=CombatStats.create();last_damage={};damage_markers=[];cysts=[];reward_queue=[];reward_options=[];offer_quality={};claimed_rewards=[]
 	rng.seed = seed_value
 	world.generate(seed_value)
@@ -171,6 +177,11 @@ func hurt_player(amount: float,source: Dictionary={}):
 	var kind=str(source.get("kind","unknown"))
 	var label=str(source.get("name","Неизвестный источник"))
 	var origin: Vector2=source.get("pos",player)
+	if incoming>0 and kind=="collision" and build.evolved("acid") and cooldowns.get("mantle",0)<=0:
+		cooldowns.mantle=2.0
+		var point=player+_membrane_anchor((origin-player).angle())*0.95
+		_field(point,body_radius()*0.8,Catalog.scaled_damage(3+build.rank("acid")*1.5,build.rank("acid")),1.2,"mantle")
+		_effect({"type":"mantle","pos":player,"end":point,"r":body_radius(),"life":0.65,"max":0.65})
 	var entry=CombatStats.record_taken(combat_stats,elapsed,actual,incoming-damage,kind,label,origin,int(source.get("id",0)))
 	if actual<=0:return
 	hp-=actual
@@ -263,20 +274,32 @@ func _update_ecology():
 		actor.speed=23.0
 		resident.active=true
 
-func _touches(position: Vector2,object_radius: float=0.0) -> bool:
-	var start=previous_player
-	var nearest=Geometry2D.get_closest_point_to_segment(position,start,player)
-	var broad=body_radius()*1.7+object_radius
-	if nearest.distance_squared_to(position)>broad*broad: return false
+func _ensure_contact_shape():
 	var shape_hash=hash(contact_contour)
+	if contact_contour.is_empty():shape_hash=hash([player_genome,build.stats.evolutions,elapsed if not build.stats.evolutions.is_empty() else 0.0])
 	var radius=body_radius()
 	var health=hp/max_hp
 	if _cached_contact_polygon.is_empty() or radius!=_cached_contact_radius or health!=_cached_contact_health or shape_hash!=_cached_contact_hash:
-		var shape=contact_contour if not contact_contour.is_empty() else TissueDamage.contour(Genome.contour(player_genome),player_genome,health)
-		_cached_contact_polygon=Transform2D(0,Vector2.ONE*radius,0,Vector2.ZERO)*shape
+		_cached_contact_unit=contact_contour if not contact_contour.is_empty() else EvolutionAnatomy.shape(TissueDamage.contour(Genome.contour(player_genome),player_genome,health),build.stats.evolutions,elapsed,float(player_genome.phase))
+		_cached_contact_polygon=Transform2D(0,Vector2.ONE*radius,0,Vector2.ZERO)*_cached_contact_unit
 		_cached_contact_radius=radius
 		_cached_contact_health=health
 		_cached_contact_hash=shape_hash
+
+func _membrane_anchor(angle: float) -> Vector2:
+	_ensure_contact_shape()
+	return MouthShape.boundary(_cached_contact_unit,angle)*body_radius()
+
+func _crown_destination() -> Vector2:
+	_ensure_contact_shape()
+	return player+MouthShape.pose(_cached_contact_unit,facing,bite_flash,0.0).throat*body_radius()
+
+func _touches(position: Vector2,object_radius: float=0.0) -> bool:
+	var start=previous_player
+	var nearest=Geometry2D.get_closest_point_to_segment(position,start,player)
+	var broad=body_radius()*2.1+object_radius
+	if nearest.distance_squared_to(position)>broad*broad: return false
+	_ensure_contact_shape()
 	var polygon=_cached_contact_polygon
 	var steps=maxi(1,ceili(start.distance_to(player)/maxf(4.0,body_radius()*0.3)))
 	for step in range(steps+1):
@@ -345,6 +368,7 @@ func step(dt: float,direction: Vector2):
 	player = world.move_body(player,travel,minf(26.0,body_radius()*0.65))
 	var resolved_velocity=(player-previous_player)/maxf(0.001,dt)
 	if resolved_velocity.length_squared()>4.0:facing=lerp_angle(facing,resolved_velocity.angle(),1.0-exp(-dt*9.0))
+	if not build.evolved("infection"):spore_charge=0
 	var colony_regen=build.rank("division")*0.15 if "metabolic_colony" in build.active_synergies() else 0.0
 	heal_player((build.passive("regen")+float(upgrades.get("regen",0))*0.1+colony_regen)*dt)
 	if hp<max_hp*0.25 and elapsed-_danger_at>2.0:_feedback("danger",player);_danger_at=elapsed
@@ -456,6 +480,14 @@ func _update_enemies(dt: float):
 		e.tissue_budget=minf(e.max_hp*0.06,float(e.get("tissue_budget",0))+e.max_hp*rate*dt)
 		e.slow = maxf(0,e.slow-dt)
 		e.grasp=maxf(0.0,float(e.get("grasp",0))-dt)
+		e.crown_time=maxf(0,float(e.get("crown_time",0))-dt)
+		if not build.evolved("tentacle") or not EvolutionRules.crown_eligible(body_radius(),e,build.rank("magnet")) or e.pos.distance_to(player)>EvolutionRules.crown_reach(body_radius(),build.rank("tentacle"))+15:
+			e.crown_time=0.0
+		if e.crown_time>0:
+			e.crown_age=float(e.get("crown_age",0))+dt
+			if e.crown_age>0.18:
+				if build.rank("acid")>0:hit_enemy(e,Catalog.scaled_damage(1+build.rank("acid"),build.rank("acid"))*dt,"acid")
+				if build.rank("infection")>0:e.infect=maxf(e.infect,1.0)
 		if e.infect>0:
 			e.infect -= dt
 			hit_enemy(e,Catalog.scaled_damage(4.0+build.rank("infection")*3.0,build.rank("infection"))*dt,"infection")
@@ -482,6 +514,7 @@ func _update_enemies(dt: float):
 				e.entry_distance=dist
 				e.captured=true
 				e.via_mouth=mouth_contact(e)
+				e.meal_infected=e.infect>0
 				e.digest_duration=interaction(e).duration
 			e.engulf = minf(1.0,float(e.get("engulf",0.0))+dt/float(e.get("digest_duration",0.6)))
 			e.vel = e.get("vel",Vector2.ZERO)*exp(-dt/0.18)
@@ -496,7 +529,10 @@ func _update_enemies(dt: float):
 		var rules=interaction(e)
 		var desired = dir*e.speed*rules.speed*(0.35 if e.slow>0 else 1.0)*(1.2 if "swift" in e.get("traits",[]) else 1.0)
 		var pull_range=maxf(attraction_radius(),(165+build.rank("tentacle")*12)*ability_scale() if e.grasp>0 else 0.0)
-		if dist<pull_range and rules.pull>0:desired+=offset.normalized()*rules.pull
+		if e.crown_time>0:
+			var mouth=_crown_destination()
+			desired=desired*0.25+(mouth-e.pos).normalized()*rules.pull*1.35
+		elif dist<pull_range and rules.pull>0:desired+=offset.normalized()*rules.pull
 		e.impulse=e.get("impulse",Vector2.ZERO)*exp(-dt/0.25)
 		desired+=e.impulse
 		var old_velocity = e.get("vel",Vector2.ZERO)
@@ -534,6 +570,7 @@ func _die(index: int,absorbed: bool):
 		gain_xp(4 if e.kind=="prey" else int(6*meal_scale))
 		build.biomass += 1 if e.kind=="prey" else int(3*meal_scale)
 		heal_player(build.rank("devour")*0.8)
+		if e.get("meal_infected",e.infect>0):_infected_meal()
 		if e.infect>0 and "spore_feast" in build.active_synergies(): _field(e.pos,100,14,2.5,"spore")
 	else:
 		_leave_remains(e)
@@ -600,6 +637,7 @@ func _update_remains(dt: float):
 		part.progress=minf(1.0,float(part.progress)+dt/float(part.duration))
 		if part.progress<1.0: continue
 		_assimilate(part.genome,maxf(0.5,part.r*0.12),part.pos,part.get("pigment",{}))
+		if part.infected:_infected_meal()
 		gain_xp(part.dna)
 		build.biomass+=int(part.bio)
 		if part.infected and "spore_feast" in build.active_synergies():_field(part.pos,100,14,2.5,"spore")
@@ -715,9 +753,24 @@ func _attack():
 			cooldowns.tentacle=0.85*metabolic
 			var count=Catalog.tentacle_count(build.rank("tentacle"))
 			var damage=Catalog.scaled_damage(9.0+build.rank("tentacle")*7,build.rank("tentacle"))/count
+			var crown_targets=[]
+			for enemy in enemies:
+				enemy.was_crown=float(enemy.get("crown_time",0))>0
+				enemy.crown_time=0.0
+			if build.evolved("tentacle"):
+				for enemy in targets:
+					if EvolutionRules.crown_eligible(body_radius(),enemy,build.rank("magnet")) and crown_targets.size()<mini(2,count):
+						enemy.crown_time=1.1;enemy.crown_limbs=[]
+						if not enemy.was_crown:enemy.crown_age=0.0
+						crown_targets.append(enemy)
+			var ordinary_targets=targets.filter(func(enemy):return enemy not in crown_targets)
+			var crown_limbs=mini(count,maxi(crown_targets.size(),count/2)) if not crown_targets.is_empty() else 0
 			var portions={}
 			for limb in range(count):
 				var target=targets[limb%targets.size()]
+				if limb<crown_limbs:target=crown_targets[limb%crown_targets.size()]
+				elif not ordinary_targets.is_empty():target=ordinary_targets[(limb-crown_limbs)%ordinary_targets.size()]
+				if float(target.get("crown_time",0))>0:target.crown_limbs.append(limb)
 				portions[target.id]=int(portions.get(target.id,0))+1
 				_effect({"type":"lash","pos":player,"end":target.pos,"limb":limb,"count":count,"life":0.5,"max":0.5,"r":reach})
 				if "acid_grasp" in synergies:
@@ -819,7 +872,7 @@ func _field(p: Vector2,radius: float,damage: float,life: float,kind: String,host
 			_effect({"type":"ferment_cloud","pos":p,"r":radius*1.25,"life":1.2,"max":1.2})
 	if kind=="spore": _effect({"type":"spore_feast","pos":p,"r":radius,"life":1.4,"max":1.4})
 	if fields.size()>=80: fields.pop_front()
-	fields.append({"pos":p,"r":radius,"damage":damage,"life":life,"max":life,"kind":kind,"hostile":hostile,"source":"infection" if kind=="spore" else ("electric" if kind=="acid_arc" else "trail"),"actor_name":actor_name,"actor_id":actor_id})
+	fields.append({"pos":p,"r":radius,"damage":damage,"life":life,"max":life,"kind":kind,"hostile":hostile,"source":"infection" if kind=="spore" else ("acid" if kind=="mantle" else ("electric" if kind=="acid_arc" else "trail")),"actor_name":actor_name,"actor_id":actor_id})
 
 func _update_fields(dt: float):
 	var ferment="ferment_cloud" in build.active_synergies()
@@ -886,7 +939,7 @@ func nearby_colony() -> int:
 	return -1
 
 func snapshot() -> Dictionary:
-	return {"version":1,"combat_stats":combat_stats.duplicate(true),"last_damage":last_damage.duplicate(true),"cysts":_pack(cysts),"reward_queue":reward_queue.duplicate(true),"reward_options":reward_options.duplicate(true),"offer_quality":offer_quality.duplicate(),"claimed_rewards":claimed_rewards.duplicate(),"player_genome":player_genome.duplicate(true),"minibosses_spawned":minibosses_spawned,"next_miniboss_at":next_miniboss_at,"facing":facing,"tissue_pigment":tissue_pigment.duplicate(true),"residents":_pack(residents),"outcome":outcome,"events":_pack(events),"seed":world.seed_value,"rng_state":str(rng.state),"run_id":run_id,"player":_vec(player),"player_velocity":_vec(player_velocity),"remains":_pack(remains),"digesting_id":digesting_id,"hp":hp,"max_hp":max_hp,"elapsed":elapsed,"xp":xp,"level":level,"pending_levels":pending_levels,"build":build.to_dict(),"enemies":_pack(enemies),"pickups":_pack(pickups),"colonies":_pack(world.colonies),"nests":_pack(world.nests),"explored":explored.keys(),"boss_spawned":boss_spawned,"kills":kills,"cores_found":cores_found,"next_id":next_id,"upgrades":upgrades,"cooldowns":cooldowns.duplicate(),"offers":current_offers.duplicate(),"rerolls":rerolls,"fields":_pack(fields),"shots":_pack(shots)}
+	return {"version":1,"spore_charge":spore_charge,"combat_stats":combat_stats.duplicate(true),"last_damage":last_damage.duplicate(true),"cysts":_pack(cysts),"reward_queue":reward_queue.duplicate(true),"reward_options":reward_options.duplicate(true),"offer_quality":offer_quality.duplicate(),"claimed_rewards":claimed_rewards.duplicate(),"player_genome":player_genome.duplicate(true),"minibosses_spawned":minibosses_spawned,"next_miniboss_at":next_miniboss_at,"facing":facing,"tissue_pigment":tissue_pigment.duplicate(true),"residents":_pack(residents),"outcome":outcome,"events":_pack(events),"seed":world.seed_value,"rng_state":str(rng.state),"run_id":run_id,"player":_vec(player),"player_velocity":_vec(player_velocity),"remains":_pack(remains),"digesting_id":digesting_id,"hp":hp,"max_hp":max_hp,"elapsed":elapsed,"xp":xp,"level":level,"pending_levels":pending_levels,"build":build.to_dict(),"enemies":_pack(enemies),"pickups":_pack(pickups),"colonies":_pack(world.colonies),"nests":_pack(world.nests),"explored":explored.keys(),"boss_spawned":boss_spawned,"kills":kills,"cores_found":cores_found,"next_id":next_id,"upgrades":upgrades,"cooldowns":cooldowns.duplicate(),"offers":current_offers.duplicate(),"rerolls":rerolls,"fields":_pack(fields),"shots":_pack(shots)}
 
 func restore(data: Dictionary) -> bool:
 	if data.get("version",0) != 1 or not data.get("player",null) is Array: return false
@@ -922,6 +975,7 @@ func restore(data: Dictionary) -> bool:
 	level = int(data.get("level",1))
 	pending_levels = int(data.get("pending_levels",0))
 	build.from_dict(data.get("build",{}))
+	spore_charge=clampi(int(data.get("spore_charge",0)),0,2) if build.evolved("infection") else 0
 	for id in Catalog.base_unlocked():
 		if not id in build.unlocked:build.unlocked.append(id)
 	enemies = _unpack(data.enemies)
@@ -1095,3 +1149,12 @@ func claim_reward(index: int,replace_id: String="") -> bool:
 	_feedback("reward",player,3 if option.kind=="evolution" else float(option.get("quality",1)))
 	_effect({"type":"mutation","pos":player,"r":body_radius()*1.6,"life":1.2,"max":1.2})
 	return true
+
+func _infected_meal():
+	if not build.evolved("infection"):return
+	spore_charge+=1
+	_effect({"type":"womb_feed","pos":player,"r":body_radius(),"life":0.7,"max":0.7})
+	if spore_charge<3:return
+	spore_charge=0
+	_field(player,body_radius()*2.3,Catalog.scaled_damage(4+build.rank("infection")*2,build.rank("infection")),2.4,"spore")
+	_effect({"type":"womb_burst","pos":player,"r":body_radius()*2.3,"life":1.0,"max":1.0})

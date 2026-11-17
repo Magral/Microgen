@@ -81,12 +81,19 @@ static func field(canvas: CanvasItem,p: Vector2,radius: float,kind: String,life:
 
 static func paint(canvas: CanvasItem,effect: Dictionary,camera: Vector2,center: Vector2,time: float,clones: Array=[]) -> bool:
 	var kind=str(effect.type)
-	if kind not in SYNERGY_STYLES and kind not in ["electric","enzymes","cilia","bite","infection","assimilate","mutation"]: return false
+	if kind not in SYNERGY_STYLES and kind not in ["electric","enzymes","cilia","bite","infection","assimilate","mutation","mantle","womb_feed","womb_burst"]: return false
 	var p=effect.pos-camera+center
 	var t=clampf(1.0-float(effect.life)/float(effect.max),0.0,1.0)
 	var alpha=pow(sin(PI*t),0.65)
 	var radius=float(effect.r)
-	if kind in SYNERGY_STYLES:
+	if kind=="mantle":
+		var end=effect.get("end",effect.pos)-camera+center
+		var a=(end-p).angle()
+		_wave(canvas,p,radius*(0.9+t*0.6),a-0.65,1.3,Color("c7f27f",alpha*0.9),3.0,time*2)
+	elif kind in ["womb_feed","womb_burst"]:
+		p=center
+		_wave(canvas,p,radius*(0.35+t*0.65),time*0.2,TAU,Color("eea1d8",alpha*0.7),2.2,time*3)
+	elif kind in SYNERGY_STYLES:
 		_synergy(canvas,kind,p,effect.get("end",effect.pos)-camera+center,radius,t,alpha,time,clones,camera,center)
 	elif kind in ["electric","enzymes","cilia"]:
 		var end=effect.get("end",effect.pos)-camera+center

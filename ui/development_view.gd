@@ -24,6 +24,7 @@ static func populate(hud,box,sim):
 	box.add_child(hud.label("Равные и крупные противники защищены стойкой тканью: она снижает быстрый суммарный урон. Цифры в бою показывают действительный урон.",17,Color("a1b8b9"),true))
 	box.add_child(hud.label(combat_summary(sim),21,Color("b7dfd2"),true))
 	box.add_child(hud.label("Числа органов ниже — до сопротивления ткани врага. Фактический DPS — урон за время учёта, включая движение и ожидание.",19,Color("9cbabc"),true))
+	if sim.build.evolved("infection"):box.add_child(hud.label("Споровые камеры: %d/3 · третья заражённая порция выпускает облако" % sim.spore_charge,21,Color("e6aad8"),true))
 	box.add_child(hud.label("Боевые органы · %d/6" % sim.build.organs.size(),26))
 	_equipped(hud,box,sim,sim.build.organs)
 	box.add_child(hud.label("Пассивные адаптации · %d/4" % sim.build.adaptations.size(),26))
@@ -32,6 +33,7 @@ static func populate(hud,box,sim):
 	for id in Catalog.EVOLUTIONS:
 		var recipe = Catalog.EVOLUTIONS[id]
 		var state = "✓ Получена" if sim.build.evolved(id) else ("Готова · ищи в наградах" if id in sim.build.evolution_candidates() else "◇ Требуются мутации")
+		if recipe.has("behavior"):box.add_child(hud.label(recipe.behavior,20,Color("b8daca"),true))
 		box.add_child(hud.label("%s · %s\n%s %d/6 + %s %d/3 · урон ×1,30" % [recipe.name,state,Catalog.item(id).name,sim.build.rank(id),Catalog.item(recipe.passive).name,sim.build.rank(recipe.passive)],20,Color("d3c19f"),true))
 	var legacy=[]
 	for id in sim.upgrades:
@@ -81,7 +83,7 @@ static func item_card(hud,id: String,rank: int,sim=null):
 	details.add_child(hud.label("%s · %d/%d" % [item.name,rank,Catalog.max_rank(id)],23,Color(item.color),true))
 	details.add_child(hud.label(item.desc,18,Color("bed2d1"),true))
 	if sim!=null:
-		details.add_child(hud.label(Rewards.quality_name(sim.build.quality(id))+(" · Эволюционировал ×1,30" if sim.build.evolved(id) else ""),20,Rewards.quality_color(sim.build.quality(id)),true))
+		details.add_child(hud.label(Rewards.quality_name(sim.build.quality(id))+(" · "+Catalog.EVOLUTIONS[id].name+" ×1,30" if sim.build.evolved(id) else ""),20,Rewards.quality_color(sim.build.quality(id)),true))
 		details.add_child(hud.label("Сейчас: "+Inspector.effect_text(sim.build,id,sim.ability_scale(),sim.cooldown_factor()),21,Color("9fe0ca"),true))
 		var actual = sim.combat_stats.get("organs",{}).get(id,{})
 		if id in Catalog.ORGANS:

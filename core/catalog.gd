@@ -107,13 +107,13 @@ static func adaptation_bonus(rank: int) -> float:
 	# Preserve old ranks 1–3 while giving both final adaptation ranks real value.
 	return minf(0.6,rank*0.12 if rank<=4 else 0.48+(rank-4)*0.06)
 
-# Evolution is a permanent 30% organ damage bonus; recipes unlock at 6 + 3 ranks.
+# Recipes preserve saved IDs and the 30% damage bonus; three also change behavior.
 const EVOLUTIONS = {
-	"tentacle": {"name":"Хищные рецепторы", "passive":"magnet"},
-	"acid": {"name":"Кислотная броня", "passive":"armor"},
+	"tentacle": {"name":"Ловчая корона", "passive":"magnet", "behavior":"До двух меньших или сильно повреждённых целей окружаются щупальцами и плавно направляются к пасти. Здоровые крупные враги не удерживаются."},
+	"acid": {"name":"Растворяющая мантия", "passive":"armor", "behavior":"При столкновении мембрана выдавливает кислоту в месте контакта. Повтор не чаще раза в 2 с; защита от столкновения не гарантируется."},
 	"spikes": {"name":"Стремительные шипы", "passive":"speed"},
 	"pulse": {"name":"Живое сокращение", "passive":"regen"},
-	"infection": {"name":"Питательная инфекция", "passive":"metabolism"},
+	"infection": {"name":"Споровая утроба", "passive":"metabolism", "behavior":"Три полностью переваренные заражённые порции наполняют камеры и выпускают облако спор. Заряд сохраняется при выходе."},
 	"electric": {"name":"Каталитический разряд", "passive":"catalysis"}
 }
 const QUALITY_MULTIPLIERS = [1.0, 1.12, 1.25, 1.45]
