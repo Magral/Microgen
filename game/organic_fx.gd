@@ -38,12 +38,18 @@ static func field(canvas: CanvasItem,p: Vector2,radius: float,kind: String,life:
 
 static func paint(canvas: CanvasItem,effect: Dictionary,camera: Vector2,center: Vector2,time: float,clones: Array=[]) -> bool:
 	var kind=str(effect.type)
-	if kind not in ["infection","acid_grasp","spike_pulse","toxic_colony","spore_feast","assimilate","mutation"]: return false
+	if kind not in ["bite","infection","acid_grasp","spike_pulse","toxic_colony","spore_feast","assimilate","mutation"]: return false
 	var p=effect.pos-camera+center
 	var t=clampf(1.0-float(effect.life)/float(effect.max),0.0,1.0)
 	var alpha=sin(PI*t)
 	var radius=float(effect.r)
-	if kind=="infection" or kind=="acid_grasp":
+	if kind=="bite":
+		var end=effect.end-camera+center
+		for i in range(5):
+			var a=i*2.399
+			var q=p.lerp(end,0.3)+Vector2.from_angle(a)*radius*t
+			canvas.draw_circle(q,1.2*(1-t)+0.4,Color("d7dfbb",alpha*0.55))
+	elif kind=="infection" or kind=="acid_grasp":
 		var end=effect.end-camera+center
 		var color=Color("eba6da") if kind=="infection" else Color("c3ed7d")
 		var normal=(end-p).normalized().orthogonal()

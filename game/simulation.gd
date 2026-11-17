@@ -4,6 +4,13 @@ const Build = preload("res://core/build_model.gd")
 const Catalog = preload("res://core/catalog.gd")
 const Genome = preload("res://core/genome.gd")
 const TissueDamage=preload("res://game/tissue_damage.gd")
+const SizeRules=preload("res://core/size_rules.gd")
+var facing=0.0
+var bite_flash=0.0
+var _cached_contact_polygon=PackedVector2Array()
+var _cached_contact_radius=-1.0
+var _cached_contact_health=-1.0
+var _cached_contact_hash=0
 const Growth=preload("res://core/growth.gd")
 var residents: Array=[]
 var previous_player=Vector2.ZERO
@@ -53,6 +60,9 @@ func new_run(seed_value: int, unlocked: Array = Catalog.base_unlocked(), permane
 	rng.seed = seed_value
 	world.generate(seed_value)
 	player_genome = Genome.create(seed_value,0,"player",0)
+	facing=float(player_genome.rotation)
+	_cached_contact_polygon=PackedVector2Array()
+	contact_contour=PackedVector2Array()
 	tissue_pigment = Pigment.create(Genome.colors(player_genome)[0])
 	build = Build.new()
 	build.unlocked = unlocked.duplicate()
@@ -135,8 +145,16 @@ func _touches(position: Vector2,object_radius: float=0.0) -> bool:
 	var nearest=Geometry2D.get_closest_point_to_segment(position,start,player)
 	var broad=body_radius()*1.7+object_radius
 	if nearest.distance_squared_to(position)>broad*broad: return false
-	var shape=contact_contour if not contact_contour.is_empty() else TissueDamage.contour(Genome.contour(player_genome),player_genome,hp/max_hp)
-	var polygon=Transform2D(0,Vector2.ONE*body_radius(),0,Vector2.ZERO)*shape
+	var shape_hash=hash(contact_contour)
+	var radius=body_radius()
+	var health=hp/max_hp
+	if _cached_contact_polygon.is_empty() or radius!=_cached_contact_radius or health!=_cached_contact_health or shape_hash!=_cached_contact_hash:
+		var shape=contact_contour if not contact_contour.is_empty() else TissueDamage.contour(Genome.contour(player_genome),player_genome,health)
+		_cached_contact_polygon=Transform2D(0,Vector2.ONE*radius,0,Vector2.ZERO)*shape
+		_cached_contact_radius=radius
+		_cached_contact_health=health
+		_cached_contact_hash=shape_hash
+	var polygon=_cached_contact_polygon
 	var steps=maxi(1,ceili(start.distance_to(player)/maxf(4.0,body_radius()*0.3)))
 	for step in range(steps+1):
 		var relative=position-start.lerp(player,float(step)/steps)
@@ -198,7 +216,10 @@ func step(dt: float,direction: Vector2):
 	var response = exp(-dt/0.2)
 	var travel = desired*dt+(player_velocity-desired)*0.2*(1.0-response)
 	player_velocity = desired+(player_velocity-desired)*response
+	bite_flash=maxf(0.0,bite_flash-dt*4.5)
 	player = world.move_body(player,travel,minf(26.0,body_radius()*0.65))
+	var resolved_velocity=(player-previous_player)/maxf(0.001,dt)
+	if resolved_velocity.length_squared()>4.0:facing=lerp_angle(facing,resolved_velocity.angle(),1.0-exp(-dt*9.0))
 	hp = minf(max_hp,hp+(build.rank("regen")*0.5+float(upgrades.get("regen",0))*0.1)*dt)
 	_reveal()
 	for k in cooldowns: cooldowns[k] = maxf(0,cooldowns[k]-dt)
@@ -276,13 +297,21 @@ func spawn_enemy(p: Vector2,kind: String):
 
 # Eligibility also governs attack exclusion: retracting visual progress alone
 # must never protect an enemy that healed or moved out of absorption range.
+func mouth_contact(e: Dictionary) -> bool:
+	if build.rank("devour")<=0:return false
+	var offset=e.pos-player
+	if offset.length()>body_radius()*1.18+e.r:return false
+	return offset.length_squared()<0.01 or offset.normalized().dot(Vector2.from_angle(facing))>=cos(0.7)
+
+func interaction(e: Dictionary) -> Dictionary:
+	var rank=build.rank("magnet")+(1 if float(e.get("grasp",0))>0 else 0)
+	return SizeRules.profile(body_radius(),e.r,e.hp/maxf(1.0,e.max_hp),rank,build.rank("devour"),mouth_contact(e))
+
 func _is_engulfing(e: Dictionary) -> bool:
-	if e.hp<=0 or e.kind=="boss": return false
-	if e.get("captured",false): return true
-	if not _touches(e.pos,e.r*1.17): return false
-	if e.r<=body_radius()*0.82: return true
-	var threshold=e.max_hp*(0.12+build.rank("devour")*0.07)
-	return e.r<=body_radius()*1.45 and build.rank("devour")>0 and e.hp<=threshold
+	if e.hp<=0 or e.kind=="boss":return false
+	if e.get("captured",false):return true
+	if not interaction(e).eligible:return false
+	return _touches(e.pos,e.r*1.17)
 
 func _update_enemies(dt: float):
 	for i in range(enemies.size()-1,-1,-1):
@@ -291,6 +320,7 @@ func _update_enemies(dt: float):
 			_die(i,false)
 			continue
 		e.slow = maxf(0,e.slow-dt)
+		e.grasp=maxf(0.0,float(e.get("grasp",0))-dt)
 		if e.infect>0:
 			e.infect -= dt
 			e.hp -= (4.0+build.rank("infection")*3.0)*dt
@@ -313,7 +343,9 @@ func _update_enemies(dt: float):
 				e.entry_angle=offset.angle()+PI
 				e.entry_distance=dist
 				e.captured=true
-			e.engulf = minf(1.0,float(e.get("engulf",0.0))+dt/0.6)
+				e.via_mouth=mouth_contact(e)
+				e.digest_duration=interaction(e).duration
+			e.engulf = minf(1.0,float(e.get("engulf",0.0))+dt/float(e.get("digest_duration",0.6)))
 			e.vel = e.get("vel",Vector2.ZERO)*exp(-dt/0.18)
 			e.pos = player+Vector2.from_angle(float(e.get("entry_angle",0)))*body_radius()*0.35
 			if e.engulf >= 1.0: _die(i,true)
@@ -323,7 +355,12 @@ func _update_enemies(dt: float):
 		if e.r<body_radius()*0.82: dir = -dir if dist<180+body_radius() else dir.rotated(e.phase)
 		if e.kind == "spitter" and dist<300: dir = -dir*0.3
 		if _safe_zone(player) and e.kind != "prey": dir = -dir
-		var desired = dir*e.speed*(0.35 if e.slow>0 else 1.0)*(1.2 if "swift" in e.get("traits",[]) else 1.0)
+		var rules=interaction(e)
+		var desired = dir*e.speed*rules.speed*(0.35 if e.slow>0 else 1.0)*(1.2 if "swift" in e.get("traits",[]) else 1.0)
+		var pull_range=maxf(attraction_radius(),(165+build.rank("tentacle")*12)*ability_scale() if e.grasp>0 else 0.0)
+		if dist<pull_range and rules.pull>0:desired+=offset.normalized()*rules.pull
+		e.impulse=e.get("impulse",Vector2.ZERO)*exp(-dt/0.25)
+		desired+=e.impulse
 		var old_velocity = e.get("vel",Vector2.ZERO)
 		var response = exp(-dt/0.28)
 		e.vel = desired+(old_velocity-desired)*response
@@ -336,10 +373,10 @@ func _update_enemies(dt: float):
 				if e.kind == "boss":
 					for n in range(10): _shot(e.pos,Vector2.from_angle(n*TAU/10.0+elapsed*0.2)*135,10,true)
 				else: _shot(e.pos,offset.normalized()*155,8,true)
-		if dist<e.r+body_radius()*0.75 and e.r>body_radius()*0.82 and invuln<=0 and not _safe_zone(player):
-			hp -= (10.0 if e.kind!="boss" else 22.0)*clampf(e.r/body_radius(),0.8,2.4)*(1.0-build.rank("armor")*0.12)
+		if dist<e.r+body_radius()*0.75 and rules.impact>0 and invuln<=0 and not _safe_zone(player):
+			hp -= rules.impact*(1.2 if e.kind=="boss" else 1.0)*(1.0-build.rank("armor")*0.12)
 			invuln = 0.65
-			e.pos = world.move_body(e.pos,-offset.normalized()*30,minf(26.0,e.r*0.6))
+			e.impulse=-offset.normalized()*24.0
 			_effect({"type":"hurt","pos":player,"life":0.3,"max":0.3,"r":45.0})
 		if e.hp<=0: _die(i,false)
 
@@ -448,7 +485,23 @@ func _nearest(radius: float) -> Dictionary:
 			nearest = e
 	return nearest
 
+func _bite():
+	var rank=build.rank("devour")
+	if rank<=0 or cooldowns.get("bite",0)>0:return
+	var target={}
+	var nearest=INF
+	for enemy in enemies:
+		if enemy.hp<=0 or enemy.get("captured",false) or not mouth_contact(enemy):continue
+		var distance=player.distance_squared_to(enemy.pos)
+		if distance<nearest:nearest=distance;target=enemy
+	if target.is_empty():return
+	cooldowns.bite=0.45
+	bite_flash=1.0
+	target.hp-=7.0+rank*5.0
+	_effect({"type":"bite","pos":player+Vector2.from_angle(facing)*body_radius()*0.8,"end":target.pos,"r":body_radius()*0.25,"life":0.3,"max":0.3})
+
 func _attack():
+	_bite()
 	var metabolic = 0.88 if world.conditions[world.biome(player)] == 2 else 1.0
 	var synergies = build.active_synergies()
 	if build.rank("tentacle")>0 and cooldowns.get("tentacle",0)<=0:
@@ -460,7 +513,7 @@ func _attack():
 			if "acid_grasp" in synergies:
 				_effect({"type":"acid_grasp","pos":player,"end":target.pos,"r":30.0,"life":0.65,"max":0.65})
 				target.slow = 1.3
-				target.pos = world.move_body(target.pos,(player-target.pos).limit_length(65),target.r*0.6)
+				target.grasp=1.3
 	if build.rank("acid")>0:
 		for e in enemies:
 			if _is_engulfing(e): continue
@@ -479,7 +532,7 @@ func _attack():
 			if _is_engulfing(e): continue
 			if player.distance_squared_to(e.pos)<radius*radius:
 				e.hp -= 12+build.rank("pulse")*8
-				e.pos = world.move_body(e.pos,(e.pos-player).normalized()*65,minf(26.0,e.r*0.6))
+				e.impulse=e.get("impulse",Vector2.ZERO)+(e.pos-player).normalized()*100.0
 		_effect({"type":"pulse","pos":player,"r":float(radius),"life":0.55,"max":0.55})
 		if "spike_pulse" in synergies:
 			_effect({"type":"spike_pulse","pos":player,"r":float(radius),"life":0.8,"max":0.8})
@@ -610,7 +663,7 @@ func nearby_colony() -> int:
 	return -1
 
 func snapshot() -> Dictionary:
-	return {"version":1,"player_genome":player_genome.duplicate(true),"tissue_pigment":tissue_pigment.duplicate(true),"residents":_pack(residents),"outcome":outcome,"events":_pack(events),"seed":world.seed_value,"rng_state":str(rng.state),"run_id":run_id,"player":_vec(player),"player_velocity":_vec(player_velocity),"remains":_pack(remains),"digesting_id":digesting_id,"hp":hp,"max_hp":max_hp,"elapsed":elapsed,"xp":xp,"level":level,"pending_levels":pending_levels,"build":build.to_dict(),"enemies":_pack(enemies),"pickups":_pack(pickups),"colonies":_pack(world.colonies),"nests":_pack(world.nests),"explored":explored.keys(),"boss_spawned":boss_spawned,"kills":kills,"cores_found":cores_found,"next_id":next_id,"upgrades":upgrades,"cooldowns":cooldowns.duplicate(),"offers":current_offers.duplicate(),"rerolls":rerolls,"fields":_pack(fields),"shots":_pack(shots)}
+	return {"version":1,"player_genome":player_genome.duplicate(true),"facing":facing,"tissue_pigment":tissue_pigment.duplicate(true),"residents":_pack(residents),"outcome":outcome,"events":_pack(events),"seed":world.seed_value,"rng_state":str(rng.state),"run_id":run_id,"player":_vec(player),"player_velocity":_vec(player_velocity),"remains":_pack(remains),"digesting_id":digesting_id,"hp":hp,"max_hp":max_hp,"elapsed":elapsed,"xp":xp,"level":level,"pending_levels":pending_levels,"build":build.to_dict(),"enemies":_pack(enemies),"pickups":_pack(pickups),"colonies":_pack(world.colonies),"nests":_pack(world.nests),"explored":explored.keys(),"boss_spawned":boss_spawned,"kills":kills,"cores_found":cores_found,"next_id":next_id,"upgrades":upgrades,"cooldowns":cooldowns.duplicate(),"offers":current_offers.duplicate(),"rerolls":rerolls,"fields":_pack(fields),"shots":_pack(shots)}
 
 func restore(data: Dictionary) -> bool:
 	if data.get("version",0) != 1 or not data.get("player",null) is Array: return false
@@ -620,6 +673,9 @@ func restore(data: Dictionary) -> bool:
 	var saved_recipe = data.get("player_genome",{})
 	player_genome = saved_recipe if saved_recipe is Dictionary else {}
 	if not Genome.validate(player_genome): player_genome = Genome.create(world.seed_value,0,"player",0)
+	facing=float(data.get("facing",player_genome.rotation))
+	_cached_contact_polygon=PackedVector2Array()
+	contact_contour=PackedVector2Array()
 	tissue_pigment = Pigment.restore(data.get("tissue_pigment",{}),Genome.colors(player_genome)[0])
 	rng.seed = int(data.seed)
 	rng.state = int(data.get("rng_state","0"))

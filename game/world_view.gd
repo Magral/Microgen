@@ -14,6 +14,7 @@ var tracked_sim
 var feeding: Array=[]
 var reaction=0.0
 var previous_build=""
+var detailed_enemies: Dictionary={}
 var zoom=3.09
 
 func _ready():
@@ -23,12 +24,14 @@ func _ready():
 func _motion(key,position: Vector2,recipe: Dictionary,dt: float,radius: float):
 	if not motions.has(key):
 		motions[key] = {"jelly":Jelly.new(float(recipe.rotation)),"position":position,"distance":0.0}
+		if key is String and key=="player":motions[key].jelly.angle=sim.facing
 	var state = motions[key]
 	var displacement = position-state.position
 	state.position = position
 	if not sim.paused:
 		var velocity = displacement/maxf(dt,0.001) if displacement.length()<100 else Vector2.ZERO
 		state.jelly.step(dt,velocity)
+		if key is String and key=="player":state.jelly.angle=sim.facing
 		state.distance += displacement.length() if displacement.length()<100 else 0.0
 		if state.distance>radius*0.7:
 			fluid.emit_wake(position,velocity,radius)
@@ -64,6 +67,15 @@ func _process(dt):
 				reaction=1.0
 				previous_build=build_key
 				sim._effect({"type":"mutation","pos":sim.player,"r":60.0,"life":1.1,"max":1.1})
+		var visible=[]
+		var bounds=get_viewport_rect().size/(2*zoom)+Vector2.ONE*120
+		for enemy in sim.enemies:
+			var offset=enemy.pos-sim.player
+			if absf(offset.x)<bounds.x and absf(offset.y)<bounds.y and enemy.r*zoom>=22:
+				visible.append(enemy)
+		visible.sort_custom(func(a,b):return sim.player.distance_squared_to(a.pos)<sim.player.distance_squared_to(b.pos))
+		detailed_enemies.clear()
+		for i in range(mini(6,visible.size())):detailed_enemies[visible[i].id]=true
 		var alive = {"player":true}
 		_motion("player",sim.player,sim.player_genome,dt,sim.body_radius())
 		var physical=TissueDamage.contour(painter.anatomy(sim.player_genome).contour,sim.player_genome,sim.hp/sim.max_hp)
@@ -170,7 +182,7 @@ func _draw():
 		if not area.has_point(e.pos): continue
 		if feeding.any(func(entry): return entry.get("enemy_id",-1)==e.id): continue
 		var organs = enemy_organs(e)
-		painter.paint(self,screen(e.pos),e.r*1.17*(1.0-float(e.get("engulf",0))*0.65),e.genome,organs,visual_time,"prey" if e.r<sim.body_radius()*0.82 else e.kind,e.kind=="boss" or (e.r>20 and sim.enemies.size()<90),motion_for(e.id),[],Color(-1,-1,-1),0.0,e.hp/e.max_hp)
+		painter.paint(self,screen(e.pos),e.r*1.17*(1.0-float(e.get("engulf",0))*0.65),e.genome,organs,visual_time,"prey" if e.r<sim.body_radius()*0.82 else e.kind,e.kind=="boss" or detailed_enemies.has(e.id),motion_for(e.id),[],Color(-1,-1,-1),0.0,e.hp/e.max_hp)
 		if e.infect>0: OrganicFX.infected(self,screen(e.pos),e.r,e.genome,visual_time,float(e.infect),motion_for(e.id))
 		if e.hp<e.max_hp:
 			var p = screen(e.pos)+Vector2(-e.r,-e.r*1.5-10)
@@ -188,6 +200,7 @@ func _draw():
 		draw_line(p-shot.vel.normalized()*13,p,col,3,true)
 		draw_circle(p,3,col)
 	for effect in sim.effects:
+		if not area.grow(float(effect.r)).has_point(effect.pos):continue
 		if OrganicFX.paint(self,effect,sim.player,size*Vector2(0.5,0.51),visual_time,sim.clone_positions() if sim.build.rank("division")>0 else []): continue
 		var p = screen(effect.pos)
 		var alpha = effect.life/effect.max
@@ -253,7 +266,7 @@ func _draw_player():
 		draw_arc(p,(75+sim.build.rank("acid")*9)*sim.ability_scale(),0,TAU,48,Color(0.6,0.85,0.4,0.14),1.0,true)
 	var anatomy = sim.build.organs.duplicate()
 	anatomy.merge(sim.build.adaptations,true)
-	painter.paint(self,p,radius,sim.player_genome,anatomy,visual_time,"player",true,motion_for("player"),feeding,sim.body_color(),reaction,sim.hp/sim.max_hp)
+	painter.paint(self,p,radius,sim.player_genome,anatomy,visual_time,"player",true,motion_for("player"),feeding,sim.body_color(),reaction,sim.hp/sim.max_hp,sim.bite_flash)
 	if sim.invuln>0: draw_arc(p,radius*1.4,0,TAU,40,Color("f2c3d1",0.2+0.2*sin(visual_time*24)),2,true)
 
 func enemy_organs(e: Dictionary) -> Dictionary:
