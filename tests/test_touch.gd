@@ -46,6 +46,9 @@ func run():
 	if scene.stage=="start":
 		await tap(find_button(scene.hud.content,"Начать жизнь"))
 		check(scene.stage=="game","native touch starts game")
+		# Seed 72 places another colony near colony 0 + (500,0). Keep this
+		# overlap deterministic: a fixed offset is not guaranteed to be water.
+		scene.start_run(72)
 		scene.sim.gain_xp(12)
 		scene.show_level()
 		await tap(find_button(scene.hud.content,"Выбрать"))
@@ -55,8 +58,15 @@ func run():
 		scene.show_shop()
 		await tap(find_button(scene.hud.content,"Купить"))
 		check(scene.sim.world.colonies[0].stock[0].sold,"native touch buys shop item")
-		scene.sim.player += Vector2(500,0)
+		scene.sim.player = scene.sim.world.colonies[1].pos
 		scene.resume_game()
+		await tap(scene.hud.shop_button)
+		check(scene.stage=="shop","native colony button consumes its touch")
+		for nutrient in scene.sim.world.nutrients:
+			scene.sim.player = nutrient.pos
+			if scene.sim.nearby_colony()<0: break
+		scene.resume_game()
+		check(scene.sim.nearby_colony()<0 and not scene.hud.shop_button.visible,"joystick fixture is outside every colony button")
 		var size = root.get_visible_rect().size
 		for p in [Vector2(250,400),size*Vector2(0.8,0.55),size*Vector2(0.5,0.12),size*Vector2(0.5,0.92),scene.hud.hp_bar.global_position+scene.hud.hp_bar.size/2]:
 			var touch = InputEventScreenTouch.new()
