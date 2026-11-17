@@ -6,8 +6,8 @@ run/max_fps=60
 run/main_scene="res://main.tscn"
 config/features=PackedStringArray("4.6", "GL Compatibility")
 config/icon="res://assets/icon.svg"
-config/version="1.0.0"
-config/version_code=100
+config/version="1.0.1"
+config/version_code=101
 
 [display]
 window/size/viewport_width=1280

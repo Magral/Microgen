@@ -305,9 +305,9 @@ func show_menu():
 	sim.paused = true
 	view.sim = sim
 	hud.game_visible(false)
-	var box = hud.open("МИКРОГЕН", "Маленькая жизнь. Непредсказуемая эволюция.\nВерсия 1.0.0 · игра работает без интернета",740)
-	box.add_child(hud.label("Собери организм, который сможет выжить.",25,Color("9ce3cf"),true))
-	box.add_child(hud.label("Исследуй случайный микромир, поглощай ДНК и соединяй мутации. Атаки автоматические — управляй только движением.",20,Color("a3bfc0"),true))
+	var box = hud.open_home()
+	box.add_child(hud.label("МИКРОГЕН",46,Color("e2f4ed")))
+	box.add_child(hud.label("Маленькая жизнь. Непредсказуемая эволюция.",22,Color("9ce3cf"),true))
 	if not store.profile.checkpoint.is_empty(): box.add_child(hud.button("Завершить итоги жизни" if str(store.profile.checkpoint.get("outcome",""))!="" else "Продолжить забег",continue_run,true))
 	box.add_child(hud.button("Новый организм",show_start,true))
 	var row = hud.row()
@@ -316,16 +316,23 @@ func show_menu():
 		var b = hud.button(entry[0],entry[1])
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(b)
-	box.add_child(hud.button("Обновления",show_updates))
-	if not store.profile.legacy.pending.is_empty():box.add_child(hud.button("Наследие прошлой жизни",func():show_imprints("menu"),true))
-	box.add_child(hud.label("Ядра наследия: %d   ·   Забеги: %d   ·   Победы: %d" % [store.profile.cores,store.profile.runs,store.profile.wins],18,Color("ccb2e7")))
+	var services=hud.row()
+	box.add_child(services)
+	var updates=hud.button("Обновления",show_updates)
+	updates.size_flags_horizontal=Control.SIZE_EXPAND_FILL
+	services.add_child(updates)
+	if not store.profile.legacy.pending.is_empty():
+		var inheritance=hud.button("Отпечатки · наследие",func():show_imprints("menu"),true)
+		inheritance.size_flags_horizontal=Control.SIZE_EXPAND_FILL
+		services.add_child(inheritance)
 	var footer_actions=hud.row()
 	box.add_child(footer_actions)
-	var gallery_button=hud.button("Случайные формы · коллекция",show_gallery)
+	var gallery_button=hud.button("Коллекция форм",show_gallery)
 	gallery_button.size_flags_horizontal=Control.SIZE_EXPAND_FILL
 	footer_actions.add_child(gallery_button)
 	footer_actions.add_child(hud.button("Выход",exit_game))
-	box.add_child(hud.label("2 области · %d органов · %d синергий · процедурные организмы" % [Catalog.ORGANS.size(),Catalog.SYNERGIES.size()],16,Color("78989f"),true))
+	box.add_child(hud.label("Ядра: %d   ·   Забеги: %d   ·   Победы: %d" % [store.profile.cores,store.profile.runs,store.profile.wins],20,Color("ccb2e7"),true))
+	box.add_child(hud.label("Версия %s · игра работает без интернета" % ProjectSettings.get_setting("application/config/version","1.0.1"),20,Color("94b5b8"),true))
 
 func exit_game():
 	save_run()

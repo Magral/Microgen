@@ -7,6 +7,8 @@ const LIGHT = Vector2(-0.70710678,-0.70710678)
 var _topologies: Dictionary = {}
 var _materials: Dictionary = {}
 var _densities: Dictionary = {}
+var _shading: Dictionary = {}
+const SHADING_LIMIT=96
 const MATERIAL_LIMIT=48
 const LIGHT_SAMPLES=49
 
@@ -81,33 +83,35 @@ func mesh(contour: PackedVector2Array,p: Vector2,radius: float,body: Color,edge:
 		if contour[i].cross(contour[(i+1)%contour.size()])< -0.0000001:
 			return _irregular_mesh(contour,p,radius,body,edge,shadow)
 	var topo=topology(contour.size(),rich)
-	var palette=material(body,edge,shadow,rich)
-	var grain=density(contour.size(),phase) if rich else PackedFloat32Array()
-	var points=PackedVector2Array()
-	var colors=PackedColorArray()
-	points.resize(1+contour.size()*topo.rings.size())
-	colors.resize(points.size())
-	points[0]=p
-	colors[0]=Color(body.lerp(edge,0.20),0.88)
-	# World-space upper-left light remains steady as the organism turns.
+	var points=PackedVector2Array([p])
+	for radial in topo.rings:
+		points.append_array(Transform2D(0,Vector2.ONE*radius*float(radial),0,p)*contour)
+	return {"indices":topo.indices,"points":points,"colors":_lighting(contour,body,edge,shadow,rich,phase)}
+
+func _lighting(contour: PackedVector2Array,body: Color,edge: Color,shadow: Color,rich: bool,phase: float) -> PackedColorArray:
+	# Normals already use a 49-step LUT. Reuse the exact final vertex colors
+	# while these bins and the material are unchanged; positions stay live.
 	var light_samples=PackedInt32Array()
 	for i in range(contour.size()):
 		var tangent=contour[(i+1)%contour.size()]-contour[posmod(i-1,contour.size())]
 		var facing=Vector2(tangent.y,-tangent.x).normalized().dot(LIGHT)
 		light_samples.append(clampi(roundi((facing+1.0)*0.5*(LIGHT_SAMPLES-1)),0,LIGHT_SAMPLES-1))
-	for ring in range(topo.rings.size()):
-		var radial: float=topo.rings[ring]
+	var key=[body,edge,shadow,rich,phase,light_samples]
+	if key in _shading:return _shading[key].duplicate()
+	var palette=material(body,edge,shadow,rich)
+	var grain=density(contour.size(),phase) if rich else PackedFloat32Array()
+	var rings=RICH_RINGS if rich else SIMPLE_RINGS
+	var colors=PackedColorArray([Color(body.lerp(edge,0.20),0.88)])
+	for ring in range(rings.size()):
 		for i in range(contour.size()):
-			var index=1+ring*contour.size()+i
-			points[index]=p+contour[i]*radius*radial
 			var lit: Color=palette[ring*LIGHT_SAMPLES+light_samples[i]]
 			if rich:
-				# Fine cytoplasmic density follows tissue, rather than floating dots.
 				var alpha=lit.a
-				lit=lit.lerp(shadow,grain[ring*contour.size()+i])
-				lit.a=alpha
-			colors[index]=lit
-	return {"indices":topo.indices,"points":points,"colors":colors}
+				lit=lit.lerp(shadow,grain[ring*contour.size()+i]);lit.a=alpha
+			colors.append(lit)
+	if _shading.size()>=SHADING_LIMIT:_shading.erase(_shading.keys()[0])
+	_shading[key]=colors
+	return colors.duplicate()
 
 func _irregular_mesh(contour: PackedVector2Array,p: Vector2,radius: float,body: Color,edge: Color,shadow: Color) -> Dictionary:
 	var indices=Geometry2D.triangulate_polygon(contour)

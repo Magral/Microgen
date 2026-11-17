@@ -22,13 +22,17 @@ def display_command():
 def main():
     env = os.environ
     env["LIBGL_ALWAYS_SOFTWARE"] = "1"
-    for name in ["core", "simulation", "genome", "ui", "input_regions", "jelly", "fluid", "harvest", "absorption", "organic_fx", "pigment", "growth_contact", "tissue_damage", "size_rules", "mouth_shape", "fragment_shape", "combat_pacing", "new_content", "development", "audio", "fx_style", "sustained_play", "radial_boundary", "organic_volume", "environment", "water_depth", "substrate_mesh", "progression", "combat_stats", "reward_simulation", "ui_rewards", "reward_view", "living_mutations", "cyst_reveal", "functional_evolutions", "genome_legacy", "run_loadout", "genome_view", "updates", "foundation_flow"]:
+    for name in ["core", "simulation", "genome", "ui", "input_regions", "jelly", "fluid", "harvest", "absorption", "organic_fx", "pigment", "growth_contact", "tissue_damage", "size_rules", "mouth_shape", "fragment_shape", "combat_pacing", "new_content", "development", "audio", "fx_style", "sustained_play", "radial_boundary", "organic_volume", "environment", "water_depth", "substrate_mesh", "progression", "combat_stats", "reward_simulation", "ui_rewards", "reward_view", "living_mutations", "cyst_reveal", "functional_evolutions", "genome_legacy", "run_loadout", "genome_view", "updates", "foundation_flow", "volume_reuse", "home_layout"]:
         path = "tests/test_" + name + ".gd"
         if Path(path).is_file():
             run(name, ["godot", "--headless", "--path", ".", "--script", path])
     if Path("tests/test_touch.gd").is_file():
         run("touch", display_command() + ["godot", "--path", ".",
                       "--audio-driver", "Dummy", "--script", "tests/test_touch.gd"])
+
+    env["MICROGEN_HOME_CAPTURE"] = str(Path("build/Microgen-home.png").resolve())
+    run("home-native", display_command() + ["godot", "--path", ".", "--audio-driver", "Dummy", "--script", "tests/test_home_layout.gd"])
+    env.pop("MICROGEN_HOME_CAPTURE", None)
 
     run("evolution-art", display_command() + ["godot", "--path", ".", "--audio-driver", "Dummy", "--script", "tests/test_evolution_art.gd"])
 
