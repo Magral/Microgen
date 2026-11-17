@@ -59,6 +59,13 @@ func _initialize():
 	var legacy = Sim.new()
 	check(legacy.restore(snap),"0.1 checkpoint accepted")
 	check(Genome.validate(legacy.player_genome) and legacy.enemies[0].traits.is_empty(),"0.1 fallback preserves gameplay")
+	for malformed_recipe in [null, [], "broken", 12]:
+		var damaged = sim.snapshot()
+		damaged.player_genome = malformed_recipe
+		damaged.enemies[0].genome = malformed_recipe
+		var recovered = Sim.new()
+		check(recovered.restore(damaged),"malformed phenotype checkpoint accepted")
+		check(Genome.validate(recovered.player_genome) and Genome.validate(recovered.enemies[0].genome),"malformed phenotype regenerated")
 	var regen = Sim.new()
 	regen.new_run(82)
 	regen.spawn_enemy(regen.player+Vector2(250,0),"hunter")
