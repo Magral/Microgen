@@ -1,3 +1,13 @@
+## 0.11.0 — Living mutations
+
+- One working tentacle per skill rank (1–10); limbs extend from living tissue toward targets. Multiple foes share the existing total volley damage, preserving slow combat.
+- All 18 skills have visible anatomy; breathing glands, beating cilia/flagella, metabolic flow and catalytic folds. Quality pigments tint corresponding organs; rare membrane veins and evolved double veins remain on the organism.
+- Green actual-healing numbers batch regeneration ticks and exclude overheal. Infection gains a colored skin, vascular growth and a screen-size status label; enzymes have a distinct amber skin.
+- Animated cyst opening with cosmetic rolling icons, tier-colored burst and framed final choices. Skip and X are safe; animations neither grant rewards nor consume gameplay RNG.
+- Blue/purple/gold fragments retain rarity during digestion; acquisitions flash and identify the changed organ/quality.
+- Cache combined player anatomy, reuse the feeding poses prepared for physical contact, reduce rare-vein anchor searches and cache reveal frames.
+- Added actual-damage, healing, cyst geometry/lifecycle and all-skill native render regressions. No videos.
+
 ## 0.10.0
 
 Source-specific louder damage audio and one smooth movement voice; bounded actual combat attribution/history and direct journal. Persistent quality, six recipe evolutions, deterministic cyst rewards and atomic/deferred choices; numerical context-aware comparisons. Edible enemy markers, wide touch scrollbars and fixed modal close controls. Cached synergies/enemy anatomy/per-frame clone positions, bounded statistics summaries, paired profiling. Original save identity and no-video delivery retained.

@@ -42,3 +42,11 @@ static func paint(canvas: CanvasItem,p: Vector2,tier: int,time: float,id: int,pr
 static func marker(canvas: CanvasItem,p: Vector2,tier: int,alpha: float=1.0,radius: float=4.0):
 	var points=Transform2D(0,Vector2.ONE,0,p)*contour(tier,radius,0,0)
 	canvas.draw_colored_polygon(points,Color(color(tier),alpha))
+
+# Walk each half continuously across the angular wrap; close across its cut.
+static func shell(tier: int,radius: float,time: float,side: int) -> PackedVector2Array:
+	var half=[]
+	for point in contour(tier,radius,time,0):
+		if point.x*side>=0:half.append(point)
+	half.sort_custom(func(a,b):return a.angle()<b.angle() if side>0 else fposmod(a.angle(),TAU)<fposmod(b.angle(),TAU))
+	return PackedVector2Array(half)

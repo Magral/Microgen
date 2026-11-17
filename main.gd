@@ -1,4 +1,6 @@
 extends Node2D
+const CystReveal=preload("res://ui/cyst_reveal.gd")
+var reward_reveal
 const Sim = preload("res://game/simulation.gd")
 const View = preload("res://game/world_view.gd")
 const HUD = preload("res://ui/hud.gd")
@@ -131,6 +133,25 @@ func _ready():
 			sim.build.qualities={"tentacle":1}
 			sim.reward_queue=[{"token":"preview-reward","tier":2}]
 			show_reward()
+			reward_reveal.skip()
+		elif capture_mode == "cyst":
+			sim.reward_queue=[{"token":"preview-cyst","tier":3}]
+			show_reward()
+			reward_reveal.set_process(false);reward_reveal.advance(1.65)
+		elif capture_mode == "mutations":
+			sim.level=7;sim.hp=76;sim.elapsed=85
+			sim.build.organs={"tentacle":6,"infection":5,"electric":4,"devour":6,"acid":4,"division":3}
+			sim.build.adaptations={"regen":3,"magnet":4,"metabolism":3,"catalysis":4}
+			sim.build.qualities={"tentacle":3,"infection":2,"electric":1,"devour":2,"acid":1,"division":2,"regen":1,"magnet":3,"metabolism":2,"catalysis":3}
+			sim.enemies.clear();sim.pickups.clear();sim.effects.clear();sim.cysts.clear()
+			for i in range(3):
+				sim.spawn_enemy(sim.player+Vector2.from_angle(2.2+i*1.2)*125,"hunter")
+				var e=sim.enemies.back();e.infect=2.5;e.enzyme_time=3.0;e.max_hp=400;e.hp=280;e.tissue_budget=1000
+			sim.cooldowns={};sim._attack();sim.heal_player(6.5)
+			for effect in sim.effects:
+				if effect.type=="lash":effect.life=0.25
+			view.visual_time=1.2;sim.paused=true
+			hud.message.text="Живые мутации · редкость ткани · заражение · лечение"
 		elif capture_mode == "feedback":
 			sim.level=5;sim.build.organs={"devour":3,"tentacle":3}
 			sim.spawn_enemy(sim.player+Vector2(-60,18),"prey")
@@ -251,6 +272,7 @@ func clear_stick():
 	if view!=null: view.joystick_visible = false
 
 func set_stage(value: String):
+	if value!="reward":reward_reveal=null
 	stage = value
 	clear_stick()
 	if sim!=null: sim.paused = stage!="game"
@@ -263,7 +285,7 @@ func show_menu():
 	sim.paused = true
 	view.sim = sim
 	hud.game_visible(false)
-	var box = hud.open("МИКРОГЕН", "Маленькая жизнь. Непредсказуемая эволюция.\nТестовая версия 0.10.0 · офлайн",740)
+	var box = hud.open("МИКРОГЕН", "Маленькая жизнь. Непредсказуемая эволюция.\nТестовая версия 0.11.0 · офлайн",740)
 	box.add_child(hud.label("Собери организм, который сможет выжить.",25,Color("9ce3cf"),true))
 	box.add_child(hud.label("Исследуй случайный микромир, поглощай ДНК и соединяй мутации. Атаки автоматические — управляй только движением.",20,Color("a3bfc0"),true))
 	if not store.profile.checkpoint.is_empty(): box.add_child(hud.button("Продолжить забег",continue_run,true))
@@ -467,12 +489,14 @@ func _mutation_card(id: String,callback: Callable,quality: int=0) -> PanelContai
 	var item = Catalog.item(id)
 	var illustration = OrganArt.new()
 	illustration.organ_id = id
+	illustration.quality=maxi(quality,sim.build.quality(id))
 	illustration.custom_minimum_size = Vector2(120,100)
 	# Keep the action and explicit quality label visible before long details.
 	illustration.custom_minimum_size.y = 70
 	column.add_child(illustration)
 	column.add_child(hud.label(item.name,23,Color(item.color),true))
 	var result_grade=maxi(quality,sim.build.quality(id))
+	if result_grade>0:card.add_theme_stylebox_override("panel",hud.box(Color("122e39").lerp(Rewards.quality_color(result_grade),0.07),Rewards.quality_color(result_grade),16))
 	column.add_child(hud.label(Rewards.quality_name(result_grade)+(" (сохранится)" if result_grade>quality else "")+" · сила ×%.2f" % Rewards.quality_multiplier(result_grade),20,Rewards.quality_color(result_grade),true))
 	var rank = sim.build.rank(id)
 	var rank_text = ("Новый орган · 1/10" if id in Catalog.ORGANS else "Адаптация · 1/6") if rank==0 else ("Улучшение качества · ранг %d/%d" % [rank,Catalog.max_rank(id)] if rank>=Catalog.max_rank(id) else "Ранг %d → %d / %d" % [rank,rank+1,Catalog.max_rank(id)])
@@ -789,8 +813,22 @@ func show_reward():
 	sim.prepare_reward()
 	set_stage("reward")
 	var box = hud.open("Награда за опасную добычу", "Выбери одну награду. Качество и варианты сохраняются. Ожидают: %d." % sim.reward_queue.size())
+	reward_reveal=CystReveal.new()
+	reward_reveal.tier=int(sim.reward_queue[0].tier)
+	reward_reveal.options=sim.reward_options.duplicate(true)
+	box.add_child(reward_reveal)
+	var reveal=reward_reveal
 	var row = hud.row()
 	box.add_child(row)
+	row.hide()
+	reveal.finished.connect(func():
+		if stage!="reward" or reward_reveal!=reveal or not is_instance_valid(row):return
+		reveal.hide();row.show()
+		_tone(560+int(reveal.tier)*110)
+		var tween=create_tween()
+		row.modulate.a=0
+		tween.tween_property(row,"modulate:a",1.0,0.3)
+	)
 	for i in range(sim.reward_options.size()):
 		var option = sim.reward_options[i]
 		if option.kind=="mutation":
@@ -811,6 +849,7 @@ func show_reward():
 	save_run()
 
 func claim_reward(index: int,replace_id: String=""):
+	if stage=="reward" and is_instance_valid(reward_reveal) and not reward_reveal.complete:return
 	if stage not in ["reward","replace"] or index<0 or index>=sim.reward_options.size(): return
 	var option = sim.reward_options[index]
 	if option.kind=="mutation" and replace_id=="" and _needs_replacement(option.id):

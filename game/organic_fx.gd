@@ -44,22 +44,27 @@ static func _thread(canvas: CanvasItem,a: Vector2,b: Vector2,color: Color,time: 
 	canvas.draw_polyline(points,color,width,true)
 	canvas.draw_polyline(points,Color(color.lightened(0.4),color.a*0.6),maxf(0.6,width*0.3),true)
 
-static func infected(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,time: float,remaining: float,motion=null):
+static func infected(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,time: float,remaining: float,motion=null,enzyme: bool=false):
 	var contour=_infection_contour(recipe)
 	if motion!=null: contour=motion.deform_points(contour,float(recipe.phase))
-	var growth=clampf((4.5-remaining)*1.8,0.12,1.0)
+	var growth=clampf((4.5-remaining)*1.8,0.55,1.0)
+	var tint=Color("ffc16d") if enzyme else Color("fa69c5")
+	var skin=Transform2D(0,Vector2.ONE*radius*1.15,0,p)*contour
+	canvas.draw_colored_polygon(skin,Color(tint,0.16+0.05*sin(time*4)))
+	skin.append(skin[0])
+	canvas.draw_polyline(skin,Color(tint,0.8),maxf(1.0,radius*0.04),true)
 	# Three thick vascular stems, each with one fork and a living spore head.
 	# 18 primitives replace 63; cached anatomy still follows this exact host.
 	for i in range(3):
 		var a=contour[(i*8+2)%contour.size()]*radius*0.78*growth
-		var color=Color("eda0d6",0.66+0.10*sin(time*3+i))
+		var color=Color(tint,0.83+0.10*sin(time*3+i))
 		_thread(canvas,p-a*0.12,p+a,color,time+i,maxf(1.1,radius*0.032),radius*0.10)
 		var middle=p+a*0.53
 		var fork=middle+a.orthogonal()*0.30+a*0.18
-		canvas.draw_polyline(PackedVector2Array([middle,fork,middle+a*0.43]),Color("f6b9e3",0.58),maxf(0.9,radius*0.020),true)
+		canvas.draw_polyline(PackedVector2Array([middle,fork,middle+a*0.43]),Color(tint.lightened(0.3),0.75),maxf(0.9,radius*0.020),true)
 		var head=maxf(1.6,radius*(0.065+0.012*sin(time*4+i)))
-		canvas.draw_circle(p+a,head,Color("d877bd",0.44))
-		canvas.draw_arc(p+a,head,0.2,5.8,9,Color("ffd1eb",0.76),1.0,true)
+		canvas.draw_circle(p+a,head,Color(tint,0.66))
+		canvas.draw_arc(p+a,head,0.2,5.8,9,Color(tint.lightened(0.5),0.9),1.0,true)
 
 static func field(canvas: CanvasItem,p: Vector2,radius: float,kind: String,life: float,maximum: float,time: float):
 	var color=Color("e499b6") if kind.begins_with("enemy") else (Color("dfa3ec") if kind=="spore" else Color("b2dd75"))
@@ -113,6 +118,8 @@ static func paint(canvas: CanvasItem,effect: Dictionary,camera: Vector2,center: 
 		# Tissue response stays attached to the organism while it swims.
 		p=center
 		var color: Color=effect.get("color",Color("d3b7f0"))
+		if kind=="mutation":
+			_wave(canvas,p,radius*(0.45+t*0.5),time*0.3,TAU,Color(color,alpha*0.8),3.0,time*2)
 		for i in range(12):
 			var a=i*2.399+time*0.15
 			var q=p+Vector2.from_angle(a)*radius*(0.15+0.55*t)

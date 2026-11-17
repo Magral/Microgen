@@ -17,7 +17,7 @@ static func effect_text(build, id: String, scale: float = 1.0,tempo: float = 1.0
 	match id:
 		"tentacle":
 			damage = 9+r*7; interval = 0.85
-			details = "; дальность %.1f" % ((165+r*12)*scale)
+			details = "; щупалец %d; суммарный залп делится между ними; дальность %.1f" % [Catalog.tentacle_count(r),(165+r*12)*scale]
 		"acid":
 			damage = 4+r*3; continuous = true
 			details = "; радиус %.1f" % ((75+r*9)*scale)

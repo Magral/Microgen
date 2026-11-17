@@ -50,6 +50,7 @@ func run():
 	scene.open_pending()
 	check(scene.stage=="reward" and scene.sim.reward_options==rewards,"reward options stable on reopen")
 	var choice = rewards.size()-1
+	scene.reward_reveal.skip()
 	scene.claim_reward(choice)
 	check(scene.sim.reward_queue.is_empty(),"reward claim consumes exactly one queued reward")
 	check(scene.stage=="game","claimed reward returns to game")

@@ -150,6 +150,13 @@ func heal_player(amount: float):
 	var actual=maxf(0.0,minf(max_hp-hp,amount))
 	hp+=actual
 	CombatStats.record_heal(combat_stats,actual)
+	if actual<=0:return
+	# Merge regeneration ticks while the number is young; never round healing up.
+	for effect in effects:
+		if effect.type=="heal" and effect.life>0.65:
+			effect.amount+=actual
+			return
+	_effect({"type":"heal","pos":player,"amount":actual,"r":0.0,"life":1.15,"max":1.15})
 
 func hurt_player(amount: float,source: Dictionary={}):
 	if hp<=0:return
@@ -699,15 +706,25 @@ func _attack():
 	var metabolic = cooldown_factor()
 	var synergies = build.active_synergies()
 	if build.rank("tentacle")>0 and cooldowns.get("tentacle",0)<=0:
-		var target = _nearest((165.0+build.rank("tentacle")*12)*ability_scale())
-		if not target.is_empty():
-			cooldowns.tentacle = 0.85*metabolic
-			hit_enemy(target,Catalog.scaled_damage(9.0+build.rank("tentacle")*7,build.rank("tentacle")),"tentacle")
-			_effect({"type":"lash","pos":player,"end":target.pos,"life":0.22,"max":0.22,"r":0})
-			if "acid_grasp" in synergies:
-				_effect({"type":"acid_grasp","pos":player,"end":target.pos,"r":30.0,"life":0.65,"max":0.65})
-				target.slow = 1.3
-				target.grasp=1.3
+		var reach=(165.0+build.rank("tentacle")*12)*ability_scale()
+		var targets=[]
+		for enemy in enemies:
+			if enemy.hp>0 and not enemy.get("captured",false) and player.distance_squared_to(enemy.pos)<reach*reach:targets.append(enemy)
+		if not targets.is_empty():
+			targets.sort_custom(func(a,b):return player.distance_squared_to(a.pos)<player.distance_squared_to(b.pos))
+			cooldowns.tentacle=0.85*metabolic
+			var count=Catalog.tentacle_count(build.rank("tentacle"))
+			var damage=Catalog.scaled_damage(9.0+build.rank("tentacle")*7,build.rank("tentacle"))/count
+			var portions={}
+			for limb in range(count):
+				var target=targets[limb%targets.size()]
+				portions[target.id]=int(portions.get(target.id,0))+1
+				_effect({"type":"lash","pos":player,"end":target.pos,"limb":limb,"count":count,"life":0.5,"max":0.5,"r":reach})
+				if "acid_grasp" in synergies:
+					target.slow=1.3;target.grasp=1.3
+			for target in targets:
+				if portions.has(target.id):hit_enemy(target,damage*int(portions[target.id]),"tentacle")
+			if "acid_grasp" in synergies:_effect({"type":"acid_grasp","pos":player,"end":targets[0].pos,"r":30.0,"life":0.65,"max":0.65})
 	if build.rank("acid")>0:
 		for e in enemies:
 			if _is_engulfing(e): continue

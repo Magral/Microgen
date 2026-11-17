@@ -17,7 +17,10 @@ var motions = {}
 var tracked_sim
 var feeding: Array=[]
 var reaction=0.0
-var previous_build=""
+var previous_build=0
+var previous_traits: Dictionary={}
+var player_anatomy: Dictionary={}
+var _anatomy_key=0
 var detailed_enemies: Dictionary={}
 var zoom=3.09
 var organ_cache: Dictionary={}
@@ -66,7 +69,9 @@ func _process(dt):
 			motions.clear()
 			organ_cache.clear()
 			tracked_sim = sim
-			previous_build=str(sim.build.organs)
+			previous_build=hash([sim.build.organs,sim.build.adaptations,sim.build.qualities,sim.build.stats.evolutions])
+			_anatomy_key=0
+			previous_traits=_mutation_traits()
 			reaction=0.0
 			zoom=sim.view_zoom()
 			fluid.zoom=zoom
@@ -77,11 +82,25 @@ func _process(dt):
 		if not sim.paused:
 			visual_time += dt
 			reaction=maxf(0,reaction-dt*1.4)
-			var build_key=str(sim.build.organs)
+			var build_key=hash([sim.build.organs,sim.build.adaptations,sim.build.qualities,sim.build.stats.evolutions])
 			if build_key!=previous_build:
 				reaction=1.0
 				previous_build=build_key
-				sim._effect({"type":"mutation","pos":sim.player,"r":60.0,"life":1.1,"max":1.1})
+				var changed=_mutation_traits()
+				var tint=Color("98eecb")
+				var title="Мутация организма"
+				for id in changed:
+					if changed[id]!=previous_traits.get(id,[]):
+						var grade=sim.build.quality(id)
+						tint=preload("res://core/rewards.gd").quality_color(grade) if grade>0 else Color("98eecb")
+						title=Catalog.item(id).name+" · "+preload("res://core/rewards.gd").quality_name(grade)
+						break
+				previous_traits=changed
+				sim._effect({"type":"mutation","pos":sim.player,"r":sim.body_radius()*2,"color":tint,"text":title,"life":1.8,"max":1.8})
+		var anatomy_key=hash([sim.build.organs,sim.build.adaptations])
+		if anatomy_key!=_anatomy_key or player_anatomy.is_empty():
+			player_anatomy=sim.build.organs.merged(sim.build.adaptations,true)
+			_anatomy_key=anatomy_key
 		var visible=[]
 		var bounds=get_viewport_rect().size/(2*zoom)+Vector2.ONE*120
 		for enemy in sim.enemies:
@@ -172,7 +191,6 @@ func _draw():
 			draw_colored_polygon(PackedVector2Array([p+Vector2(0,-10),p+Vector2(8,0),p+Vector2(0,10),p+Vector2(-8,0)]),col)
 		else: draw_circle(p,4,col)
 	var clones=sim.clone_positions() if sim.build.rank("division")>0 else []
-	_prepare_feeding()
 	absorbable.clear()
 	for cyst in sim.cysts:
 		if not area.has_point(cyst.pos) or cyst.get("used",false) or cyst.get("captured",false):continue
@@ -191,6 +209,7 @@ func _draw():
 		if can_mark_absorbable(e):absorbable.append(e)
 		var organs = enemy_organs(e)
 		painter.paint(self,screen(e.pos),e.r*1.17*(1.0-float(e.get("engulf",0))*0.65),e.genome,organs,visual_time,"prey" if e.r<sim.body_radius()*0.82 else e.kind,e.kind=="boss" or detailed_enemies.has(e.id),motion_for(e.id),[],Color(-1,-1,-1),0.0,e.hp/e.max_hp)
+		if float(e.get("enzyme_time",0))>0:OrganicFX.infected(self,screen(e.pos),e.r,e.genome,visual_time,float(e.enzyme_time),motion_for(e.id),true)
 		if e.infect>0: OrganicFX.infected(self,screen(e.pos),e.r,e.genome,visual_time,float(e.infect),motion_for(e.id))
 		if e.kind=="miniboss":draw_string(font,screen(e.pos)+Vector2(-e.r,-e.r*1.5-20),e.get("title","Минибосс"),HORIZONTAL_ALIGNMENT_LEFT,-1,14,Color("f1c987"))
 		if e.hp<e.max_hp:
@@ -203,6 +222,7 @@ func _draw():
 			painter.paint(self,screen(p),17,sim.player_genome,{"trail":sim.build.rank("trail")},visual_time+1,"clone",false,motion_for("clone:%d" % clone_index),[],sim.body_color(),0.0,sim.hp/sim.max_hp)
 			clone_index += 1
 	_draw_player()
+	if sim.last_damage.get("kind","")=="toxin" and sim.elapsed-float(sim.last_damage.get("time",-10))<1.5:OrganicFX.infected(self,screen(sim.player),sim.body_radius(),sim.player_genome,visual_time,2.0,motion_for("player"))
 	for cyst in sim.cysts:
 		if cyst.get("captured",false):RewardArt.paint(self,screen(cyst.pos),int(cyst.tier),visual_time,int(cyst.id),float(cyst.get("progress",0.0)))
 	for shot in sim.shots:
@@ -211,7 +231,7 @@ func _draw():
 		draw_line(p-shot.vel.normalized()*13,p,col,3,true)
 		draw_circle(p,3,col)
 	for effect in sim.effects:
-		if effect.type=="damage":continue
+		if effect.type in ["damage","heal","lash"]:continue
 		if not area.grow(float(effect.r)).has_point(effect.pos):continue
 		if OrganicFX.paint(self,effect,sim.player,size*Vector2(0.5,0.51),visual_time,clones): continue
 		var p = screen(effect.pos)
@@ -239,15 +259,31 @@ func _draw():
 		draw_string(font,q+Vector2.ONE,label,HORIZONTAL_ALIGNMENT_LEFT,-1,18,Color(0.02,0.06,0.08,0.9))
 		draw_string(font,q,label,HORIZONTAL_ALIGNMENT_LEFT,-1,18,RewardArt.color(tier))
 	_draw_incoming_damage(size)
+	for enemy in sim.enemies:
+		if not area.has_point(enemy.pos) or enemy.get("captured",false):continue
+		var status="ЗАРАЖЁН" if enemy.infect>0 else ("ФЕРМЕНТЫ" if float(enemy.get("enzyme_time",0))>0 else "")
+		if status=="":continue
+		var q=(enemy.pos-sim.player)*zoom+size*Vector2(0.5,0.51)+Vector2(-38,enemy.r*zoom*1.35+20)
+		draw_string(font,q+Vector2.ONE,status,HORIZONTAL_ALIGNMENT_LEFT,-1,17,Color("10212b"))
+		draw_string(font,q,status,HORIZONTAL_ALIGNMENT_LEFT,-1,17,Color("ff9bda") if enemy.infect>0 else Color("ffd78f"))
+	for effect in sim.effects:
+		if effect.type!="mutation" or not effect.has("text"):continue
+		var title=str(effect.text)
+		var text_size=font.get_string_size(title,HORIZONTAL_ALIGNMENT_LEFT,-1,22)
+		var q=size*Vector2(0.5,0.51)+Vector2(-text_size.x/2,minf(170,sim.body_radius()*zoom*1.5+35))
+		draw_string(font,q+Vector2.ONE,title,HORIZONTAL_ALIGNMENT_LEFT,-1,22,Color("10212b"))
+		draw_string(font,q,title,HORIZONTAL_ALIGNMENT_LEFT,-1,22,Color(effect.color,minf(1,effect.life*1.5)))
 	# Damage labels keep a small constant screen size as the world camera scales.
 	for effect in sim.effects:
-		if effect.type!="damage":continue
+		if effect.type not in ["damage","heal"]:continue
 		var age=1.0-float(effect.life)/float(effect.max)
 		var p=(effect.pos-sim.player)*zoom+size*Vector2(0.5,0.51)+Vector2(7,-18-age*24)
 		if not Rect2(Vector2.ZERO,size).grow(30).has_point(p):continue
 		var amount=float(effect.get("amount",0))
-		var text_value=str(maxi(1,roundi(amount)))
-		var color=Color("ff7185") if effect.get("player",false) else Color("ef9199")
+		var healing=effect.type=="heal"
+		var text_value=(("+%.2f" % amount) if amount<0.1 else ("+%.1f" % amount)) if healing else str(maxi(1,roundi(amount)))
+		var color=Color("69ffaf") if healing else (Color("ff7185") if effect.get("player",false) else Color("ef9199"))
+		if healing:p+=Vector2(-45,-20)
 		draw_string(font,p+Vector2(1,1),text_value,HORIZONTAL_ALIGNMENT_LEFT,-1,16,Color(0.05,0.02,0.03,float(effect.life)/float(effect.max)))
 		draw_string(font,p,text_value,HORIZONTAL_ALIGNMENT_LEFT,-1,16,Color(color,minf(1.0,float(effect.life)*2.0)))
 	if joystick_visible:
@@ -299,9 +335,13 @@ func _draw_player():
 	if sim.build.rank("acid")>0:
 		draw_circle(p,(75+sim.build.rank("acid")*9)*sim.ability_scale(),Color(0.55,0.83,0.3,0.04))
 		draw_arc(p,(75+sim.build.rank("acid")*9)*sim.ability_scale(),0,TAU,48,Color(0.6,0.85,0.4,0.14),1.0,true)
-	var anatomy = sim.build.organs.duplicate()
-	anatomy.merge(sim.build.adaptations,true)
-	painter.paint(self,p,radius,sim.player_genome,anatomy,visual_time,"player",true,motion_for("player"),feeding,sim.body_color(),reaction,sim.hp/sim.max_hp,sim.bite_flash)
+	var anatomy = player_anatomy if not player_anatomy.is_empty() else sim.build.organs.merged(sim.build.adaptations,true)
+	var appearance={"qualities":sim.build.qualities,"evolved":sim.build.stats.evolutions,"lashes":{}}
+	for effect in sim.effects:
+		if effect.type=="lash":
+			var age=1.0-float(effect.life)/float(effect.max)
+			appearance.lashes[int(effect.get("limb",0))]={"tip":effect.end-sim.player,"extension":sin(PI*smoothstep(0.0,1.0,age))}
+	painter.paint(self,p,radius,sim.player_genome,anatomy,visual_time,"player",true,motion_for("player"),feeding,sim.body_color(),reaction,sim.hp/sim.max_hp,sim.bite_flash,appearance)
 	if sim.invuln>0: draw_arc(p,radius*1.4,0,TAU,40,Color("f2c3d1",0.2+0.2*sin(visual_time*24)),2,true)
 
 func enemy_organs(e: Dictionary) -> Dictionary:
@@ -416,3 +456,8 @@ func _draw_incoming_damage(size: Vector2):
 		draw_string(font,text_pos,label,HORIZONTAL_ALIGNMENT_LEFT,-1,20,tint)
 	if age<0.4:
 		draw_arc(center,sim.body_radius()*zoom*1.18,0,TAU,48,Color("ff9aab",(1.0-age/0.4)*0.20),2.0,true)
+
+func _mutation_traits() -> Dictionary:
+	var out={}
+	for id in sim.build.organs.keys()+sim.build.adaptations.keys():out[id]=[sim.build.rank(id),sim.build.quality(id),sim.build.evolved(id)]
+	return out

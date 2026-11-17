@@ -1,4 +1,6 @@
 extends RefCounted
+const Catalog = preload("res://core/catalog.gd")
+const Rewards = preload("res://core/rewards.gd")
 const Pigment = preload("res://core/pigment.gd")
 const Absorption = preload("res://game/absorption.gd")
 const Genome = preload("res://core/genome.gd")
@@ -72,7 +74,7 @@ func anatomy(recipe: Dictionary) -> Dictionary:
 	cache[key] = data
 	return data
 
-func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs: Dictionary,time: float,role: String="player",detail: bool=true,motion=null,feeding: Array=[],tint: Color=Color(-1,-1,-1),reaction: float=0.0,health_ratio: float=1.0,bite_strength: float=0.0):
+func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs: Dictionary,time: float,role: String="player",detail: bool=true,motion=null,feeding: Array=[],tint: Color=Color(-1,-1,-1),reaction: float=0.0,health_ratio: float=1.0,bite_strength: float=0.0,appearance: Dictionary={}):
 	if not Genome.validate(recipe): return
 	var data = anatomy(recipe)
 	var body: Color = data.colors[0]
@@ -104,12 +106,12 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 	_prepare_anchors(contour)
 	if int(organs.get("speed",0))>0:
 		for i in range(3):
-			_tendril(canvas,p,contour,radius,facing+PI+i*0.55-0.55,time+phase+i,0.9+visual_stage(int(organs.speed))*0.16,edge,1.4+visual_stage(int(organs.speed))*0.4)
+			_tendril(canvas,p,contour,radius,facing+PI+i*0.55-0.55,time+phase+i,0.9+visual_stage(int(organs.speed))*0.16,_organ_color("speed",edge,appearance),1.4+visual_stage(int(organs.speed))*0.4)
 	if int(organs.get("regen",0))>0:
-		for i in range(3): _branch(canvas,p,contour,radius,i*TAU/3+phase,time,edge.lerp(Color("a4dfbc"),0.24))
+		for i in range(3): _branch(canvas,p,contour,radius,i*TAU/3+phase,time,_organ_color("regen",edge.lerp(Color("a4dfbc"),0.5),appearance))
 	if int(organs.get("magnet",0))>0 or int(recipe.family)==5:
 		var count = 16 if detail else 8
-		for i in range(count): _tendril(canvas,p,contour,radius,i*TAU/count+phase,time+phase+i,0.27,Color(edge,0.6),0.8)
+		for i in range(count): _tendril(canvas,p,contour,radius,i*TAU/count+phase,time+phase+i,0.27+sin(time*2+i)*0.05,Color(_organ_color("magnet",edge,appearance),0.75),0.8)
 	var outer = _transform(contour,p,radius*breathe)
 	if detail:canvas.draw_colored_polygon(_transform(contour,p+Vector2(2,4),radius*1.025*breathe),Color(0.0,0.02,0.035,0.35))
 	volume.paint(canvas,contour,p,radius*breathe,body,edge,shadow,detail,base_phase)
@@ -174,48 +176,51 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 		for i in range(0,contour.size(),3): canvas.draw_line(p+contour[i]*radius*0.92,p+contour[i]*radius,Color(edge,0.45),1,true)
 	elif detail and int(recipe.membrane)==2:
 		for i in range(0,contour.size(),6): _soft_tissue(canvas,p+contour[i]*radius*0.95,radius*0.045,Color(edge,0.23),float(i))
-	if int(organs.get("armor",0))>0: _plates(canvas,p,contour,radius,phase,accent,int(organs.armor))
-	if int(organs.get("spikes",0))>0: _spikes(canvas,p,contour,radius,phase,accent,int(organs.spikes))
+	if int(organs.get("armor",0))>0: _plates(canvas,p,contour,radius*(1.0+sin(time*1.8)*0.018),phase,_organ_color("armor",accent,appearance),int(organs.armor))
+	if int(organs.get("spikes",0))>0: _spikes(canvas,p,contour,radius*(1.0+0.045*sin(time*3.4)),phase,_organ_color("spikes",accent,appearance),int(organs.spikes))
 	if int(organs.get("tentacle",0))>0:
-		var count = mini(4,1+int(organs.tentacle))
-		for i in range(count): _tendril(canvas,p,contour,radius,phase+i*TAU/count,time+phase+i,0.9+visual_stage(int(organs.tentacle))*0.20,edge,(3.0 if detail else 2.0)+visual_stage(int(organs.tentacle))*0.65)
+		var count = Catalog.tentacle_count(int(organs.tentacle))
+		for i in range(count):
+			var strike=appearance.get("lashes",{}).get(i,{})
+			_tendril(canvas,p,contour,radius,phase+i*TAU/count,time+phase+i,0.9+visual_stage(int(organs.tentacle))*0.20,_organ_color("tentacle",edge,appearance),(3.0 if detail else 2.0)+visual_stage(int(organs.tentacle))*0.65,strike.get("tip"),float(strike.get("extension",0)))
 	if int(organs.get("cilia",0))>0 and detail:
-		for i in range(8):_tendril(canvas,p,contour,radius,facing-1.2+i*0.34,time+i,0.20+visual_stage(int(organs.cilia))*0.065,edge,0.7+visual_stage(int(organs.cilia))*0.35)
+		for i in range(8):_tendril(canvas,p,contour,radius,facing-1.2+i*0.34,time+i,0.20+visual_stage(int(organs.cilia))*0.065+sin(time*5+i*0.3)*0.06,_organ_color("cilia",edge,appearance),0.7+visual_stage(int(organs.cilia))*0.35)
 	if int(organs.get("enzymes",0))>0:
-		for i in range(2):_vesicle(canvas,p+_anchor(contour,phase+i*2.6)*radius*0.74,radius*(0.16+visual_stage(int(organs.enzymes))*0.025),body.lerp(Color("e7c28b"),0.25+visual_stage(int(organs.enzymes))*0.10),detail)
+		for i in range(2):_vesicle(canvas,p+_anchor(contour,phase+i*2.6)*radius*0.74,radius*(0.16+visual_stage(int(organs.enzymes))*0.025)*(1+sin(time*3.2+i)*0.15),_organ_color("enzymes",body.lerp(Color("e7c28b"),0.45),appearance),detail)
 	if int(organs.get("electric",0))>0 and detail:
 		for i in range(3):
 			var root=p+_anchor(contour,phase+i*2.0)*radius*0.68
-			canvas.draw_line(p+(root-p)*0.38,root,Color(body.lerp(Color("afdfe9"),0.4),0.20+0.06*sin(time*2+i)),0.9,true)
+			canvas.draw_line(p+(root-p)*0.38,root,Color(_organ_color("electric",body.lerp(Color("afdfe9"),0.65),appearance),0.20+0.06*sin(time*2+i)),0.9,true)
 	if int(organs.get("barrier",0))>0:
 		var reinforced=_transform(contour,p,radius*0.97)
 		reinforced.append(reinforced[0])
-		canvas.draw_polyline(reinforced,Color(edge,0.32+visual_stage(int(organs.barrier))*0.08),maxf(1.4,radius*(0.035+visual_stage(int(organs.barrier))*0.013)),true)
+		canvas.draw_polyline(reinforced,Color(_organ_color("barrier",edge,appearance),0.45+visual_stage(int(organs.barrier))*0.08+sin(time*2.5)*0.10),maxf(1.4,radius*(0.035+visual_stage(int(organs.barrier))*0.013)),true)
 	if int(organs.get("acid",0))>0:
 		for i in range(mini(5,2+int(organs.acid))):
-			_vesicle(canvas,p+_anchor(contour,phase+0.7+i*2.15)*radius*0.75,radius*(0.17+visual_stage(int(organs.acid))*0.02),body.lerp(Color("b4d952"),0.42+visual_stage(int(organs.acid))*0.07),detail)
+			_vesicle(canvas,p+_anchor(contour,phase+0.7+i*2.15)*radius*0.75,radius*(0.17+visual_stage(int(organs.acid))*0.02)*(1+sin(time*2.8+i)*0.14),_organ_color("acid",body.lerp(Color("b4d952"),0.55),appearance),detail)
 	if int(organs.get("infection",0))>0:
 		for i in range(3):
 			var center = p+_anchor(contour,phase+i*2.1)*radius*0.87
-			_vesicle(canvas,center,radius*0.13,body.lerp(Color("c999d9"),0.4),detail)
+			_vesicle(canvas,center,radius*(0.14+sin(time*3.8+i)*0.025),_organ_color("infection",body.lerp(Color("e48abd"),0.65),appearance),detail)
 			if detail:
 				for j in range(3): _soft_tissue(canvas,center+Vector2.from_angle(j*TAU/3)*radius*0.06,radius*0.025,Color("f1bddb",0.28),float(j))
-	if int(organs.get("trail",0))>0: _vesicle(canvas,p+_anchor(contour,facing+PI)*radius*0.88,radius*0.19,body.lerp(Color("8fbd5b"),0.4),detail)
+	if int(organs.get("trail",0))>0: _vesicle(canvas,p+_anchor(contour,facing+PI)*radius*0.88,radius*(0.19+sin(time*2.6)*0.025),_organ_color("trail",body.lerp(Color("8fbd5b"),0.6),appearance),detail)
 	var front_feeding=0.0
 	for entry in feeding:
 		if entry.pose.direction.normalized().dot(Vector2.from_angle(facing))>cos(0.7):
 			front_feeding=maxf(front_feeding,sin(float(entry.pose.progress)*PI))
-	_mouth(canvas,p,contour,radius*breathe,facing,time+phase,body,edge,shadow,bite_strength,front_feeding,int(organs.get("devour",0)),detail)
+	_mouth(canvas,p,contour,radius*breathe,facing,time+phase,body,_organ_color("devour",edge,appearance),shadow,bite_strength,front_feeding,int(organs.get("devour",0)),detail)
 	if int(organs.get("pulse",0))>0:
-		var ring = _transform(contour,p,radius*1.07)
+		var ring = _transform(contour,p,radius*(1.04+sin(time*2+phase)*0.045))
 		ring.append(ring[0])
-		canvas.draw_polyline(ring,Color("a7cbe1",0.22+sin(time*2+phase)*0.08),1.2,true)
+		canvas.draw_polyline(ring,Color(_organ_color("pulse",Color("a7cbe1"),appearance),0.45+sin(time*2+phase)*0.18),1.2,true)
 	if int(organs.get("division",0))>0:
 		for i in range(mini(4,1+int(organs.division))):
 			var bud = p+_anchor(contour,phase+1+i*1.6)*radius*0.95
-			_soft_tissue(canvas,bud,radius*0.19,Color(body,0.82),phase+i)
+			_soft_tissue(canvas,bud,radius*(0.19+0.02*sin(time*2+i)),Color(_organ_color("division",body,appearance),0.82),phase+i)
 			_soft_tissue(canvas,bud-Vector2.ONE*radius*0.015,radius*0.14,Color(edge,0.14),phase+i)
 			_nucleus(canvas,bud,radius*0.08,core,edge,time+i,false)
+	if role=="player" and detail:_living_marks(canvas,p,contour,radius,organs,time,phase,body,edge,appearance)
 	if role=="player":
 		canvas.draw_arc(p,radius*1.48,0.35,2.8,22,Color("d4fff2",0.33),1.2,true)
 		var marker = p+Vector2(0,radius*1.5+8)
@@ -269,12 +274,14 @@ func paint_fragment(canvas: CanvasItem,p: Vector2,fragment: Dictionary,active: b
 	var data = anatomy(fragment.genome)
 	var fragment_color: Color=Pigment.color(fragment.pigment) if fragment.has("pigment") else data.colors[0]
 	var quality=clampi(int(fragment.get("quality",0)),0,3)
-	var accent_color=[Color("9db3a8"),Color("a9dfc9"),Color("a4eaf1"),Color("ffe0a3")][quality]
+	var accent_color=Rewards.quality_color(quality)
 	var progress = float(fragment.progress)
 	var radius = float(fragment.r)*(1.0-progress*0.72)
 	var local: PackedVector2Array=data.fragments[posmod(int(fragment.part),3)]
 	var points=_transform(local,p,radius)
-	canvas.draw_colored_polygon(points,Color(fragment_color,(0.72-progress*0.2)*opacity))
+	if quality>0:
+		canvas.draw_circle(p,radius*1.55,Color(accent_color,(0.10+quality*0.035)*opacity))
+	canvas.draw_colored_polygon(points,Color(fragment_color.lerp(accent_color,quality*0.14),(0.72-progress*0.2)*opacity))
 	canvas.draw_polyline(points,Color(data.colors[1].lerp(accent_color,quality*0.24),(0.55+quality*0.14)*opacity),1.0+quality*0.35,true)
 	if quality>=2:
 		for i in range(quality):
@@ -447,14 +454,18 @@ func _plates(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,radius: f
 		canvas.draw_polyline(pad,Color(color.darkened(0.25),0.55),maxf(2.0,radius*(0.105+visual_stage(rank)*0.026)),true)
 		canvas.draw_polyline(pad,Color(color.lightened(0.15),0.54),maxf(1.0,radius*(0.042+visual_stage(rank)*0.010)),true)
 
-func _tendril(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,radius: float,angle: float,time: float,length_scale: float,color: Color,width: float):
+func _tendril(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,radius: float,angle: float,time: float,length_scale: float,color: Color,width: float,tip=null,extension: float=0.0):
 	var a = _anchor(contour,angle)
 	var normal = a.normalized().orthogonal()
 	var points = PackedVector2Array()
 	var flesh=PackedVector2Array()
 	for i in range(10):
 		var t = i/9.0
-		points.append(p+a*radius*(0.76+t*length_scale)+normal*radius*sin(t*4+time*1.5)*t*0.24)
+		var resting=p+a*radius*(0.76+t*length_scale)+normal*radius*sin(t*4+time*1.5)*t*0.24
+		if tip!=null:
+			var strike=(p+a*radius*0.76).lerp(p+Vector2(tip),t)+normal*sin(t*PI)*radius*0.25
+			resting=resting.lerp(strike,extension)
+		points.append(resting)
 	# A broad taper grows directly out of the cytoplasm and narrows to a whip.
 	for i in range(points.size()):
 		var t=i/float(points.size()-1)
@@ -483,3 +494,40 @@ static func _wound_scar(root: Vector2,kink: Vector2,end: Vector2,normal: Vector2
 	hull.resize(hull.size()-1)
 	if Geometry2D.triangulate_polygon(hull).is_empty(): return PackedVector2Array()
 	return hull
+
+# Rare pigments follow the actual organs; no floating inventory shapes.
+func _organ_color(id: String,base: Color,appearance: Dictionary) -> Color:
+	var grade=clampi(int(appearance.get("qualities",{}).get(id,0)),0,3)
+	return base.lerp(Rewards.quality_color(grade),0.63 if grade>0 else 0.0)
+
+func _living_marks(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,radius: float,organs: Dictionary,time: float,phase: float,body: Color,edge: Color,appearance: Dictionary):
+	# Two metabolic canals and catalytic folds give these otherwise invisible passives tissue.
+	for id in ["metabolism","catalysis"]:
+		if int(organs.get(id,0))<=0:continue
+		var col=_organ_color(id,Color("b3ee8b") if id=="metabolism" else Color("ffc383"),appearance)
+		for i in range(2):
+			var a=phase+(0.7 if id=="metabolism" else 3.6)+i*0.6
+			var root=p+_anchor(contour,a)*radius*0.22
+			var end=p+_anchor(contour,a+0.35)*radius*0.70
+			var flow=PackedVector2Array([root,root.lerp(end,0.5)+Vector2(0,sin(time*2+i)*radius*0.07),end])
+			canvas.draw_polyline(flow,Color(body.lerp(col,0.4),0.45),radius*0.09,true)
+			canvas.draw_polyline(flow,Color(col,0.65),maxf(0.8,radius*0.018),true)
+			canvas.draw_circle(root.lerp(end,fposmod(time*0.4+i*0.4,1.0)),radius*0.025,Color(col.lightened(0.3),0.8))
+	# Each rare organ owns a short patch of perfused membrane, in a stable catalog slot.
+	var ids=Catalog.ORGANS.keys()+Catalog.ADAPTATIONS.keys()
+	for index in range(ids.size()):
+		var id=ids[index]
+		if int(organs.get(id,0))<=0:continue
+		var grade=int(appearance.get("qualities",{}).get(id,0))
+		var evolved=bool(appearance.get("evolved",{}).get(id,false))
+		if grade<=0 and not evolved:continue
+		var col=Rewards.quality_color(grade) if grade>0 else edge
+		var a=phase+index*TAU/ids.size()
+		var points=PackedVector2Array()
+		var anchor_index=contour.find(_anchor(contour,a))
+		for j in range(7):points.append(p+contour[posmod(anchor_index+j-3,contour.size())]*radius*(0.89+sin(j*0.5+time*2)*0.012))
+		canvas.draw_polyline(points,Color(col,0.22),radius*0.085,true)
+		canvas.draw_polyline(points,Color(col.lightened(0.2),0.65+0.20*sin(time*2+index)),maxf(1.0,radius*0.025),true)
+		if evolved:
+			for j in range(points.size()):points[j]=p+(points[j]-p)*0.92
+			canvas.draw_polyline(points,Color(col,0.85),maxf(0.8,radius*0.018),true)

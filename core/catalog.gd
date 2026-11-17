@@ -1,7 +1,7 @@
 extends RefCounted
 
 const ORGANS = {
-	"tentacle": {"name":"Щупальца", "branch":"predator", "desc":"Хлещут ближайших врагов. Каждый ранг усиливает удар.", "color":"6ef1cb"},
+	"tentacle": {"name":"Щупальца", "branch":"predator", "desc":"Хлещут ближайших врагов. Каждый ранг добавляет рабочее щупальце. Суммарная сила залпа распределяется между ними.", "color":"6ef1cb"},
 	"acid": {"name":"Кислотная оболочка", "branch":"toxic", "desc":"Растворяет врагов рядом с телом.", "color":"c3f56e"},
 	"spikes": {"name":"Шипы", "branch":"predator", "desc":"Выстреливают веером в ближайшую цель.", "color":"f4d394"},
 	"pulse": {"name":"Сокращение мембраны", "branch":"predator", "desc":"Отталкивает врагов круговой волной.", "color":"98caff"},
@@ -57,7 +57,7 @@ static func synergy_hint(id: String, equipped: Dictionary) -> String:
 static func effect_text(id: String,rank: int) -> String:
 	var r=maxi(1,rank)
 	match id:
-		"tentacle":return "Удар %.1f; интервал 0,85 с; дальность %.1f ×масштаб тела." % [scaled_damage(9+r*7,r),165+r*12]
+		"tentacle":return "%d щупалец; залп %.1f суммарно; интервал 0,85 с; дальность %.1f ×масштаб тела." % [tentacle_count(r),scaled_damage(9+r*7,r),165+r*12]
 		"acid":return "%.1f урона/с рядом; радиус %.1f ×масштаб тела." % [scaled_damage(4+r*3,r),75+r*9]
 		"spikes":return "Шип %.1f урона; %d шипов; интервал 1,3 с." % [scaled_damage(12+r*5,r),shot_count(r)]
 		"pulse":return "%.1f урона; радиус %.1f ×масштаб тела; каждые 3,2 с." % [scaled_damage(12+r*8,r),130+r*18]
@@ -90,6 +90,9 @@ static func milestone_text(id: String,rank: int) -> String:
 	if id not in ORGANS:
 		return "Рубежи адаптации: %s3 · %s6 — максимум" % ["✓ " if rank>=3 else "◇ ","✓ " if rank>=6 else "◇ "]
 	return "Рубежи: %s3 · формирование ×1,10; %s6 · перестройка ×1,25; %s10 · зрелость ×1,50. Множитель силы органа." % ["✓ " if rank>=3 else "◇ ","✓ " if rank>=6 else "◇ ","✓ " if rank>=10 else "◇ "]
+
+static func tentacle_count(rank: int) -> int:
+	return clampi(rank,0,10)
 
 static func shot_count(rank: int) -> int:
 	return mini(6,1+int(rank/2.0))

@@ -3,19 +3,25 @@ extends Control
 const Catalog = preload("res://core/catalog.gd")
 const Painter = preload("res://game/organism_painter.gd")
 var organ_id = ""
+var quality=0
+var animation_time=0.0
 var sim
 var painter
 func _ready():
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+func _process(dt):
+	animation_time+=dt
+	if is_visible_in_tree():queue_redraw()
 func _draw():
 	var center = size/2
 	if sim!=null:
 		if painter==null: painter=Painter.new()
 		var organs=sim.build.organs.duplicate()
 		organs.merge(sim.build.adaptations)
-		painter.paint(self,center,57,sim.player_genome,organs,sim.elapsed,"player",true)
+		painter.paint(self,center,57,sim.player_genome,organs,animation_time,"player",true,null,[],sim.body_color(),0.0,sim.hp/sim.max_hp,0.15+0.15*sin(animation_time*2),{"qualities":sim.build.qualities,"evolved":sim.build.stats.evolutions})
 		return
 	var color=Color(Catalog.item(organ_id).get("color","9ce3cf"))
+	if quality>0:color=color.lerp(preload("res://core/rewards.gd").quality_color(quality),0.55)
 	var radius=minf(size.x,size.y)*0.28
 	draw_circle(center,radius*1.2,Color(color,0.10))
 	draw_circle(center,radius,Color(color,0.25))
@@ -26,7 +32,7 @@ func _draw():
 				var angle=i*TAU/(7 if organ_id=="cilia" else 4)
 				var points=PackedVector2Array()
 				for j in range(10):
-					var p=center+Vector2.from_angle(angle)*(radius+j*2)+Vector2.from_angle(angle+PI/2)*sin(j*0.65)*5
+					var p=center+Vector2.from_angle(angle)*(radius+j*2)+Vector2.from_angle(angle+PI/2)*sin(j*0.65+animation_time*2.2)*5
 					points.append(p)
 				draw_polyline(points,color,2 if organ_id=="cilia" else 3,true)
 		"spikes":

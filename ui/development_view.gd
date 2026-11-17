@@ -71,6 +71,7 @@ static func item_card(hud,id: String,rank: int,sim=null):
 	card.add_child(row)
 	var art=Art.new()
 	art.organ_id=id
+	if sim!=null:art.quality=sim.build.quality(id)
 	art.custom_minimum_size=Vector2(112,112)
 	row.add_child(art)
 	var details=VBoxContainer.new()
