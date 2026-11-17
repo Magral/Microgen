@@ -5,6 +5,7 @@ class FakeSim:
 	var feedback: Array=[]
 	var elapsed=1.0
 	var paused=false
+	var player_velocity=Vector2.ZERO
 	var run_id="audio-test-run"
 var checks=0
 var failures=0
@@ -19,19 +20,19 @@ func run_checks():
 	var audio=Audio.new()
 	root.add_child(audio)
 	var sim=FakeSim.new()
-	check(audio.samples.size()==6 and audio.generated_samples==6,"all procedural clips generated once")
+	check(audio.samples.size()==Audio.KINDS.size() and audio.generated_samples==Audio.KINDS.size(),"all procedural clips generated once")
 	check(audio.voices.size()==Audio.VOICE_CAP,"audio has bounded voice pool")
 	var original=audio.samples.hit
 	var signatures={}
 	for kind in audio.samples:
 		var sample: AudioStreamWAV=audio.samples[kind]
 		check(sample.mix_rate==22050 and not sample.stereo,"compact mono PCM format")
-		check(sample.get_length()>0.1 and sample.get_length()<0.7,"sound duration bounded")
+		check(sample.get_length()>0.1 and sample.get_length()<=1.0,"sound duration bounded")
 		var peak=0
 		for i in range(0,sample.data.size(),2): peak=maxi(peak,absi(sample.data.decode_s16(i)))
 		check(peak>1000 and peak<30000,"PCM audible with safe headroom")
 		signatures[hash(sample.data)]=true
-	check(signatures.size()==6,"feedback sounds have distinct waveforms")
+	check(signatures.size()==Audio.KINDS.size(),"feedback sounds have distinct waveforms")
 	for i in range(20): sim.feedback.append({"kind":"hit","pos":Vector2.ZERO})
 	audio.consume(sim,true)
 	check(sim.feedback.is_empty() and audio.played_events==0,"outgoing hit spam is silent by default")
@@ -66,7 +67,7 @@ func run_checks():
 		audio.consume(sim,true)
 	check(audio.played_events-before_spam<=int((sim.elapsed-spam_start)*2.5)+1,"long combat spam stays under 2.5 sounds per second globally")
 	check(audio.voices.size()==Audio.VOICE_CAP,"busy combat never allocates more voices")
-	check(audio.generated_samples==6 and audio.samples.hit==original,"PCM cache reused across every consume")
+	check(audio.generated_samples==Audio.KINDS.size() and audio.samples.hit==original,"PCM cache reused across every consume")
 	var pending_audio=Audio.new()
 	root.add_child(pending_audio)
 	var pending_sim=FakeSim.new()
@@ -127,6 +128,46 @@ func run_checks():
 	pending_sim.elapsed=20.5
 	pending_audio.consume(pending_sim,true)
 	check(pending_audio.played_events==7,"run identity change clears warning even without clock rollback")
+	# Damage blocked by a just-played absorb survives until the next sound slot.
+	pending_sim.elapsed=30.0
+	pending_sim.feedback=[{"kind":"absorb"}]
+	pending_audio.consume(pending_sim,true)
+	pending_sim.elapsed=30.1
+	pending_sim.feedback=[{"kind":"hurt","source":"toxin"}]
+	pending_audio.consume(pending_sim,true)
+	pending_sim.elapsed=30.4
+	pending_audio.consume(pending_sim,true)
+	check(pending_audio.voices.any(func(voice): return voice.stream==pending_audio.samples.hurt_toxin and voice.volume_db>=-12.0),"deferred toxin hurt is distinct and loud")
+	pending_sim.elapsed=32.0
+	pending_sim.feedback=[{"kind":"hurt","source":"projectile"},{"kind":"absorb"}]
+	pending_audio.consume(pending_sim,true)
+	check(pending_audio.voices.any(func(voice): return voice.stream==pending_audio.samples.hurt_projectile),"projectile hurt wins over absorb")
+	var events_before_motion=pending_audio.played_events
+	pending_sim.player_velocity=Vector2(100,0)
+	for i in range(30):
+		pending_sim.elapsed+=0.02
+		pending_audio.consume(pending_sim,true)
+	check(pending_audio.movement_voice.playing and pending_audio.movement_voice.volume_db>-30.0,"movement fades into one fluid loop")
+	check(pending_audio.played_events==events_before_motion,"movement creates no repeated combat events")
+	check(pending_audio.movement_voice.stream.loop_mode==AudioStreamWAV.LOOP_FORWARD,"movement PCM loops")
+	pending_sim.paused=true
+	pending_audio.consume(pending_sim,true)
+	check(pending_audio.movement_voice.stream_paused,"pause freezes movement loop")
+	pending_sim.paused=false
+	pending_sim.player_velocity=Vector2.ZERO
+	for i in range(80):
+		pending_sim.elapsed+=0.02
+		pending_audio.consume(pending_sim,true)
+	check(not pending_audio.movement_voice.playing,"stationary movement fades to silence")
+	pending_sim.player_velocity=Vector2(100,0)
+	pending_sim.elapsed+=0.1
+	pending_audio.consume(pending_sim,true)
+	pending_audio.consume(pending_sim,false)
+	check(not pending_audio.movement_voice.playing,"mute stops the movement loop")
+	pending_sim.run_id="movement-reset"
+	pending_sim.player_velocity=Vector2.ZERO
+	pending_audio.consume(pending_sim,true)
+	check(not pending_audio.movement_voice.playing,"run reset clears movement gain")
 	for voice in pending_audio.voices: voice.stop()
 	pending_audio.free()
 	for voice in audio.voices: voice.stop()

@@ -1,4 +1,5 @@
 extends Control
+const RewardArt=preload("res://game/reward_art.gd")
 const World = preload("res://game/world.gd")
 var sim
 var large = false
@@ -34,13 +35,23 @@ func _draw():
 	texture_filter=CanvasItem.TEXTURE_FILTER_NEAREST
 	draw_texture_rect(_texture,Rect2(offset,Vector2(World.W,World.H)*World.TILE*scale_value),false)
 	for shop in sim.world.colonies:
-		if shop.visited:
-			var p = offset+shop.pos*scale_value
-			draw_rect(Rect2(p-Vector2.ONE*3.5,Vector2.ONE*7),Color("99efc6"))
+		var p=offset+shop.pos*scale_value
+		draw_rect(Rect2(p-Vector2.ONE*3.5,Vector2.ONE*7),Color("99efc6",1.0 if shop.visited else 0.4))
 	for nest in sim.world.nests:
-		var c = sim.world.tile(nest.pos)
-		if c.y*World.W+c.x in sim.explored and not nest.used:
-			draw_circle(offset+nest.pos*scale_value,3,Color("ce9bec"))
+		if not nest.used:draw_circle(offset+nest.pos*scale_value,3,Color("ce9bec",_visibility(nest.pos)))
+	var nearest={}
+	var nearest_distance=INF
+	for cyst in sim.cysts:
+		if cyst.get("used",false) or cyst.get("captured",false):continue
+		RewardArt.marker(self,offset+cyst.pos*scale_value,int(cyst.tier),_visibility(cyst.pos),5 if large else 4)
+		var distance=sim.player.distance_squared_to(cyst.pos)
+		if distance<nearest_distance:nearest=cyst;nearest_distance=distance
+	if large and not nearest.is_empty():
+		var start=offset+sim.player*scale_value
+		var end=offset+nearest.pos*scale_value
+		for i in range(1,13):
+			var t=i/13.0
+			draw_circle(start.lerp(end,t),1.1,Color(RewardArt.color(int(nearest.tier)),0.5))
 	if sim.boss_spawned and sim.outcome=="": draw_circle(offset+sim.boss_marker*scale_value,5,Color("f1869a"))
 	for enemy in sim.enemies:
 		if enemy.kind=="miniboss":draw_circle(offset+enemy.pos*scale_value,4,Color("efc17f"))
@@ -48,7 +59,17 @@ func _draw():
 	draw_circle(player,5 if large else 4,Color("ffffff"))
 	draw_arc(player,8,0,TAU,20,Color("96f6dc"),1.5,true)
 	if large:
-		draw_string(font,Vector2(15,size.y-15),"● Ты    ■ Колония    ● Находка    ● Босс",HORIZONTAL_ALIGNMENT_LEFT,-1,20,Color("d6e7e5"))
+		draw_string(font,Vector2(15,size.y-15),"● Ты   ■ Колония   ● Гнездо   ● Босс",HORIZONTAL_ALIGNMENT_LEFT,-1,18,Color("d6e7e5"))
+
+		draw_string(font,Vector2(15,size.y-39),"Цисты: редкая / эпическая / легендарная · пунктир — ближайшая",HORIZONTAL_ALIGNMENT_LEFT,-1,18,Color("a7cbca"))
+		for i in range(3):
+			var p=Vector2(24+i*170,size.y-63)
+			RewardArt.marker(self,p,i+1,1,5)
+			draw_string(font,p+Vector2(11,5),["Редкая","Эпическая","Легендарная"][i],HORIZONTAL_ALIGNMENT_LEFT,-1,18,RewardArt.color(i+1))
+
+func _visibility(position: Vector2) -> float:
+	var tile=sim.world.tile(position)
+	return 1.0 if tile.y*World.W+tile.x in sim.explored else 0.45
 
 func _box() -> StyleBoxFlat:
 	var s = StyleBoxFlat.new()

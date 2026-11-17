@@ -22,7 +22,7 @@ def display_command():
 def main():
     env = os.environ
     env["LIBGL_ALWAYS_SOFTWARE"] = "1"
-    for name in ["core", "simulation", "genome", "ui", "input_regions", "jelly", "fluid", "harvest", "absorption", "organic_fx", "pigment", "growth_contact", "tissue_damage", "size_rules", "mouth_shape", "fragment_shape", "combat_pacing", "new_content", "development", "audio", "fx_style", "sustained_play", "radial_boundary", "organic_volume", "environment", "water_depth", "substrate_mesh"]:
+    for name in ["core", "simulation", "genome", "ui", "input_regions", "jelly", "fluid", "harvest", "absorption", "organic_fx", "pigment", "growth_contact", "tissue_damage", "size_rules", "mouth_shape", "fragment_shape", "combat_pacing", "new_content", "development", "audio", "fx_style", "sustained_play", "radial_boundary", "organic_volume", "environment", "water_depth", "substrate_mesh", "progression", "combat_stats", "reward_simulation", "ui_rewards", "reward_view"]:
         path = "tests/test_" + name + ".gd"
         if Path(path).is_file():
             run(name, ["godot", "--headless", "--path", ".", "--script", path])
@@ -33,7 +33,7 @@ def main():
     run("render-cache", display_command() + ["godot", "--path", ".", "--audio-driver", "Dummy", "--script", "tests/test_render_cache.gd"])
 
     if Path("core/genome.gd").is_file():
-        for mode in ["game", "gallery", "development", "jaw", "habitat"]:
+        for mode in ["game", "gallery", "development", "jaw", "habitat", "rewards", "feedback", "journal"]:
             target = str(Path("build/Microgen-" + mode + ".png").resolve())
             run("render-" + mode, display_command() + ["godot", "--path", ".",
                 "--audio-driver", "Dummy", "--", "--preview=" + mode, "--capture=" + target])

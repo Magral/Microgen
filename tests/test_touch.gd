@@ -106,9 +106,38 @@ func run():
 		Input.parse_input_event(held)
 		await process_frame
 		check(scene.stage=="development" and scene.sim.paused and scene.stick_id==-1,"second finger opens development while joystick held")
-		await tap(find_button(scene.hud.content,"Вернуться в микромир"))
+		var scrollbar=scene.hud.scroll_container.get_v_scroll_bar()
+		var scroll_before=scrollbar.value
+		var scroll_touch=InputEventScreenTouch.new()
+		scroll_touch.index=0;scroll_touch.pressed=true
+		scroll_touch.position=scrollbar.global_position+Vector2(scrollbar.size.x/2,25)
+		Input.parse_input_event(scroll_touch)
+		await process_frame
+		for n in range(1,5):
+			var scroll_drag=InputEventScreenDrag.new()
+			scroll_drag.index=0;scroll_drag.position=scroll_touch.position+Vector2(0,n*45)
+			scroll_drag.relative=Vector2(0,45);scroll_drag.velocity=Vector2(0,300)
+			Input.parse_input_event(scroll_drag)
+			await process_frame
+		scroll_touch.position+=Vector2(0,180);scroll_touch.pressed=false
+		Input.parse_input_event(scroll_touch)
+		await process_frame
+		check(scrollbar.value>scroll_before,"native touch drags the widened scrollbar")
+		await tap(find_button(scene.hud.modal,"×"))
 		check(scene.stage=="game","native touch closes development")
 
+		scene.sim.reward_queue.append({"token":"native-pending","tier":1})
+		scene.hud.update_game(scene.sim)
+		held.pressed=true
+		Input.parse_input_event(held)
+		await process_frame
+		await tap(scene.hud.pending_button,1)
+		held.pressed=false
+		Input.parse_input_event(held)
+		await process_frame
+		check(scene.stage=="reward" and scene.sim.paused,"second finger opens pending reward while moving")
+		await tap(find_button(scene.hud.modal,"×"))
+		check(scene.stage=="game" and scene.sim.reward_queue.size()==1,"native close defers pending reward without losing it")
 
 	scene.store.clear_test_files()
 	print("TOUCH: %d failures" % failures)

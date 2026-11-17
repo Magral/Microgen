@@ -6,9 +6,14 @@ var status: VBoxContainer
 var hp_bar: ProgressBar
 var xp_bar: ProgressBar
 var stats: Label
+var damage_source: Label
+var pending_button: Button
+var on_pending: Callable
+var on_close: Callable
 var area_label: Label
 var minimap: Control
 var modal: Control
+var scroll_container: ScrollContainer
 var content: VBoxContainer
 var message: Label
 var shop_button: Button
@@ -39,6 +44,8 @@ func _ready():
 	status.add_child(xp_bar)
 	stats = label("",24)
 	status.add_child(stats)
+	damage_source = label("",20,Color("efb6a9"),true)
+	status.add_child(damage_source)
 	minimap = MiniMap.new()
 	minimap.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	minimap.position = Vector2(-220,24)
@@ -60,14 +67,20 @@ func _ready():
 	shop_button.position = Vector2(-140,-85)
 	shop_button.size = Vector2(280,54)
 	root.add_child(shop_button)
-	build_button = button("Развитие",func(): on_build.call())
+	build_button = button("Организм",func(): on_build.call())
 	build_button.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	build_button.position = Vector2(-220,240)
 	build_button.size = Vector2(192,54)
 	root.add_child(build_button)
+	pending_button = button("",func(): on_pending.call(),true)
+	pending_button.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	pending_button.position = Vector2(-220,304)
+	pending_button.size = Vector2(192,54)
+	pending_button.hide()
+	root.add_child(pending_button)
 	message = label("",22,Color("e8d9b5"))
 	message.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
-	message.position = Vector2(-330,164)
+	message.position = Vector2(-330,208)
 	message.custom_minimum_size = Vector2(660,0)
 	message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(message)
@@ -79,6 +92,10 @@ func update_game(sim):
 	xp_bar.value = sim.xp/sim.xp_needed()*100
 	area_label.text = ("ПИТАТЕЛЬНАЯ СРЕДА" if sim.world.biome(sim.player)==0 else "ТОКСИЧНАЯ ЗОНА")+"  ·  "+sim.world.condition_name(sim.world.biome(sim.player))
 	stats.text = "Размер ×%.1f  ·  Ур. %d  ·  %d/%d HP\nБиомасса %d  ·  %02d:%02d" % [sim.body_radius()/22.0,sim.level,int(sim.hp),int(sim.max_hp),sim.build.biomass,int(sim.elapsed)/60,int(sim.elapsed)%60]
+	var damage = sim.last_damage
+	damage_source.text = "Последний урон: −%.1f HP · %s" % [float(damage.get("amount",0)),damage.get("name","неизвестный источник")] if not damage.is_empty() else ""
+	pending_button.text = "Награда · %d" % sim.reward_queue.size() if not sim.reward_queue.is_empty() else "Мутация · %d" % sim.pending_levels
+	pending_button.visible = modal==null and (not sim.reward_queue.is_empty() or sim.pending_levels>0)
 	shop_button.visible = sim.nearby_colony()>=0 and modal==null
 
 func game_visible(value: bool):
@@ -104,14 +121,39 @@ func open(title: String,subtitle: String="",width: float=1030) -> VBoxContainer:
 	panel.size = panel.custom_minimum_size
 	panel.add_theme_stylebox_override("panel",box(Color("0c202b"),Color("2c5159"),22))
 	center.add_child(panel)
+	var frame = VBoxContainer.new()
+	panel.add_child(frame)
+	var heading = row()
+	frame.add_child(heading)
+	var title_label = label(title,30,Color("e2f4ed"),true)
+	heading.add_child(title_label)
+	var close_button = button("×",func(): on_close.call())
+	close_button.custom_minimum_size = Vector2(56,56)
+	heading.add_child(close_button)
 	var scroll = ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	panel.add_child(scroll)
+	scroll_container=scroll
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.scroll_deadzone = 12
+	frame.add_child(scroll)
+	var scrollbar = scroll.get_v_scroll_bar()
+	scrollbar.custom_minimum_size.x = 44
+	for state in ["grabber","grabber_highlight","grabber_pressed"]:
+		var handle = box(Color("79bfb3"),Color("b3eadd"),0)
+		handle.content_margin_left = 12
+		handle.content_margin_right = 12
+		handle.set_expand_margin(SIDE_LEFT,-9)
+		handle.set_expand_margin(SIDE_RIGHT,-9)
+		scrollbar.add_theme_stylebox_override(state,handle)
+	scrollbar.add_theme_stylebox_override("scroll",box(Color("213f49"),Color("315962"),0))
+	var gutter=MarginContainer.new()
+	gutter.size_flags_horizontal=Control.SIZE_EXPAND_FILL
+	gutter.add_theme_constant_override("margin_right",44)
+	scroll.add_child(gutter)
 	content = VBoxContainer.new()
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.add_theme_constant_override("separation",15)
-	scroll.add_child(content)
-	content.add_child(label(title,32,Color("e2f4ed")))
+	gutter.add_child(content)
 	if subtitle!="": content.add_child(label(subtitle,22,Color("94b5b8"),true))
 	return content
 

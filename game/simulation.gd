@@ -5,6 +5,16 @@ const Catalog = preload("res://core/catalog.gd")
 const Genome = preload("res://core/genome.gd")
 const TissueDamage=preload("res://game/tissue_damage.gd")
 const CombatTissue=preload("res://core/combat_tissue.gd")
+const CombatStats=preload("res://core/combat_stats.gd")
+const Rewards=preload("res://core/rewards.gd")
+var combat_stats: Dictionary=CombatStats.create()
+var last_damage: Dictionary={}
+var damage_markers: Array=[]
+var cysts: Array=[]
+var reward_queue: Array=[]
+var reward_options: Array=[]
+var offer_quality: Dictionary={}
+var claimed_rewards: Array=[]
 var feedback: Array=[]
 var minibosses_spawned=0
 var next_miniboss_at=180.0
@@ -62,6 +72,7 @@ var boss_marker = Vector2.ZERO
 var last_tile = Vector2i(-100,-100)
 
 func new_run(seed_value: int, unlocked: Array = Catalog.base_unlocked(), permanent: Dictionary = {}, selected_branch: String = "predator"):
+	combat_stats=CombatStats.create();last_damage={};damage_markers=[];cysts=[];reward_queue=[];reward_options=[];offer_quality={};claimed_rewards=[]
 	rng.seed = seed_value
 	world.generate(seed_value)
 	player_genome = Genome.create(seed_value,0,"player",0)
@@ -98,6 +109,8 @@ func new_run(seed_value: int, unlocked: Array = Catalog.base_unlocked(), permane
 	for i in range(12):
 		var p=player+Vector2.from_angle(i*2.399)*float(85+i*27)
 		if world.walkable(p,7): _drop(p,"heal",6)
+	_create_cysts()
+	_grade_stocks()
 	_reveal()
 	# Enough near-start food for a quick first mutation.
 	for i in range(8):
@@ -105,7 +118,7 @@ func new_run(seed_value: int, unlocked: Array = Catalog.base_unlocked(), permane
 		pickups.append({"pos":p,"type":"dna","amount":3,"id":next_id})
 		next_id += 1
 
-func _feedback(kind: String,position: Vector2,amount: float=0.0):
+func _feedback(kind: String,position: Vector2,amount: float=0.0,source: String=""):
 	if feedback.size()>=48:
 		if kind=="hit":return
 		var expendable=-1
@@ -113,16 +126,18 @@ func _feedback(kind: String,position: Vector2,amount: float=0.0):
 			if feedback[i].kind=="hit":expendable=i;break
 		if expendable>=0:feedback.remove_at(expendable)
 		else:feedback.pop_front()
-	feedback.append({"kind":kind,"pos":position,"amount":amount})
+	feedback.append({"kind":kind,"pos":position,"amount":amount,"tier":int(amount),"source":source})
 
-func hit_enemy(enemy: Dictionary,amount: float) -> float:
+func hit_enemy(enemy: Dictionary,amount: float,source: String="unknown") -> float:
 	if enemy.hp<=0 or enemy.get("captured",false):return 0.0
-	var raw=maxf(0.0,amount)*(1.0+build.rank("catalysis")*0.08)
+	var raw=maxf(0.0,amount)*(1.0+build.passive("catalysis"))*build.power(source)
 	var budget=float(enemy.get("tissue_budget",enemy.max_hp*0.01))
 	var dealt=minf(enemy.hp,minf(raw,budget))
 	enemy.tissue_budget=maxf(0,budget-dealt)
 	enemy.hp-=dealt
 	if dealt>0:
+		enemy.last_damage_source=source
+		CombatStats.record_damage(combat_stats,source,dealt)
 		_feedback("hit",enemy.pos,dealt)
 		enemy.popup_damage=float(enemy.get("popup_damage",0))+dealt
 		if elapsed-float(enemy.get("popup_at",-1))>=0.24 and enemy.popup_damage>=0.8:
@@ -131,23 +146,47 @@ func hit_enemy(enemy: Dictionary,amount: float) -> float:
 			enemy.popup_at=elapsed
 	return dealt
 
-func hurt_player(amount: float):
-	var damage=maxf(0.0,amount)
+func heal_player(amount: float):
+	var actual=maxf(0.0,minf(max_hp-hp,amount))
+	hp+=actual
+	CombatStats.record_heal(combat_stats,actual)
+
+func hurt_player(amount: float,source: Dictionary={}):
+	if hp<=0:return
+	var incoming=maxf(0.0,amount)
+	var damage=incoming*(1.0-build.passive("armor"))
 	if build.rank("barrier")>0 and cooldowns.get("barrier",0)<=0:
-		damage=maxf(0.0,damage-Catalog.scaled_damage(8+build.rank("barrier")*6,build.rank("barrier")))
+		damage=maxf(0.0,damage-Catalog.scaled_damage(8+build.rank("barrier")*6,build.rank("barrier"))*build.power("barrier"))
 		cooldowns.barrier=8.0
 		_effect({"type":"pulse","pos":player,"r":body_radius()*1.4,"life":0.4,"max":0.4})
 		_feedback("synergy",player)
-	if damage<=0:return
-	hp-=damage
-	_feedback("hurt",player,damage)
+	var actual=minf(maxf(0.0,hp),damage)
+	var kind=str(source.get("kind","unknown"))
+	var label=str(source.get("name","Неизвестный источник"))
+	var origin: Vector2=source.get("pos",player)
+	var entry=CombatStats.record_taken(combat_stats,elapsed,actual,incoming-damage,kind,label,origin,int(source.get("id",0)))
+	if actual<=0:return
+	hp-=actual
+	last_damage=entry.duplicate(true)
+	_feedback("hurt",origin,actual,kind)
+	var marked=false
+	for marker in damage_markers:
+		if marker.kind==kind and marker.name==label and marker.pos.distance_squared_to(origin)<10000:
+			marker.amount+=actual;marker.life=1.5;marker.pos=origin;marked=true;break
+	if not marked:
+		if damage_markers.size()>=6:damage_markers.pop_front()
+		damage_markers.append({"pos":origin,"kind":kind,"name":label,"amount":actual,"life":1.5,"max":1.5})
 	var merged=false
 	for effect in effects:
 		if effect.type=="damage" and effect.get("player",false) and effect.life>0.5:
-			effect.amount+=damage
-			merged=true
-			break
-	if not merged:_effect({"type":"damage","pos":player,"amount":damage,"player":true,"r":0.0,"life":0.75,"max":0.75})
+			effect.amount+=actual;merged=true;break
+	if not merged:_effect({"type":"damage","pos":player,"amount":actual,"player":true,"r":0.0,"life":0.75,"max":0.75})
+
+func _enemy_label(enemy: Dictionary) -> String:
+	if enemy.kind=="boss":return "Архицит"
+	if enemy.kind=="miniboss":return str(enemy.get("title","Минибосс"))
+	if enemy.kind=="spitter":return "Плюющая амёба"
+	return "Крупная амёба" if enemy.r>body_radius()*1.08 else "Враждебная амёба"
 
 func _update_minibosses():
 	if minibosses_spawned>=2 or elapsed<next_miniboss_at or enemies.size()>=ENEMY_CAP:return
@@ -182,6 +221,9 @@ func view_zoom() -> float:
 
 func ability_scale() -> float:
 	return body_radius()/34.0
+
+func cooldown_factor() -> float:
+	return 0.88 if world.conditions[world.biome(player)]==2 else 1.0
 
 func _create_residents():
 	residents.clear()
@@ -239,7 +281,7 @@ func _touches(position: Vector2,object_radius: float=0.0) -> bool:
 
 func attraction_radius() -> float:
 	var rank=build.rank("magnet")
-	return body_radius() if rank<=0 else body_radius()+55.0*rank+float(upgrades.get("collect",0))*8
+	return body_radius() if rank<=0 else body_radius()+build.passive("magnet")+float(upgrades.get("collect",0))*8
 
 func _capture(item: Dictionary):
 	item.captured=true
@@ -274,7 +316,7 @@ func xp_needed() -> float:
 	return 12.0+float(level-1)*6.0
 
 func gain_xp(amount: float):
-	xp += amount*(1.0+build.rank("metabolism")*0.06)
+	xp += amount*(1.0+build.passive("metabolism"))
 	while xp >= xp_needed():
 		xp -= xp_needed()
 		level += 1
@@ -287,7 +329,7 @@ func step(dt: float,direction: Vector2):
 	invuln = maxf(0,invuln-dt)
 	var condition = world.conditions[world.biome(player)]
 	previous_player=player
-	var speed = (72.0+body_radius()*0.6)*(1.0+Catalog.adaptation_bonus(build.rank("speed")))*(0.85 if condition == 1 else 1.0)
+	var speed = (72.0+body_radius()*0.6)*(1.0+build.passive("speed"))*(0.85 if condition == 1 else 1.0)
 	var desired = direction.limit_length()*speed
 	var response = exp(-dt/0.2)
 	var travel = desired*dt+(player_velocity-desired)*0.2*(1.0-response)
@@ -297,7 +339,7 @@ func step(dt: float,direction: Vector2):
 	var resolved_velocity=(player-previous_player)/maxf(0.001,dt)
 	if resolved_velocity.length_squared()>4.0:facing=lerp_angle(facing,resolved_velocity.angle(),1.0-exp(-dt*9.0))
 	var colony_regen=build.rank("division")*0.15 if "metabolic_colony" in build.active_synergies() else 0.0
-	hp = minf(max_hp,hp+(build.rank("regen")*0.5+float(upgrades.get("regen",0))*0.1+colony_regen)*dt)
+	heal_player((build.passive("regen")+float(upgrades.get("regen",0))*0.1+colony_regen)*dt)
 	if hp<max_hp*0.25 and elapsed-_danger_at>2.0:_feedback("danger",player);_danger_at=elapsed
 	_reveal()
 	for k in cooldowns: cooldowns[k] = maxf(0,cooldowns[k]-dt)
@@ -323,6 +365,10 @@ func step(dt: float,direction: Vector2):
 	_update_fields(dt)
 	_update_remains(dt)
 	_collect(dt)
+	_update_cysts(dt)
+	for i in range(damage_markers.size()-1,-1,-1):
+		damage_markers[i].life-=dt
+		if damage_markers[i].life<=0:damage_markers.remove_at(i)
 	for i in range(effects.size()-1,-1,-1):
 		effects[i].life -= dt
 		if effects[i].life<=0: effects.remove_at(i)
@@ -405,16 +451,16 @@ func _update_enemies(dt: float):
 		e.grasp=maxf(0.0,float(e.get("grasp",0))-dt)
 		if e.infect>0:
 			e.infect -= dt
-			hit_enemy(e,Catalog.scaled_damage(4.0+build.rank("infection")*3.0,build.rank("infection"))*dt)
+			hit_enemy(e,Catalog.scaled_damage(4.0+build.rank("infection")*3.0,build.rank("infection"))*dt,"infection")
 		if "regen" in e.get("traits",[]) and e.kind!="miniboss": e.hp = minf(e.max_hp,e.hp+e.max_hp*0.012*dt)
 		if e.get("enzyme_time",0)>0:
 			e.enzyme_time=maxf(0.0,e.enzyme_time-dt)
-			hit_enemy(e,Catalog.scaled_damage(3+build.rank("enzymes")*2,build.rank("enzymes"))*dt)
+			hit_enemy(e,Catalog.scaled_damage(3+build.rank("enzymes")*2,build.rank("enzymes"))*dt,"enzymes")
 		if "toxic" in e.get("traits",[]):
 			e.emission_cd -= dt
 			if e.emission_cd<=0:
 				e.emission_cd = 2.5
-				_field(e.pos,48,6.0,2.8,"enemy_toxin",true)
+				_field(e.pos,48,6.0,2.8,"enemy_toxin",true,_enemy_label(e)+" · токсин",int(e.id))
 		if e.hp <= 0:
 			_die(i,false)
 			continue
@@ -456,12 +502,12 @@ func _update_enemies(dt: float):
 			if e.shot_cd<=0 and dist<850:
 				e.shot_cd = 2.0 if e.kind=="spitter" else 1.5
 				if e.kind == "boss":
-					for n in range(10): _shot(e.pos,Vector2.from_angle(n*TAU/10.0+elapsed*0.2)*135,10,true)
+					for n in range(10): _shot(e.pos,Vector2.from_angle(n*TAU/10.0+elapsed*0.2)*135,10,true,"enemy",_enemy_label(e),int(e.id))
 				elif e.kind=="miniboss":
-					for n in range(5):_shot(e.pos,Vector2.from_angle(n*TAU/5+elapsed)*100,7,true)
-				else: _shot(e.pos,offset.normalized()*155,8,true)
+					for n in range(5):_shot(e.pos,Vector2.from_angle(n*TAU/5+elapsed)*100,7,true,"enemy",_enemy_label(e),int(e.id))
+				else: _shot(e.pos,offset.normalized()*155,8,true,"enemy",_enemy_label(e),int(e.id))
 		if dist<e.r+body_radius()*0.75 and rules.impact>0 and invuln<=0 and not _safe_zone(player):
-			hurt_player(rules.impact*(1.2 if e.kind in ["boss","miniboss"] else 1.0)*(1.0-Catalog.adaptation_bonus(build.rank("armor"))))
+			hurt_player(rules.impact*(1.2 if e.kind in ["boss","miniboss"] else 1.0),{"kind":"collision","name":_enemy_label(e),"pos":e.pos,"id":e.id})
 			invuln = 0.65
 			e.impulse=-offset.normalized()*24.0
 			_effect({"type":"hurt","pos":player,"life":0.3,"max":0.3,"r":45.0})
@@ -473,13 +519,14 @@ func _die(index: int,absorbed: bool):
 	for resident in residents:
 		if resident.id==e.get("resident_id",0):resident.dead=true; resident.active=false
 	kills += 1
-	if "spores" in e.get("traits",[]): _field(e.pos,75,8.0,2.5,"enemy_spore",true)
+	CombatStats.record_kill(combat_stats,"devour" if absorbed else str(e.get("last_damage_source","unknown")))
+	if "spores" in e.get("traits",[]): _field(e.pos,75,8.0,2.5,"enemy_spore",true,_enemy_label(e)+" · споры",int(e.id))
 	if absorbed:
 		var meal_scale=maxf(1.0,e.r/26.0) if e.r>40 else 1.0
 		_assimilate(e.genome,maxf(1.0,e.r/12.0),e.pos)
 		gain_xp(4 if e.kind=="prey" else int(6*meal_scale))
 		build.biomass += 1 if e.kind=="prey" else int(3*meal_scale)
-		hp = minf(max_hp,hp+build.rank("devour")*0.8)
+		heal_player(build.rank("devour")*0.8)
 		if e.infect>0 and "spore_feast" in build.active_synergies(): _field(e.pos,100,14,2.5,"spore")
 	else:
 		_leave_remains(e)
@@ -489,6 +536,7 @@ func _die(index: int,absorbed: bool):
 		events.append({"type":"core","token":run_id+":boss","amount":12})
 		events.append({"type":"end","outcome":"victory"})
 	elif e.kind=="miniboss":
+		_spawn_cyst(e.pos,3,"elite:"+str(e.id))
 		events.append({"type":"core","token":e.get("elite_token",run_id+":elite:"+str(e.id)),"amount":4})
 		events.append({"type":"message","text":"Минибосс повержен: +4 ядра наследия"})
 	elif kills%18 == 0:
@@ -594,7 +642,7 @@ func _bite():
 	if target.is_empty():return
 	cooldowns.bite=0.45
 	bite_flash=1.0
-	hit_enemy(target,Catalog.scaled_damage(7.0+rank*5.0,rank)*(1.25 if "enzyme_bite" in build.active_synergies() else 1.0))
+	hit_enemy(target,Catalog.scaled_damage(7.0+rank*5.0,rank)*(1.25 if "enzyme_bite" in build.active_synergies() else 1.0),"devour")
 	if "enzyme_bite" in build.active_synergies():
 		target.enzyme_time=3.0
 		_effect({"type":"enzyme_bite","pos":player,"end":target.pos,"r":body_radius(),"life":0.7,"max":0.7})
@@ -609,7 +657,7 @@ func _attack():
 			var offset=enemy.pos-player
 			if enemy.get("captured",false) or offset.length()>(100+build.rank("cilia")*10)*ability_scale():continue
 			if offset.normalized().dot(Vector2.from_angle(facing))<0.5:continue
-			hit_enemy(enemy,Catalog.scaled_damage(10+build.rank("cilia")*6,build.rank("cilia")))
+			hit_enemy(enemy,Catalog.scaled_damage(10+build.rank("cilia")*6,build.rank("cilia")),"cilia")
 			touched=true
 		if touched:
 			cooldowns.cilia=1.4
@@ -637,7 +685,7 @@ func _attack():
 					if d<distance:distance=d;nearest=enemy
 				if nearest.is_empty():break
 				hit.append(nearest.id)
-				hit_enemy(nearest,Catalog.scaled_damage(12+build.rank("electric")*6,build.rank("electric")))
+				hit_enemy(nearest,Catalog.scaled_damage(12+build.rank("electric")*6,build.rank("electric")),"electric")
 				_effect({"type":"electric","pos":previous,"end":nearest.pos,"r":20.0,"life":0.35,"max":0.35})
 				if "conductive_bath" in combos:
 					nearest.slow=1.2
@@ -648,13 +696,13 @@ func _attack():
 	if "metabolic_colony" in combos and cooldowns.get("colony_visual",0)<=0 and hp<max_hp:
 		cooldowns.colony_visual=2.0
 		_effect({"type":"metabolic_colony","pos":player,"r":body_radius()*2.5,"life":1.4,"max":1.4})
-	var metabolic = 0.88 if world.conditions[world.biome(player)] == 2 else 1.0
+	var metabolic = cooldown_factor()
 	var synergies = build.active_synergies()
 	if build.rank("tentacle")>0 and cooldowns.get("tentacle",0)<=0:
 		var target = _nearest((165.0+build.rank("tentacle")*12)*ability_scale())
 		if not target.is_empty():
 			cooldowns.tentacle = 0.85*metabolic
-			hit_enemy(target,Catalog.scaled_damage(9.0+build.rank("tentacle")*7,build.rank("tentacle")))
+			hit_enemy(target,Catalog.scaled_damage(9.0+build.rank("tentacle")*7,build.rank("tentacle")),"tentacle")
 			_effect({"type":"lash","pos":player,"end":target.pos,"life":0.22,"max":0.22,"r":0})
 			if "acid_grasp" in synergies:
 				_effect({"type":"acid_grasp","pos":player,"end":target.pos,"r":30.0,"life":0.65,"max":0.65})
@@ -663,7 +711,7 @@ func _attack():
 	if build.rank("acid")>0:
 		for e in enemies:
 			if _is_engulfing(e): continue
-			if player.distance_squared_to(e.pos)<pow((75+build.rank("acid")*9)*ability_scale(),2): hit_enemy(e,Catalog.scaled_damage(4+build.rank("acid")*3,build.rank("acid"))*_attack_dt)
+			if player.distance_squared_to(e.pos)<pow((75+build.rank("acid")*9)*ability_scale(),2): hit_enemy(e,Catalog.scaled_damage(4+build.rank("acid")*3,build.rank("acid"))*_attack_dt,"acid")
 	if build.rank("spikes")>0 and cooldowns.get("spikes",0)<=0:
 		var target = _nearest(650)
 		if not target.is_empty():
@@ -680,7 +728,7 @@ func _attack():
 		for e in enemies:
 			if _is_engulfing(e): continue
 			if player.distance_squared_to(e.pos)<radius*radius:
-				hit_enemy(e,Catalog.scaled_damage(12+build.rank("pulse")*8,build.rank("pulse")))
+				hit_enemy(e,Catalog.scaled_damage(12+build.rank("pulse")*8,build.rank("pulse")),"pulse")
 				e.impulse=e.get("impulse",Vector2.ZERO)+(e.pos-player).normalized()*100.0
 		_effect({"type":"pulse","pos":player,"r":float(radius),"life":0.55,"max":0.55})
 		if "spike_pulse" in synergies:
@@ -703,7 +751,7 @@ func _attack():
 		for p in clone_positions():
 			for e in enemies:
 				if _is_engulfing(e): continue
-				if p.distance_squared_to(e.pos)<pow(e.r+18,2): hit_enemy(e,Catalog.scaled_damage(8+build.rank("division")*4,build.rank("division"))*_attack_dt)
+				if p.distance_squared_to(e.pos)<pow(e.r+18,2): hit_enemy(e,Catalog.scaled_damage(8+build.rank("division")*4,build.rank("division"))*_attack_dt,"division")
 
 var _attack_dt = 0.016
 
@@ -713,9 +761,9 @@ func clone_positions() -> Array:
 		out.append(player+Vector2.from_angle(elapsed*1.6+i*TAU/Catalog.clone_count(build.rank("division")))*105)
 	return out
 
-func _shot(p: Vector2,velocity: Vector2,damage: float,hostile: bool):
+func _shot(p: Vector2,velocity: Vector2,damage: float,hostile: bool,source: String="spikes",actor_name: String="",actor_id: int=0):
 	if shots.size()>=200: return
-	shots.append({"pos":p,"vel":velocity,"damage":damage,"hostile":hostile,"life":2.0})
+	shots.append({"pos":p,"vel":velocity,"damage":damage,"hostile":hostile,"life":2.0,"source":source,"origin":p,"actor_name":actor_name,"actor_id":actor_id})
 
 func _update_shots(dt: float):
 	_attack_dt = dt
@@ -734,7 +782,7 @@ func _update_shots(dt: float):
 			if shot.pos.distance_squared_to(player)<pow(body_radius()*0.78+3,2):
 				hit = true
 				if invuln<=0 and not _safe_zone(player):
-					hurt_player(shot.damage*(1-Catalog.adaptation_bonus(build.rank("armor"))))
+					hurt_player(shot.damage,{"kind":"projectile","name":str(shot.get("actor_name","")) if str(shot.get("actor_name",""))!="" else "Вражеский снаряд","pos":shot.get("origin",shot.pos),"id":int(shot.get("actor_id",0))})
 					invuln = 0.4
 		else:
 			var cell = Vector2i(shot.pos/100.0)
@@ -742,11 +790,11 @@ func _update_shots(dt: float):
 				for x in range(-1,2):
 					for e in buckets.get(cell+Vector2i(x,y),[]):
 						if not hit and shot.pos.distance_squared_to(e.pos)<pow(e.r+8,2):
-							hit_enemy(e,shot.damage)
+							hit_enemy(e,shot.damage,str(shot.get("source","spikes")))
 							hit = true
 		if hit or shot.life<=0 or not world.walkable(shot.pos): shots.remove_at(i)
 
-func _field(p: Vector2,radius: float,damage: float,life: float,kind: String,hostile: bool=false):
+func _field(p: Vector2,radius: float,damage: float,life: float,kind: String,hostile: bool=false,actor_name: String="",actor_id: int=0):
 	if not hostile and "ferment_cloud" in build.active_synergies() and kind=="poison":
 		damage*=1.25
 		if cooldowns.get("ferment_visual",0)<=0:
@@ -754,7 +802,7 @@ func _field(p: Vector2,radius: float,damage: float,life: float,kind: String,host
 			_effect({"type":"ferment_cloud","pos":p,"r":radius*1.25,"life":1.2,"max":1.2})
 	if kind=="spore": _effect({"type":"spore_feast","pos":p,"r":radius,"life":1.4,"max":1.4})
 	if fields.size()>=80: fields.pop_front()
-	fields.append({"pos":p,"r":radius,"damage":damage,"life":life,"max":life,"kind":kind,"hostile":hostile})
+	fields.append({"pos":p,"r":radius,"damage":damage,"life":life,"max":life,"kind":kind,"hostile":hostile,"source":"infection" if kind=="spore" else ("electric" if kind=="acid_arc" else "trail"),"actor_name":actor_name,"actor_id":actor_id})
 
 func _update_fields(dt: float):
 	var ferment="ferment_cloud" in build.active_synergies()
@@ -762,11 +810,11 @@ func _update_fields(dt: float):
 		var f = fields[i]
 		f.life -= dt
 		if f.get("hostile",false):
-			if f.pos.distance_squared_to(player)<pow(f.r+body_radius()*0.65,2) and not _safe_zone(player): hurt_player(f.damage*dt*(1-Catalog.adaptation_bonus(build.rank("armor"))))
+			if f.pos.distance_squared_to(player)<pow(f.r+body_radius()*0.65,2) and not _safe_zone(player): hurt_player(f.damage*dt,{"kind":"toxin","name":str(f.get("actor_name","")) if str(f.get("actor_name",""))!="" else ("Вражеские споры" if f.kind=="enemy_spore" else "Ядовитое облако"),"pos":f.pos,"id":int(f.get("actor_id",0))})
 		else:
 			for e in enemies:
 				if f.pos.distance_squared_to(e.pos)<pow(f.r+e.r*0.5,2):
-					hit_enemy(e,f.damage*dt)
+					hit_enemy(e,f.damage*dt,str(f.get("source","infection" if f.kind=="spore" else ("electric" if f.kind=="acid_arc" else "trail"))))
 					if ferment:e.enzyme_time=2.0
 		if f.life<=0: fields.remove_at(i)
 
@@ -791,7 +839,7 @@ func _collect(dt: float):
 		if item.type=="dna":gain_xp(item.amount)
 		elif item.type=="bio":build.biomass+=int(item.amount)
 		elif item.type=="heal":
-			hp=minf(max_hp,hp+float(item.amount))
+			heal_player(float(item.amount))
 			_effect({"type":"assimilate","pos":player,"end":item.pos,"r":body_radius(),"color":Color("7dfcd4"),"life":0.8,"max":0.8})
 		else:
 			cores_found+=item.amount
@@ -821,7 +869,7 @@ func nearby_colony() -> int:
 	return -1
 
 func snapshot() -> Dictionary:
-	return {"version":1,"player_genome":player_genome.duplicate(true),"minibosses_spawned":minibosses_spawned,"next_miniboss_at":next_miniboss_at,"facing":facing,"tissue_pigment":tissue_pigment.duplicate(true),"residents":_pack(residents),"outcome":outcome,"events":_pack(events),"seed":world.seed_value,"rng_state":str(rng.state),"run_id":run_id,"player":_vec(player),"player_velocity":_vec(player_velocity),"remains":_pack(remains),"digesting_id":digesting_id,"hp":hp,"max_hp":max_hp,"elapsed":elapsed,"xp":xp,"level":level,"pending_levels":pending_levels,"build":build.to_dict(),"enemies":_pack(enemies),"pickups":_pack(pickups),"colonies":_pack(world.colonies),"nests":_pack(world.nests),"explored":explored.keys(),"boss_spawned":boss_spawned,"kills":kills,"cores_found":cores_found,"next_id":next_id,"upgrades":upgrades,"cooldowns":cooldowns.duplicate(),"offers":current_offers.duplicate(),"rerolls":rerolls,"fields":_pack(fields),"shots":_pack(shots)}
+	return {"version":1,"combat_stats":combat_stats.duplicate(true),"last_damage":last_damage.duplicate(true),"cysts":_pack(cysts),"reward_queue":reward_queue.duplicate(true),"reward_options":reward_options.duplicate(true),"offer_quality":offer_quality.duplicate(),"claimed_rewards":claimed_rewards.duplicate(),"player_genome":player_genome.duplicate(true),"minibosses_spawned":minibosses_spawned,"next_miniboss_at":next_miniboss_at,"facing":facing,"tissue_pigment":tissue_pigment.duplicate(true),"residents":_pack(residents),"outcome":outcome,"events":_pack(events),"seed":world.seed_value,"rng_state":str(rng.state),"run_id":run_id,"player":_vec(player),"player_velocity":_vec(player_velocity),"remains":_pack(remains),"digesting_id":digesting_id,"hp":hp,"max_hp":max_hp,"elapsed":elapsed,"xp":xp,"level":level,"pending_levels":pending_levels,"build":build.to_dict(),"enemies":_pack(enemies),"pickups":_pack(pickups),"colonies":_pack(world.colonies),"nests":_pack(world.nests),"explored":explored.keys(),"boss_spawned":boss_spawned,"kills":kills,"cores_found":cores_found,"next_id":next_id,"upgrades":upgrades,"cooldowns":cooldowns.duplicate(),"offers":current_offers.duplicate(),"rerolls":rerolls,"fields":_pack(fields),"shots":_pack(shots)}
 
 func restore(data: Dictionary) -> bool:
 	if data.get("version",0) != 1 or not data.get("player",null) is Array: return false
@@ -885,6 +933,29 @@ func restore(data: Dictionary) -> bool:
 	rerolls = int(data.get("rerolls",0))
 	fields = _unpack(data.get("fields",[]))
 	shots = _unpack(data.get("shots",[]))
+	combat_stats=CombatStats.restore(data.get("combat_stats",{}))
+	if not data.has("combat_stats"):combat_stats.tracking_start=elapsed
+	last_damage=data.get("last_damage",{}).duplicate(true) if data.get("last_damage") is Dictionary else {}
+	cysts=_unpack(data.cysts) if data.get("cysts") is Array else []
+	if not data.has("cysts"):_create_cysts()
+	reward_queue=data.get("reward_queue",[]).duplicate(true) if data.get("reward_queue") is Array else []
+	reward_options=data.get("reward_options",[]).duplicate(true) if data.get("reward_options") is Array else []
+	offer_quality=data.get("offer_quality",{}).duplicate() if data.get("offer_quality") is Dictionary else {}
+	claimed_rewards=data.get("claimed_rewards",[]).duplicate() if data.get("claimed_rewards") is Array else []
+	var clean_queue=[]
+	for entry in reward_queue:
+		if entry is Dictionary and str(entry.get("token",""))!="" and not str(entry.token) in claimed_rewards:
+			clean_queue.append({"token":str(entry.token),"tier":clampi(int(entry.get("tier",1)),1,3)})
+	reward_queue=clean_queue.slice(0,12)
+	var clean_options=[]
+	for entry in reward_options:
+		if not entry is Dictionary:continue
+		var kind=str(entry.get("kind",""));var id=str(entry.get("id",""))
+		if (kind=="mutation" and not Catalog.item(id).is_empty()) or (kind=="evolution" and id in Catalog.EVOLUTIONS):
+			clean_options.append({"kind":kind,"id":id,"quality":clampi(int(entry.get("quality",0)),0,3)})
+		elif kind=="biomass":clean_options.append({"kind":kind,"id":"biomass","quality":clampi(int(entry.get("quality",0)),0,3),"amount":maxi(0,int(entry.get("amount",0)))})
+	reward_options=clean_options.slice(0,3) if not reward_queue.is_empty() else []
+	roll_offer_quality()
 	return true
 
 func _vec(v: Vector2) -> Array: return [v.x,v.y]
@@ -902,7 +973,108 @@ func _unpack(source: Array) -> Array:
 	var out = []
 	for entry in source:
 		var copy = entry.duplicate(true)
-		for k in ["pos","vel","impulse"]:
+		for k in ["pos","vel","impulse","origin"]:
 			if copy.get(k,null) is Array and copy[k].size()==2: copy[k] = Vector2(copy[k][0],copy[k][1])
 		out.append(copy)
 	return out
+
+func _grade_stocks():
+	var reward_rng=RandomNumberGenerator.new()
+	reward_rng.seed=world.seed_value+889711
+	for colony in world.colonies:
+		for stock in colony.stock:
+			if stock.id!="heal":stock.quality=Rewards.roll_quality(reward_rng,1)
+
+func _spawn_cyst(p: Vector2,tier: int,identity: String):
+	if cysts.size()>=12:return
+	var token=run_id+":cyst:"+identity
+	if token in claimed_rewards:return
+	for cyst in cysts:
+		if cyst.token==token:return
+	cysts.append({"id":-300-posmod(hash(identity),1000000000),"pos":p,"tier":clampi(tier,1,3),"r":21.0+tier*4,"token":token,"captured":false,"progress":0.0,"duration":0.65})
+
+func _create_cysts():
+	cysts.clear()
+	var reward_rng=RandomNumberGenerator.new()
+	reward_rng.seed=world.seed_value+811733
+	var tiers=[1,1,2,1,2,3]
+	for i in range(tiers.size()):
+		for attempt in range(100):
+			var p=world.start+Vector2.from_angle(reward_rng.randf()*TAU)*reward_rng.randf_range(380,650) if i==0 else Vector2(reward_rng.randf_range(220,World.W*World.TILE-220),reward_rng.randf_range(220,World.H*World.TILE-220))
+			if not world.walkable(p,28) or p.distance_to(world.start)<350 or _safe_zone(p):continue
+			if cysts.any(func(c):return c.pos.distance_to(p)<220):continue
+			_spawn_cyst(p,tiers[i],"map:"+str(i))
+			break
+
+func _update_cysts(dt: float):
+	for i in range(cysts.size()-1,-1,-1):
+		var cyst=cysts[i]
+		if not cyst.captured:
+			if not _touches(cyst.pos,float(cyst.r)):continue
+			_capture(cyst)
+		cyst.pos=player+Vector2.from_angle(float(cyst.get("entry_angle",0)))*body_radius()*(0.75-cyst.progress*0.65)
+		cyst.progress=minf(1.0,cyst.progress+dt/float(cyst.duration))
+		if cyst.progress<1.0:continue
+		var duplicate=cyst.token in claimed_rewards or reward_queue.any(func(q):return q.token==cyst.token)
+		if not duplicate:reward_queue.append({"token":cyst.token,"tier":int(cyst.tier)})
+		_feedback("reward",player,float(cyst.tier))
+		_effect({"type":"assimilate","pos":player,"end":cyst.pos,"r":body_radius(),"color":Rewards.quality_color(int(cyst.tier)),"life":1.1,"max":1.1})
+		cysts.remove_at(i)
+
+func roll_offer_quality():
+	var clean={}
+	for id in current_offers:
+		clean[id]=clampi(int(offer_quality[id]),0,3) if id in offer_quality else Rewards.roll_quality(rng,mini(5,int(elapsed/120)))
+	offer_quality=clean
+
+func prepare_reward() -> Array:
+	# Stable options are saved, so neither menu X nor checkpoint restore rerolls loot.
+	while not reward_queue.is_empty() and str(reward_queue[0].token) in claimed_rewards:reward_queue.pop_front();reward_options.clear()
+	if reward_queue.is_empty():reward_options.clear();return reward_options
+	if not reward_options.is_empty():
+		_refresh_reward_options()
+		return reward_options
+	var tier=clampi(int(reward_queue[0].tier),1,3)
+	if tier>=2:
+		var evolutions=build.evolution_candidates()
+		if not evolutions.is_empty():reward_options.append({"kind":"evolution","id":evolutions[0],"quality":build.quality(evolutions[0])})
+	var pool=build.offers(rng)
+	# Even a rank-capped organ can still gain a truly superior material quality.
+	for id in build.organs.keys()+build.adaptations.keys():
+		if build.rank(id)>=Catalog.max_rank(id) and build.quality(id)<tier and not id in pool:pool.append(id)
+	for id in pool:
+		if reward_options.size()>=3:break
+		var grade=maxi(tier,Rewards.roll_quality(rng,tier+2))
+		reward_options.append({"kind":"mutation","id":id,"quality":grade})
+	if reward_options.is_empty():reward_options.append({"kind":"biomass","id":"biomass","quality":tier,"amount":20+tier*20})
+	return reward_options
+
+func _refresh_reward_options():
+	for i in range(reward_options.size()):
+		var option=reward_options[i]
+		var obsolete=false
+		if option.kind=="mutation":obsolete=build.rank(str(option.id))>=Catalog.max_rank(str(option.id)) and build.quality(str(option.id))>=int(option.quality)
+		elif option.kind=="evolution":obsolete=not str(option.id) in build.evolution_candidates()
+		if obsolete:
+			var grade=int(option.get("quality",1))
+			reward_options[i]={"kind":"biomass","id":"biomass","quality":grade,"amount":20+20*maxi(1,grade)}
+
+func claim_reward(index: int,replace_id: String="") -> bool:
+	_refresh_reward_options()
+	if reward_queue.is_empty() or index<0 or index>=reward_options.size():return false
+	var token=str(reward_queue[0].token)
+	if token in claimed_rewards:return false
+	var option=reward_options[index]
+	var accepted=false
+	match str(option.kind):
+		"mutation":accepted=build.apply(str(option.id),replace_id,int(option.quality))
+		"evolution":accepted=replace_id=="" and build.evolve(str(option.id))
+		"biomass":
+			if replace_id=="":build.biomass+=int(option.amount);accepted=true
+	if not accepted:return false
+	claimed_rewards.append(token)
+	# Each run has at most six map cysts and two elite cysts. Preserve all tokens.
+	reward_queue.pop_front();reward_options.clear()
+	_feedback("reward",player,3 if option.kind=="evolution" else float(option.get("quality",1)))
+	_effect({"type":"mutation","pos":player,"r":body_radius()*1.6,"life":1.2,"max":1.2})
+	return true

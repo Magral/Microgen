@@ -1,3 +1,7 @@
+## 0.10.0
+
+Source-specific louder damage audio and one smooth movement voice; bounded actual combat attribution/history and direct journal. Persistent quality, six recipe evolutions, deterministic cyst rewards and atomic/deferred choices; numerical context-aware comparisons. Edible enemy markers, wide touch scrollbars and fixed modal close controls. Cached synergies/enemy anatomy/per-frame clone positions, bounded statistics summaries, paired profiling. Original save identity and no-video delivery retained.
+
 ## 0.9.0
 
 Aquatic caustics and layered parallax matter, rounded directional organism lighting, recessed anatomy, detailed procedural tissue terrain. Single indexed mesh per terrain chunk; bounded palette/density/optical caches; staggered particle currents. Safe triangulated fallback for damaged nonradial jelly contours; corrected per-depth haze transforms. Native static QA and paired long-run evidence in docs/performance/0.9.0.md. No videos.

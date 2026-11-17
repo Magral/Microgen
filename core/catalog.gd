@@ -17,9 +17,9 @@ const ORGANS = {
 const ADAPTATIONS = {
 	"metabolism": {"name":"Усиленное усвоение","desc":"Повышает получаемую ДНК.","color":"b7eb9e"},
 	"catalysis": {"name":"Каталитические белки","desc":"Усиливают базовый урон органов.","color":"e9bb91"},
-	"armor": {"name":"Плотная мембрана", "desc":"Снижает получаемый урон на 12% за ранг, до 60%.", "color":"99b7df"},
+	"armor": {"name":"Плотная мембрана", "desc":"Ранг и качество снижают входящий урон. Предел — 60%.", "color":"99b7df"},
 	"regen": {"name":"Регенерация", "desc":"Восстанавливает 0,5 здоровья в секунду за уровень.", "color":"6ef1cb"},
-	"speed": {"name":"Жгутики", "desc":"Увеличивают скорость на 12% за ранг, до 60%.", "color":"f4d394"},
+	"speed": {"name":"Жгутики", "desc":"Ранг и качество увеличивают скорость. Предел — 60%.", "color":"f4d394"},
 	"magnet": {"name":"Рецепторы", "desc":"Притягивают ДНК, биомассу и ткань с растущего радиуса. Само поглощение идёт при касании.", "color":"e7a7f5"}
 }
 const SYNERGIES = {
@@ -103,3 +103,17 @@ static func clone_count(rank: int) -> int:
 static func adaptation_bonus(rank: int) -> float:
 	# Preserve old ranks 1–3 while giving both final adaptation ranks real value.
 	return minf(0.6,rank*0.12 if rank<=4 else 0.48+(rank-4)*0.06)
+
+# Evolution is a permanent 30% organ damage bonus; recipes unlock at 6 + 3 ranks.
+const EVOLUTIONS = {
+	"tentacle": {"name":"Хищные рецепторы", "passive":"magnet"},
+	"acid": {"name":"Кислотная броня", "passive":"armor"},
+	"spikes": {"name":"Стремительные шипы", "passive":"speed"},
+	"pulse": {"name":"Живое сокращение", "passive":"regen"},
+	"infection": {"name":"Питательная инфекция", "passive":"metabolism"},
+	"electric": {"name":"Каталитический разряд", "passive":"catalysis"}
+}
+const QUALITY_MULTIPLIERS = [1.0, 1.12, 1.25, 1.45]
+
+static func quality_multiplier(grade: int) -> float:
+	return QUALITY_MULTIPLIERS[clampi(grade, 0, 3)]

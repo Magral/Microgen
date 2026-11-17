@@ -7,6 +7,7 @@ const Absorption = preload("res://game/absorption.gd")
 const OrganicFX = preload("res://game/organic_fx.gd")
 const Jelly = preload("res://game/jelly_motion.gd")
 const Fluid = preload("res://game/fluid_view.gd")
+const RewardArt=preload("res://game/reward_art.gd")
 const Terrain=preload("res://game/terrain_view.gd")
 var terrain=Terrain.new()
 var painter = Painter.new()
@@ -19,6 +20,10 @@ var reaction=0.0
 var previous_build=""
 var detailed_enemies: Dictionary={}
 var zoom=3.09
+var organ_cache: Dictionary={}
+var organ_cache_hits=0
+var organ_cache_misses=0
+var absorbable: Array=[]
 
 func _ready():
 	fluid.show_behind_parent = true
@@ -59,6 +64,7 @@ func _process(dt):
 	if sim != null:
 		if tracked_sim != sim:
 			motions.clear()
+			organ_cache.clear()
 			tracked_sim = sim
 			previous_build=str(sim.build.organs)
 			reaction=0.0
@@ -85,6 +91,7 @@ func _process(dt):
 		visible.sort_custom(func(a,b):return sim.player.distance_squared_to(a.pos)<sim.player.distance_squared_to(b.pos))
 		detailed_enemies.clear()
 		for i in range(mini(6,visible.size())):detailed_enemies[visible[i].id]=true
+		_prune_organ_cache()
 		var alive = {"player":true}
 		_motion("player",sim.player,sim.player_genome,dt,sim.body_radius())
 		var physical=TissueDamage.contour(painter.anatomy(sim.player_genome).contour,sim.player_genome,sim.hp/sim.max_hp)
@@ -164,7 +171,12 @@ func _draw():
 		elif pickup.type == "core":
 			draw_colored_polygon(PackedVector2Array([p+Vector2(0,-10),p+Vector2(8,0),p+Vector2(0,10),p+Vector2(-8,0)]),col)
 		else: draw_circle(p,4,col)
+	var clones=sim.clone_positions() if sim.build.rank("division")>0 else []
 	_prepare_feeding()
+	absorbable.clear()
+	for cyst in sim.cysts:
+		if not area.has_point(cyst.pos) or cyst.get("used",false) or cyst.get("captured",false):continue
+		RewardArt.paint(self,screen(cyst.pos),int(cyst.tier),visual_time,int(cyst.id),float(cyst.get("progress",0.0)))
 	for fragment in sim.remains:
 		if fragment.get("captured",false): continue
 		if area.has_point(fragment.pos): painter.paint_fragment(self,screen(fragment.pos),fragment,fragment.id==sim.digesting_id)
@@ -176,6 +188,7 @@ func _draw():
 			continue
 		if not area.has_point(e.pos): continue
 		if feeding.any(func(entry): return entry.get("enemy_id",-1)==e.id): continue
+		if can_mark_absorbable(e):absorbable.append(e)
 		var organs = enemy_organs(e)
 		painter.paint(self,screen(e.pos),e.r*1.17*(1.0-float(e.get("engulf",0))*0.65),e.genome,organs,visual_time,"prey" if e.r<sim.body_radius()*0.82 else e.kind,e.kind=="boss" or detailed_enemies.has(e.id),motion_for(e.id),[],Color(-1,-1,-1),0.0,e.hp/e.max_hp)
 		if e.infect>0: OrganicFX.infected(self,screen(e.pos),e.r,e.genome,visual_time,float(e.infect),motion_for(e.id))
@@ -186,10 +199,12 @@ func _draw():
 			draw_line(p,p+Vector2(e.r*2*maxf(0,e.hp/e.max_hp),0),Color("e9a5ad"),3,true)
 	if sim.build.rank("division")>0:
 		var clone_index = 0
-		for p in sim.clone_positions():
+		for p in clones:
 			painter.paint(self,screen(p),17,sim.player_genome,{"trail":sim.build.rank("trail")},visual_time+1,"clone",false,motion_for("clone:%d" % clone_index),[],sim.body_color(),0.0,sim.hp/sim.max_hp)
 			clone_index += 1
 	_draw_player()
+	for cyst in sim.cysts:
+		if cyst.get("captured",false):RewardArt.paint(self,screen(cyst.pos),int(cyst.tier),visual_time,int(cyst.id),float(cyst.get("progress",0.0)))
 	for shot in sim.shots:
 		var p = screen(shot.pos)
 		var col = Color("e27e9d") if shot.hostile else Color("e7d1a7")
@@ -198,7 +213,7 @@ func _draw():
 	for effect in sim.effects:
 		if effect.type=="damage":continue
 		if not area.grow(float(effect.r)).has_point(effect.pos):continue
-		if OrganicFX.paint(self,effect,sim.player,size*Vector2(0.5,0.51),visual_time,sim.clone_positions() if sim.build.rank("division")>0 else []): continue
+		if OrganicFX.paint(self,effect,sim.player,size*Vector2(0.5,0.51),visual_time,clones): continue
 		var p = screen(effect.pos)
 		var alpha = effect.life/effect.max
 		if effect.type=="lash":
@@ -211,7 +226,19 @@ func _draw():
 		else:
 			var col = Color("f5989e") if effect.type=="hurt" else Color("9be8db")
 			draw_arc(p,effect.r*(1-alpha*0.6),0,TAU,40,Color(col,alpha*0.55),2,true)
+	_draw_damage_sources()
 	draw_set_transform(Vector2.ZERO)
+	_draw_absorbable(size)
+	for cyst in sim.cysts:
+		if cyst.get("captured",false) or cyst.get("used",false) or not area.has_point(cyst.pos):continue
+		var p=(cyst.pos-sim.player)*zoom+size*Vector2(0.5,0.51)
+		var tier=clampi(int(cyst.tier),1,3)
+		var label=["Редкая циста","Эпическая циста","Легендарная циста"][tier-1]
+		var width=font.get_string_size(label,HORIZONTAL_ALIGNMENT_LEFT,-1,18).x
+		var q=p+Vector2(-width/2,(12.0+tier*3.0)*zoom*1.3+18)
+		draw_string(font,q+Vector2.ONE,label,HORIZONTAL_ALIGNMENT_LEFT,-1,18,Color(0.02,0.06,0.08,0.9))
+		draw_string(font,q,label,HORIZONTAL_ALIGNMENT_LEFT,-1,18,RewardArt.color(tier))
+	_draw_incoming_damage(size)
 	# Damage labels keep a small constant screen size as the world camera scales.
 	for effect in sim.effects:
 		if effect.type!="damage":continue
@@ -278,6 +305,12 @@ func _draw_player():
 	if sim.invuln>0: draw_arc(p,radius*1.4,0,TAU,40,Color("f2c3d1",0.2+0.2*sin(visual_time*24)),2,true)
 
 func enemy_organs(e: Dictionary) -> Dictionary:
+	var signature=hash(e.kind)^(int(e.variant)*31)^hash(e.get("traits",[]))
+	var cached=organ_cache.get(e.id,{})
+	if cached.get("signature",-1)==signature:
+		organ_cache_hits+=1
+		return cached.organs
+	organ_cache_misses+=1
 	var organs = {}
 	if e.kind=="spitter": organs.infection = 1
 	if e.kind in ["boss","miniboss"]:
@@ -288,6 +321,7 @@ func enemy_organs(e: Dictionary) -> Dictionary:
 	for mutation in e.get("traits",[]):
 		var id = {"shell":"armor","swift":"speed","regen":"regen","toxic":"acid","spores":"infection"}.get(mutation,"")
 		if id!="": organs[id] = 2
+	organ_cache[e.id]={"signature":signature,"organs":organs}
 	return organs
 
 func _blob(p: Vector2,radius: float,color: Color,phase: float,lobes: float,nucleus: bool):
@@ -305,3 +339,80 @@ func _blob(p: Vector2,radius: float,color: Color,phase: float,lobes: float,nucle
 		for i in range(3):
 			var q = p+Vector2.from_angle(i*2.2+phase+visual_time*0.13)*radius*0.55
 			draw_circle(q,radius*0.1,Color(color,0.35))
+
+func _prune_organ_cache():
+	var alive={}
+	for enemy in sim.enemies:alive[enemy.id]=true
+	for key in organ_cache.keys():
+		if not alive.has(key):organ_cache.erase(key)
+	# View switches must not retain a cache proportional to the entire world.
+	if organ_cache.size()>256:organ_cache.clear()
+
+func can_mark_absorbable(enemy: Dictionary) -> bool:
+	if enemy.hp<=0 or enemy.kind=="boss" or enemy.get("captured",false):return false
+	if enemy.kind=="miniboss" and enemy.hp>enemy.max_hp*0.15:return false
+	# Interaction performs size/contact checks only for nearby visible organisms.
+	var reach=sim.body_radius()*5.0+float(enemy.r)
+	if enemy.pos.distance_squared_to(sim.player)>reach*reach:return false
+	return sim.interaction(enemy).eligible
+
+func _draw_absorbable(size: Vector2):
+	absorbable.sort_custom(func(a,b):return a.pos.distance_squared_to(sim.player)<b.pos.distance_squared_to(sim.player))
+	for i in range(absorbable.size()):
+		var enemy=absorbable[i]
+		var p=(enemy.pos-sim.player)*zoom+size*Vector2(0.5,0.51)
+		var radius=float(enemy.r)*zoom*1.25+7
+		var tint=Color("7ef3e5",0.74+sin(visual_time*3)*0.10)
+		if i<3:
+			for angle in [0.0,PI]:draw_arc(p,radius,angle-0.36,angle+0.36,8,tint,1.7,true)
+			var label="Можно поглотить"
+			var width=font.get_string_size(label,HORIZONTAL_ALIGNMENT_LEFT,-1,18).x
+			var origin=p+Vector2(-width/2,-radius-11)
+			draw_string(font,origin+Vector2(1,1),label,HORIZONTAL_ALIGNMENT_LEFT,-1,18,Color(0.01,0.06,0.08,0.9))
+			draw_string(font,origin,label,HORIZONTAL_ALIGNMENT_LEFT,-1,18,tint)
+		var q=p+Vector2(0,-radius-3)
+		draw_polyline(PackedVector2Array([q+Vector2(-4,-3),q+Vector2(0,1),q+Vector2(4,-3)]),tint,1.7,true)
+
+func _draw_damage_sources():
+	for marker in sim.damage_markers:
+		var alpha=clampf(float(marker.life)/maxf(0.01,float(marker.max)),0,1)
+		var p=screen(marker.pos)
+		var toxin=str(marker.kind) in ["toxin","acid","spore","toxic","pool"]
+		var radius=19.0
+		for enemy in sim.enemies:
+			if enemy.pos.distance_squared_to(marker.pos)<16:radius=float(enemy.r)*1.3;break
+		draw_arc(p,radius,0,TAU,24,Color("f1b76c" if toxin else "ff8398",alpha*0.68),1.4,true)
+
+func _draw_incoming_damage(size: Vector2):
+	var source=sim.last_damage
+	if source.is_empty():return
+	var age=float(sim.elapsed)-float(source.get("time",-10.0))
+	if age<0 or age>3.0:return
+	var coords=source.get("pos",[])
+	var position=coords if coords is Vector2 else (Vector2(coords[0],coords[1]) if coords.size()>=2 else sim.player)
+	var offset=position-sim.player
+	var alpha=minf(1.0,(3.0-age)*1.3)
+	var toxin=str(source.get("kind","")) in ["toxin","acid","spore","toxic","pool"]
+	var tint=Color("efbf77" if toxin else "ff879b",alpha*0.85)
+	var center=size*Vector2(0.5,0.51)
+	# A pool beneath the cell has no meaningful incoming direction.
+	if offset.length()<sim.body_radius()*1.6:
+		var radius=sim.body_radius()*zoom*1.35+8
+		draw_arc(center,radius,0,TAU,48,Color(tint,alpha*0.45),1.7,true)
+		if toxin:draw_arc(center,radius+8+sin(visual_time*4)*2,0,TAU,48,Color(tint,alpha*0.25),1.2,true)
+		draw_string(font,center+Vector2(-50,radius+25),str(source.get("name","Опасная среда")),HORIZONTAL_ALIGNMENT_LEFT,-1,20,tint)
+	else:
+		var direction=offset.normalized()
+		var extents=Vector2(maxf(80,size.x*0.5-270),maxf(60,size.y*0.5-190))
+		var reach=minf(200,minf(extents.x/maxf(0.001,absf(direction.x)),extents.y/maxf(0.001,absf(direction.y))))
+		var p=center+direction*reach
+		var side=direction.orthogonal()
+		draw_polyline(PackedVector2Array([p-direction*11+side*7,p,p-direction*11-side*7]),tint,2.5,true)
+		draw_arc(center,reach-13,direction.angle()-0.10,direction.angle()+0.10,12,Color(tint,alpha*0.4),2.0,true)
+		var label=str(source.get("name","Источник урона"))
+		var width=font.get_string_size(label,HORIZONTAL_ALIGNMENT_LEFT,-1,20).x
+		var text_pos=p-direction*30+Vector2(-width/2,5)
+		draw_string(font,text_pos+Vector2.ONE,label,HORIZONTAL_ALIGNMENT_LEFT,-1,20,Color(0.03,0.02,0.04,alpha*0.9))
+		draw_string(font,text_pos,label,HORIZONTAL_ALIGNMENT_LEFT,-1,20,tint)
+	if age<0.4:
+		draw_arc(center,sim.body_radius()*zoom*1.18,0,TAU,48,Color("ff9aab",(1.0-age/0.4)*0.20),2.0,true)

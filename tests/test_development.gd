@@ -14,7 +14,7 @@ func find_text(node,needle):
 		if find_text(child,needle): return true
 	return false
 func check_action_bounds(content,prefix):
-	var scroll=content.get_parent()
+	var scroll=content.get_parent().get_parent()
 	for child in content.find_children("*","Button",true,false):
 		if child.text.begins_with(prefix):
 			check(scroll.get_global_rect().encloses(child.get_global_rect()),prefix+" action stays above fold")
@@ -45,7 +45,7 @@ func run():
 		check(find_text(scene.hud.content,"Рубежи"),"build shows milestone status")
 		check(scene.hud.stats.get_theme_font_size("font_size")>=22,"HUD stats enlarged")
 		check(scene.hud.content.get_child_count()>10,"development shows growth organs and all synergy cards")
-		var scroll=scene.hud.content.get_parent()
+		var scroll=scene.hud.scroll_container
 		check(scroll is ScrollContainer and scroll.size.y<=root.get_visible_rect().size.y,"development scroll fits screen")
 		check(scene.hud.content.size.y>scroll.size.y,"long development content scrolls vertically")
 		check(scene.hud.content.size.x<=scroll.size.x,"development cards fit without horizontal scroll")
