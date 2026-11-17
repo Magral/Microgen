@@ -5,6 +5,7 @@ class FakeSim:
 	var feedback: Array=[]
 	var elapsed=1.0
 	var paused=false
+	var run_id="audio-test-run"
 var checks=0
 var failures=0
 func check(ok: bool,message: String):
@@ -33,32 +34,101 @@ func run_checks():
 	check(signatures.size()==6,"feedback sounds have distinct waveforms")
 	for i in range(20): sim.feedback.append({"kind":"hit","pos":Vector2.ZERO})
 	audio.consume(sim,true)
-	check(sim.feedback.is_empty() and audio.played_events==1,"impact bursts drain and throttle")
+	check(sim.feedback.is_empty() and audio.played_events==0,"outgoing hit spam is silent by default")
+	sim.feedback=[{"kind":"synergy"}]
+	audio.consume(sim,true)
+	check(audio.played_events==0,"synergy loops do not add a repeated shooting cue")
 	sim.elapsed+=0.1
 	sim.feedback=[{"kind":"hit"},{"kind":"absorb"},{"kind":"danger"},{"kind":"synergy"}]
 	audio.consume(sim,true)
-	check(audio.played_events==5,"independent feedback kinds play together")
+	check(audio.played_events==1,"all feedback shares a sparse global budget")
+	check(audio.voices.any(func(voice): return voice.stream==audio.samples.danger),"warning cue takes priority over feeding in a crowded frame")
 	sim.elapsed+=0.1
 	sim.feedback=[{"kind":"danger"},{"kind":"miniboss"}]
 	audio.consume(sim,true)
-	check(audio.played_events==5,"warning cues share one second throttle")
+	check(audio.played_events==1,"warning cues share one second throttle")
 	sim.paused=true
 	sim.feedback=[{"kind":"absorb"}]
 	audio.consume(sim,true)
-	check(sim.feedback.is_empty() and audio.played_events==5,"pause drains feedback without new sounds")
+	check(sim.feedback.is_empty() and audio.played_events==1,"pause drains feedback without new sounds")
 	for voice in audio.voices:
 		if voice.playing: check(voice.stream_paused,"pause freezes active audio voice")
 	sim.paused=false
 	sim.feedback=[{"kind":"absorb"}]
 	audio.consume(sim,false)
-	check(sim.feedback.is_empty() and audio.played_events==5,"muted queue clears without replay")
+	check(sim.feedback.is_empty() and audio.played_events==1,"muted queue clears without replay")
 	for voice in audio.voices: check(not voice.playing,"mute stops active audio")
-	for i in range(60):
-		sim.elapsed+=0.13
-		sim.feedback=[{"kind":"hit"},{"kind":"absorb"},{"kind":"synergy"}]
+	var before_spam=audio.played_events
+	var spam_start=sim.elapsed
+	for i in range(600):
+		sim.elapsed+=0.05
+		sim.feedback=[{"kind":"hit"},{"kind":"absorb"},{"kind":"synergy"},{"kind":"hurt"},{"kind":"danger"}]
 		audio.consume(sim,true)
+	check(audio.played_events-before_spam<=int((sim.elapsed-spam_start)*2.5)+1,"long combat spam stays under 2.5 sounds per second globally")
 	check(audio.voices.size()==Audio.VOICE_CAP,"busy combat never allocates more voices")
 	check(audio.generated_samples==6 and audio.samples.hit==original,"PCM cache reused across every consume")
+	var pending_audio=Audio.new()
+	root.add_child(pending_audio)
+	var pending_sim=FakeSim.new()
+	pending_sim.elapsed=10.0
+	pending_sim.feedback=[{"kind":"absorb"}]
+	pending_audio.consume(pending_sim,true)
+	pending_sim.elapsed=10.1
+	pending_sim.feedback=[{"kind":"danger"},{"kind":"miniboss"},{"kind":"danger"}]
+	pending_audio.consume(pending_sim,true)
+	check(pending_audio.played_events==1,"pending warning obeys current global sound budget")
+	pending_sim.elapsed=10.4
+	pending_audio.consume(pending_sim,true)
+	check(pending_audio.played_events==2 and pending_audio.voices.any(func(voice): return voice.stream==pending_audio.samples.miniboss),"highest priority blocked warning survives an empty later frame")
+	pending_sim.elapsed=10.8
+	pending_audio.consume(pending_sim,true)
+	check(pending_audio.played_events==2,"deferred warning plays exactly once")
+	pending_sim.elapsed=12.0
+	pending_sim.feedback=[{"kind":"absorb"}]
+	pending_audio.consume(pending_sim,true)
+	pending_sim.elapsed=12.1
+	pending_sim.feedback=[{"kind":"miniboss"}]
+	pending_audio.consume(pending_sim,true)
+	pending_sim.paused=true
+	pending_sim.elapsed=12.5
+	pending_audio.consume(pending_sim,true)
+	check(pending_audio.played_events==3,"pause keeps a warning pending without playback")
+	pending_sim.paused=false
+	pending_audio.consume(pending_sim,true)
+	check(pending_audio.played_events==4,"resume delivers the paused warning once")
+	pending_sim.elapsed=14.0
+	pending_sim.feedback=[{"kind":"absorb"}]
+	pending_audio.consume(pending_sim,true)
+	pending_sim.elapsed=14.1
+	pending_sim.feedback=[{"kind":"danger"}]
+	pending_audio.consume(pending_sim,true)
+	pending_audio.consume(pending_sim,false)
+	pending_sim.elapsed=14.5
+	pending_audio.consume(pending_sim,true)
+	check(pending_audio.played_events==5,"mute discards a pending warning")
+	pending_sim.elapsed=16.0
+	pending_sim.feedback=[{"kind":"absorb"}]
+	pending_audio.consume(pending_sim,true)
+	pending_sim.elapsed=16.1
+	pending_sim.feedback=[{"kind":"miniboss"}]
+	pending_audio.consume(pending_sim,true)
+	pending_sim.elapsed=0.0
+	pending_audio.consume(pending_sim,true)
+	pending_sim.elapsed=0.5
+	pending_audio.consume(pending_sim,true)
+	check(pending_audio.played_events==6,"new run discards stale pending warnings")
+	pending_sim.elapsed=20.0
+	pending_sim.feedback=[{"kind":"absorb"}]
+	pending_audio.consume(pending_sim,true)
+	pending_sim.elapsed=20.1
+	pending_sim.feedback=[{"kind":"miniboss"}]
+	pending_audio.consume(pending_sim,true)
+	pending_sim.run_id="another-run"
+	pending_sim.elapsed=20.5
+	pending_audio.consume(pending_sim,true)
+	check(pending_audio.played_events==7,"run identity change clears warning even without clock rollback")
+	for voice in pending_audio.voices: voice.stop()
+	pending_audio.free()
 	for voice in audio.voices: voice.stop()
 	audio.free()
 	await create_timer(0.25).timeout

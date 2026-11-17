@@ -7,6 +7,8 @@ const Absorption = preload("res://game/absorption.gd")
 const OrganicFX = preload("res://game/organic_fx.gd")
 const Jelly = preload("res://game/jelly_motion.gd")
 const Fluid = preload("res://game/fluid_view.gd")
+const Terrain=preload("res://game/terrain_view.gd")
+var terrain=Terrain.new()
 var painter = Painter.new()
 var fluid = Fluid.new()
 var motions = {}
@@ -20,6 +22,8 @@ var zoom=3.09
 func _ready():
 	fluid.show_behind_parent = true
 	add_child(fluid)
+	terrain.show_behind_parent=true
+	add_child(terrain)
 
 func _motion(key,position: Vector2,recipe: Dictionary,dt: float,radius: float):
 	if not motions.has(key):
@@ -59,6 +63,7 @@ func _process(dt):
 			fluid.reset(sim.world.seed_value,sim.player,get_viewport_rect().size)
 		if not sim.paused:zoom=lerpf(zoom,sim.view_zoom(),1.0-exp(-dt*2.0))
 		fluid.update(dt,sim,get_viewport_rect().size,zoom)
+		terrain.update_world(sim.world,sim.player,get_viewport_rect().size,zoom)
 		if not sim.paused:
 			visual_time += dt
 			reaction=maxf(0,reaction-dt*1.4)
@@ -112,21 +117,6 @@ func _draw():
 	var center=size*Vector2(0.5,0.51)
 	draw_set_transform(center*(1.0-zoom),0,Vector2.ONE*zoom)
 	var area = Rect2(sim.player-size/(2*zoom)-Vector2.ONE*150,size/zoom+Vector2.ONE*300)
-	var c1 = sim.world.tile(area.position)
-	var c2 = sim.world.tile(area.end)
-	for y in range(maxi(0,c1.y),mini(World.H,c2.y+1)):
-		for x in range(maxi(0,c1.x),mini(World.W,c2.x+1)):
-			var p = Vector2(x+0.5,y+0.5)*World.TILE
-			var biome = sim.world.biome(p)
-			var hash_value = posmod(x*157+y*977+sim.world.seed_value,100)
-			if biome == 1:
-				draw_circle(screen(p),85,Color(0.16,0.23,0.10,0.12),false,12)
-			if sim.world.cells[y*World.W+x] == 1:
-				var color = Color("294536") if biome == 1 else Color("183640")
-				_blob(screen(p),World.TILE*0.69,color,hash_value*0.3,0.6,false)
-				_blob(screen(p)+Vector2(7,-8),World.TILE*0.48,Color(color,0.45),hash_value,0.3,false)
-			elif hash_value<11:
-				draw_arc(screen(p),22+hash_value,0.3,4.7,18,Color(0.4,0.65,0.6,0.08),1.5,true)
 	for nest in sim.world.nests:
 		if not area.has_point(nest.pos) or nest.used: continue
 		var p = screen(nest.pos)
@@ -226,8 +216,8 @@ func _draw():
 		var amount=float(effect.get("amount",0))
 		var text_value=str(maxi(1,roundi(amount)))
 		var color=Color("ff7185") if effect.get("player",false) else Color("ef9199")
-		draw_string(font,p+Vector2(1,1),text_value,HORIZONTAL_ALIGNMENT_LEFT,-1,14,Color(0.05,0.02,0.03,float(effect.life)/float(effect.max)))
-		draw_string(font,p,text_value,HORIZONTAL_ALIGNMENT_LEFT,-1,14,Color(color,minf(1.0,float(effect.life)*2.0)))
+		draw_string(font,p+Vector2(1,1),text_value,HORIZONTAL_ALIGNMENT_LEFT,-1,16,Color(0.05,0.02,0.03,float(effect.life)/float(effect.max)))
+		draw_string(font,p,text_value,HORIZONTAL_ALIGNMENT_LEFT,-1,16,Color(color,minf(1.0,float(effect.life)*2.0)))
 	if joystick_visible:
 		draw_circle(joystick_origin,66,Color(0.6,0.9,0.85,0.05))
 		draw_arc(joystick_origin,66,0,TAU,48,Color(0.6,0.9,0.85,0.28),2,true)

@@ -3,20 +3,36 @@ const World = preload("res://game/world.gd")
 var sim
 var large = false
 var font = ThemeDB.fallback_font
+var _world
+var _seed=-1
+var _explored_count=-1
+var _texture: ImageTexture
+var rebuilds=0
+func _update_texture():
+	if _world==sim.world and _seed==sim.world.seed_value and _explored_count==sim.explored.size():return
+	_world=sim.world
+	_seed=sim.world.seed_value
+	_explored_count=sim.explored.size()
+	var pixels=Image.create(World.W,World.H,false,Image.FORMAT_RGBA8)
+	pixels.fill(Color.TRANSPARENT)
+	for idx in sim.explored:
+		var x=int(idx)%World.W
+		var y=int(int(idx)/World.W)
+		var wall=sim.world.cells[int(idx)]==1
+		var col=Color("294e54") if wall else (Color("72814c") if sim.world.biome(Vector2(x+0.5,y+0.5)*World.TILE)==1 else Color("477c78"))
+		pixels.set_pixel(x,y,col)
+	if _texture==null:_texture=ImageTexture.create_from_image(pixels)
+	else:_texture.update(pixels)
+	rebuilds+=1
 
 func _draw():
 	if sim==null: return
 	var scale_value = minf(size.x/(World.W*World.TILE),size.y/(World.H*World.TILE))
 	var offset = (size-Vector2(World.W,World.H)*World.TILE*scale_value)/2
 	draw_style_box(_box(),Rect2(Vector2.ZERO,size))
-	var ts = World.TILE*scale_value
-	for idx in sim.explored:
-		var x = int(idx)%World.W
-		var y = int(int(idx)/World.W)
-		var p = Vector2(x+0.5,y+0.5)*World.TILE
-		var wall = sim.world.cells[int(idx)] == 1
-		var col = Color("294e54") if wall else (Color("72814c") if sim.world.biome(p)==1 else Color("477c78"))
-		draw_rect(Rect2(offset+Vector2(x,y)*ts,Vector2.ONE*(ts+0.3)),col)
+	_update_texture()
+	texture_filter=CanvasItem.TEXTURE_FILTER_NEAREST
+	draw_texture_rect(_texture,Rect2(offset,Vector2(World.W,World.H)*World.TILE*scale_value),false)
 	for shop in sim.world.colonies:
 		if shop.visited:
 			var p = offset+shop.pos*scale_value
@@ -32,7 +48,7 @@ func _draw():
 	draw_circle(player,5 if large else 4,Color("ffffff"))
 	draw_arc(player,8,0,TAU,20,Color("96f6dc"),1.5,true)
 	if large:
-		draw_string(font,Vector2(15,size.y-15),"● Ты    ■ Колония    ● Находка    ● Босс",HORIZONTAL_ALIGNMENT_LEFT,-1,17,Color("d6e7e5"))
+		draw_string(font,Vector2(15,size.y-15),"● Ты    ■ Колония    ● Находка    ● Босс",HORIZONTAL_ALIGNMENT_LEFT,-1,20,Color("d6e7e5"))
 
 func _box() -> StyleBoxFlat:
 	var s = StyleBoxFlat.new()

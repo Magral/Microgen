@@ -217,7 +217,7 @@ func show_menu():
 	sim.paused = true
 	view.sim = sim
 	hud.game_visible(false)
-	var box = hud.open("МИКРОГЕН", "Маленькая жизнь. Непредсказуемая эволюция.\nТестовая версия 0.7.0 · офлайн",740)
+	var box = hud.open("МИКРОГЕН", "Маленькая жизнь. Непредсказуемая эволюция.\nТестовая версия 0.8.0 · офлайн",740)
 	box.add_child(hud.label("Собери организм, который сможет выжить.",25,Color("9ce3cf"),true))
 	box.add_child(hud.label("Исследуй случайный микромир, поглощай ДНК и соединяй мутации. Атаки автоматические — управляй только движением.",20,Color("a3bfc0"),true))
 	if not store.profile.checkpoint.is_empty(): box.add_child(hud.button("Продолжить забег",continue_run,true))
@@ -414,17 +414,18 @@ func _mutation_card(id: String,callback: Callable) -> PanelContainer:
 	var item = Catalog.item(id)
 	var illustration = OrganArt.new()
 	illustration.organ_id = id
-	illustration.custom_minimum_size = Vector2(120,90)
+	illustration.custom_minimum_size = Vector2(120,100)
 	column.add_child(illustration)
 	column.add_child(hud.label(item.name,23,Color(item.color),true))
 	var rank = sim.build.rank(id)
-	column.add_child(hud.label(("Новый орган" if id in Catalog.ORGANS else "Адаптация") if rank==0 else "Уровень %d → %d" % [rank,rank+1],17,Color("97b6ba")))
+	column.add_child(hud.label(("Новый орган · 1/10" if id in Catalog.ORGANS else "Адаптация · 1/6") if rank==0 else "Ранг %d → %d / %d" % [rank,rank+1,Catalog.max_rank(id)],17,Color("97b6ba")))
 	var full = sim.build.rank(id)==0 and ((id in Catalog.ORGANS and sim.build.organs.size()>=6) or (id in Catalog.ADAPTATIONS and sim.build.adaptations.size()>=4))
 	column.add_child(hud.button("Заменить орган" if full else "Выбрать",callback,true))
 	var description = hud.label(item.desc,19,Color("c5d8d7"),true)
 	description.custom_minimum_size.y = 66
 	column.add_child(description)
-	column.add_child(hud.label(Development.effect_text(id,maxi(1,rank+1)),17,Color("9fe0ca"),true))
+	column.add_child(hud.label("Следующий ранг: "+Development.effect_text(id,maxi(1,rank+1)),22,Color("9fe0ca"),true))
+	column.add_child(hud.label(Catalog.milestone_text(id,rank),20,Color("d7c39f"),true))
 	var hints = hud.label(Catalog.synergy_hint(id,sim.build.organs.merged(sim.build.adaptations)),16,Color("d0b3e8"),true)
 	hints.custom_minimum_size.y = 75
 	column.add_child(hints)

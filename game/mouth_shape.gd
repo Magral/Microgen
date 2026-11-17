@@ -12,15 +12,48 @@ static func boundary(contour: PackedVector2Array,heading: float) -> Vector2:
 		if absf(cross)<0.00001: continue
 		var distance=a.cross(segment)/cross
 		var along=a.cross(direction)/cross
-		if distance>0.0 and along>=0.0 and along<=1.0: nearest=minf(nearest,distance)
+		if distance>0.0 and along>= -0.00001 and along<=1.00001: nearest=minf(nearest,distance)
 	return direction*(nearest if is_finite(nearest) else 0.8)
+
+# Ordered radial contours permit exact ray lookup without rescanning every edge
+# for every jaw vertex. Nonradial/degenerated inputs retain the general solver.
+static func radial_angles(contour: PackedVector2Array) -> PackedFloat64Array:
+	var angles=PackedFloat64Array()
+	if contour.size()<3:return angles
+	var origin=contour[0].angle()
+	angles.append(0.0)
+	for i in range(1,contour.size()):
+		var angle=fposmod(contour[i].angle()-origin,TAU)
+		if angle<=angles[-1] or contour[i].length_squared()<0.000001:return PackedFloat64Array()
+		angles.append(angle)
+	return angles
+
+static func radial_boundary(contour: PackedVector2Array,heading: float,angles: PackedFloat64Array) -> Vector2:
+	if angles.is_empty():return boundary(contour,heading)
+	var angle=fposmod(heading-contour[0].angle(),TAU)
+	var left=0
+	var right=angles.size()
+	while left+1<right:
+		var middle=(left+right)/2
+		if angles[middle]<=angle:left=middle
+		else:right=middle
+	var a: Vector2=contour[left]
+	var segment: Vector2=contour[(left+1)%contour.size()]-a
+	var direction=Vector2.from_angle(heading)
+	var cross=direction.cross(segment)
+	if absf(cross)<0.00001:return boundary(contour,heading)
+	var distance=a.cross(segment)/cross
+	var along=a.cross(direction)/cross
+	if distance<=0 or along< -0.00001 or along>1.00001:return boundary(contour,heading)
+	return direction*distance
 
 # The fixed commissures hinge into a deep, asymmetric lower jaw. Every point
 # remains in living tissue and in the same +/-0.7 rad front cone as the bite.
 static func pose(contour: PackedVector2Array,heading: float,bite: float,feeding: float) -> Dictionary:
 	var direction=Vector2.from_angle(heading)
 	var tangent=direction.orthogonal()
-	var anchor=boundary(contour,heading)
+	var angles=radial_angles(contour)
+	var anchor=radial_boundary(contour,heading,angles)
 	var activation=clampf(maxf(bite,feeding),0.0,1.0)
 	var gap=0.016+activation*0.19
 	var width=0.23+activation*0.18
@@ -45,7 +78,7 @@ static func pose(contour: PackedVector2Array,heading: float,bite: float,feeding:
 		upper.append(center+across+direction*gap*arch*0.38)
 		lower.append(center+across-direction*gap*arch*1.42)
 	for point in upper+lower:
-		fit=minf(fit,boundary(contour,point.angle()).length()*0.96/maxf(0.00001,point.length()))
+		fit=minf(fit,radial_boundary(contour,point.angle(),angles).length()*0.96/maxf(0.00001,point.length()))
 	for i in range(upper.size()):
 		upper[i]*=fit
 		lower[i]*=fit

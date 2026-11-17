@@ -1,3 +1,7 @@
+## 0.8.0
+
+Quieter bounded combat audio; ten explicit synergy visuals; ten organ/six passive ranks with 3/6/10 numeric and visual milestones; larger UI text and accessible actions. Cached native terrain chunks and exploration texture; cached infection anatomy, reduced field/infection draw work; valid wound scars at all health levels. Restored checkpoint impulse vectors. Comparative sustained-play evidence in docs/performance/0.8.0.md.
+
 # 0.2.0 — 17 ноября 2026
 
 - Процедурная внешность: шесть семейств тел, восемь палитр, разные ядра, мембраны и внутренние структуры.

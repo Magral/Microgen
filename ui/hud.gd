@@ -28,16 +28,16 @@ func _ready():
 	root.theme = _theme()
 	status = VBoxContainer.new()
 	status.position = Vector2(28,22)
-	status.custom_minimum_size = Vector2(380,0)
+	status.custom_minimum_size = Vector2(760,0)
 	status.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(status)
-	area_label = label("",16,Color("9bbfbb"))
+	area_label = label("",20,Color("9bbfbb"))
 	status.add_child(area_label)
 	hp_bar = _bar(Color("78d9bd"),14)
 	xp_bar = _bar(Color("ba99e4"),6)
 	status.add_child(hp_bar)
 	status.add_child(xp_bar)
-	stats = label("",18)
+	stats = label("",24)
 	status.add_child(stats)
 	minimap = MiniMap.new()
 	minimap.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
@@ -62,12 +62,12 @@ func _ready():
 	root.add_child(shop_button)
 	build_button = button("Развитие",func(): on_build.call())
 	build_button.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	build_button.position = Vector2(-220,224)
+	build_button.position = Vector2(-220,240)
 	build_button.size = Vector2(192,54)
 	root.add_child(build_button)
 	message = label("",22,Color("e8d9b5"))
 	message.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
-	message.position = Vector2(-330,120)
+	message.position = Vector2(-330,164)
 	message.custom_minimum_size = Vector2(660,0)
 	message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(message)
@@ -78,7 +78,7 @@ func update_game(sim):
 	hp_bar.value = sim.hp/sim.max_hp*100
 	xp_bar.value = sim.xp/sim.xp_needed()*100
 	area_label.text = ("ПИТАТЕЛЬНАЯ СРЕДА" if sim.world.biome(sim.player)==0 else "ТОКСИЧНАЯ ЗОНА")+"  ·  "+sim.world.condition_name(sim.world.biome(sim.player))
-	stats.text = "Размер ×%.1f   ·   Ур. %d   ·   %d/%d HP   ·   Биомасса %d   ·   %02d:%02d" % [sim.body_radius()/22.0,sim.level,int(sim.hp),int(sim.max_hp),sim.build.biomass,int(sim.elapsed)/60,int(sim.elapsed)%60]
+	stats.text = "Размер ×%.1f  ·  Ур. %d  ·  %d/%d HP\nБиомасса %d  ·  %02d:%02d" % [sim.body_radius()/22.0,sim.level,int(sim.hp),int(sim.max_hp),sim.build.biomass,int(sim.elapsed)/60,int(sim.elapsed)%60]
 	shop_button.visible = sim.nearby_colony()>=0 and modal==null
 
 func game_visible(value: bool):
@@ -100,7 +100,7 @@ func open(title: String,subtitle: String="",width: float=1030) -> VBoxContainer:
 	modal.add_child(center)
 	var size = root.get_viewport_rect().size
 	var panel = PanelContainer.new()
-	panel.custom_minimum_size = Vector2(minf(width,size.x-50),minf(620,size.y-44))
+	panel.custom_minimum_size = Vector2(minf(width,size.x-50),size.y-28)
 	panel.size = panel.custom_minimum_size
 	panel.add_theme_stylebox_override("panel",box(Color("0c202b"),Color("2c5159"),22))
 	center.add_child(panel)
@@ -112,7 +112,7 @@ func open(title: String,subtitle: String="",width: float=1030) -> VBoxContainer:
 	content.add_theme_constant_override("separation",15)
 	scroll.add_child(content)
 	content.add_child(label(title,32,Color("e2f4ed")))
-	if subtitle!="": content.add_child(label(subtitle,18,Color("94b5b8"),true))
+	if subtitle!="": content.add_child(label(subtitle,22,Color("94b5b8"),true))
 	return content
 
 func close():
@@ -125,7 +125,7 @@ func close():
 func label(text: String,font_size: int=22,color: Color=Color("d4e7e7"),wrap: bool=false) -> Label:
 	var l = Label.new()
 	l.text = text
-	l.add_theme_font_size_override("font_size",font_size)
+	l.add_theme_font_size_override("font_size",maxi(20,font_size))
 	l.add_theme_color_override("font_color",color)
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if wrap:
@@ -136,7 +136,8 @@ func label(text: String,font_size: int=22,color: Color=Color("d4e7e7"),wrap: boo
 func button(text: String,callback: Callable,primary: bool=false) -> Button:
 	var b = Button.new()
 	b.text = text
-	b.custom_minimum_size.y = 48
+	b.custom_minimum_size.y = 56
+	b.add_theme_font_size_override("font_size",24)
 	b.focus_mode = Control.FOCUS_NONE
 	if primary:
 		b.add_theme_stylebox_override("normal",box(Color("72d4b6"),Color("98eed0"),12))
@@ -178,7 +179,7 @@ func _bar(color: Color,height: float) -> ProgressBar:
 
 func _theme() -> Theme:
 	var t = Theme.new()
-	t.default_font_size = 21
+	t.default_font_size = 22
 	t.set_stylebox("normal","Button",box(Color("173946"),Color("37616a"),12))
 	t.set_stylebox("hover","Button",box(Color("24515b"),Color("78cbb8"),12))
 	t.set_stylebox("pressed","Button",box(Color("306255"),Color("9ce5cb"),12))

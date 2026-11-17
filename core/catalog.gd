@@ -1,7 +1,7 @@
 extends RefCounted
 
 const ORGANS = {
-	"tentacle": {"name":"Щупальца", "branch":"predator", "desc":"Хлещут ближайших врагов. Каждый уровень усиливает удар.", "color":"6ef1cb"},
+	"tentacle": {"name":"Щупальца", "branch":"predator", "desc":"Хлещут ближайших врагов. Каждый ранг усиливает удар.", "color":"6ef1cb"},
 	"acid": {"name":"Кислотная оболочка", "branch":"toxic", "desc":"Растворяет врагов рядом с телом.", "color":"c3f56e"},
 	"spikes": {"name":"Шипы", "branch":"predator", "desc":"Выстреливают веером в ближайшую цель.", "color":"f4d394"},
 	"pulse": {"name":"Сокращение мембраны", "branch":"predator", "desc":"Отталкивает врагов круговой волной.", "color":"98caff"},
@@ -17,9 +17,9 @@ const ORGANS = {
 const ADAPTATIONS = {
 	"metabolism": {"name":"Усиленное усвоение","desc":"Повышает получаемую ДНК.","color":"b7eb9e"},
 	"catalysis": {"name":"Каталитические белки","desc":"Усиливают базовый урон органов.","color":"e9bb91"},
-	"armor": {"name":"Плотная мембрана", "desc":"Снижает получаемый урон на 12% за уровень.", "color":"99b7df"},
+	"armor": {"name":"Плотная мембрана", "desc":"Снижает получаемый урон на 12% за ранг, до 60%.", "color":"99b7df"},
 	"regen": {"name":"Регенерация", "desc":"Восстанавливает 0,5 здоровья в секунду за уровень.", "color":"6ef1cb"},
-	"speed": {"name":"Жгутики", "desc":"Увеличивают скорость на 12% за уровень.", "color":"f4d394"},
+	"speed": {"name":"Жгутики", "desc":"Увеличивают скорость на 12% за ранг, до 60%.", "color":"f4d394"},
 	"magnet": {"name":"Рецепторы", "desc":"Притягивают ДНК, биомассу и ткань с растущего радиуса. Само поглощение идёт при касании.", "color":"e7a7f5"}
 }
 const SYNERGIES = {
@@ -39,7 +39,7 @@ static func item(id: String) -> Dictionary:
 	return ORGANS.get(id, ADAPTATIONS.get(id, {}))
 
 static func max_rank(id: String) -> int:
-	return 5 if id in ORGANS else 3
+	return 10 if id in ORGANS else 6
 
 static func base_unlocked() -> Array:
 	var ids = ORGANS.keys()
@@ -57,22 +57,49 @@ static func synergy_hint(id: String, equipped: Dictionary) -> String:
 static func effect_text(id: String,rank: int) -> String:
 	var r=maxi(1,rank)
 	match id:
-		"tentacle":return "Удар %.0f; интервал 0,85 с; дальность %.0f ×масштаб тела." % [9+r*7,165+r*12]
-		"acid":return "%.0f урона/с рядом; радиус %.0f ×масштаб тела." % [4+r*3,75+r*9]
-		"spikes":return "Шип %.0f урона; %d шипов; интервал 1,3 с." % [12+r*5,1+int(r/2.0)]
-		"pulse":return "%.0f урона; радиус %.0f ×масштаб тела; каждые 3,2 с." % [12+r*8,130+r*18]
-		"division":return "%d копий; контактный урон %.0f/с." % [1+r,8+r*4]
-		"trail":return "Поле %.0f урона/с на 3 с; новое каждые 0,6 с." % [5+r*3]
-		"infection":return "%.0f урона/с на 4,5 с; запуск каждые 1,6 с." % [4+r*3]
-		"devour":return "Укус %.0f каждые 0,45 с; передний сектор 80°; переваривание быстрее на 35%%." % [7+r*5]
-		"cilia":return "Веер %.0f урона; сектор 120°; каждые 1,4 с." % [10+r*6]
-		"enzymes":return "Ферменты %.0f урона/с на 4 с; каждые 2 с." % [3+r*2]
-		"electric":return "%.0f урона по%d целям; каждые 2,6 с." % [12+r*6,1+r]
-		"barrier":return "Щит поглощает до%.0f HP; восстанавливается каждые 8 с." % [8+r*6]
-		"armor":return "Входящий урон снижен на%d%%." % [r*12]
+		"tentacle":return "Удар %.1f; интервал 0,85 с; дальность %.1f ×масштаб тела." % [scaled_damage(9+r*7,r),165+r*12]
+		"acid":return "%.1f урона/с рядом; радиус %.1f ×масштаб тела." % [scaled_damage(4+r*3,r),75+r*9]
+		"spikes":return "Шип %.1f урона; %d шипов; интервал 1,3 с." % [scaled_damage(12+r*5,r),shot_count(r)]
+		"pulse":return "%.1f урона; радиус %.1f ×масштаб тела; каждые 3,2 с." % [scaled_damage(12+r*8,r),130+r*18]
+		"division":return "%d копий; контактный урон %.1f/с." % [clone_count(r),scaled_damage(8+r*4,r)]
+		"trail":return "Поле %.1f урона/с на 3 с; новое каждые 0,6 с." % [scaled_damage(5+r*3,r)]
+		"infection":return "%.1f урона/с на 4,5 с; запуск каждые 1,6 с." % [scaled_damage(4+r*3,r)]
+		"devour":return "Укус %.1f каждые 0,45 с; передний сектор 80°; переваривание быстрее на 35%%." % [scaled_damage(7+r*5,r)]
+		"cilia":return "Веер %.1f урона; сектор 120°; каждые 1,4 с." % [scaled_damage(10+r*6,r)]
+		"enzymes":return "Ферменты %.1f урона/с на 4 с; каждые 2 с." % [scaled_damage(3+r*2,r)]
+		"electric":return "%.1f урона по %d целям; каждые 2,6 с." % [scaled_damage(12+r*6,r),electric_targets(r)]
+		"barrier":return "Щит поглощает до %.1f HP; восстанавливается каждые 8 с." % [scaled_damage(8+r*6,r)]
+		"armor":return "Входящий урон снижен на %d%%." % [roundi(adaptation_bonus(r)*100)]
 		"regen":return "Регенерация %.1f HP/с." % [r*0.5]
-		"speed":return "Скорость движения +%d%%." % [r*12]
+		"speed":return "Скорость движения +%d%%." % [roundi(adaptation_bonus(r)*100)]
 		"magnet":return "Притягивание на радиус тела+%d; без рывков." % [r*55]
 		"metabolism":return "Получаемая ДНК +%d%%." % [r*6]
 		"catalysis":return "Базовый урон органов +%d%%; стойкая ткань врага ограничивает взрывной урон." % [r*8]
 	return item(id).get("desc","")
+
+static func milestone_multiplier(rank: int) -> float:
+	if rank>=10: return 1.50
+	if rank>=6: return 1.25
+	if rank>=3: return 1.10
+	return 1.0
+
+static func scaled_damage(base: float,rank: int) -> float:
+	return base*milestone_multiplier(rank)
+
+static func milestone_text(id: String,rank: int) -> String:
+	if id not in ORGANS:
+		return "Рубежи адаптации: %s3 · %s6 — максимум" % ["✓ " if rank>=3 else "◇ ","✓ " if rank>=6 else "◇ "]
+	return "Рубежи: %s3 · формирование ×1,10; %s6 · перестройка ×1,25; %s10 · зрелость ×1,50. Множитель силы органа." % ["✓ " if rank>=3 else "◇ ","✓ " if rank>=6 else "◇ ","✓ " if rank>=10 else "◇ "]
+
+static func shot_count(rank: int) -> int:
+	return mini(6,1+int(rank/2.0))
+
+static func electric_targets(rank: int) -> int:
+	return mini(6,1+rank)
+
+static func clone_count(rank: int) -> int:
+	return mini(5,1+rank)
+
+static func adaptation_bonus(rank: int) -> float:
+	# Preserve old ranks 1–3 while giving both final adaptation ranks real value.
+	return minf(0.6,rank*0.12 if rank<=4 else 0.48+(rank-4)*0.06)

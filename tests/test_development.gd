@@ -4,6 +4,20 @@ func check(ok: bool, message: String):
 	if not ok:
 		failures += 1
 		push_error(message)
+func inspect_readability(node):
+	if node is Label and node.text!="": check(node.get_theme_font_size("font_size")>=20,"body text is readable: "+node.text.left(30))
+	if node is Button: check(node.get_theme_font_size("font_size")>=24,"button text is readable")
+	for child in node.get_children(): inspect_readability(child)
+func find_text(node,needle):
+	if node is Label and needle in node.text: return true
+	for child in node.get_children():
+		if find_text(child,needle): return true
+	return false
+func check_action_bounds(content,prefix):
+	var scroll=content.get_parent()
+	for child in content.find_children("*","Button",true,false):
+		if child.text.begins_with(prefix):
+			check(scroll.get_global_rect().encloses(child.get_global_rect()),prefix+" action stays above fold")
 func _initialize(): call_deferred("run")
 func run():
 	var scene = load("res://main.tscn").instantiate()
@@ -16,6 +30,9 @@ func run():
 	check(scene.hud.get("build_button") is Button,"game HUD has development button")
 	check(scene.hud.get("slots")==null and scene.hud.get("synergy_label")==null,"bottom build text removed permanently")
 	check(scene.has_method("show_development"),"development window exists")
+	await process_frame
+	check(not scene.hud.map_button.get_global_rect().intersects(scene.hud.build_button.get_global_rect()),"larger HUD action buttons do not overlap")
+	check(not scene.hud.stats.get_global_rect().intersects(scene.hud.message.get_global_rect()),"larger HUD stats do not overlap transient message")
 	if scene.has_method("show_development"):
 		var key=InputEventKey.new()
 		key.keycode=KEY_B
@@ -23,6 +40,10 @@ func run():
 		scene._input(key)
 		check(scene.stage=="development" and scene.sim.paused,"development pauses game")
 		await process_frame
+		inspect_readability(scene.hud.content)
+		check(find_text(scene.hud.content,"Следующий ранг"),"build shows next rank bonus")
+		check(find_text(scene.hud.content,"Рубежи"),"build shows milestone status")
+		check(scene.hud.stats.get_theme_font_size("font_size")>=22,"HUD stats enlarged")
 		check(scene.hud.content.get_child_count()>10,"development shows growth organs and all synergy cards")
 		var scroll=scene.hud.content.get_parent()
 		check(scroll is ScrollContainer and scroll.size.y<=root.get_visible_rect().size.y,"development scroll fits screen")
@@ -53,6 +74,10 @@ func run():
 		scene.resume_game()
 		scene.sim.gain_xp(12)
 		scene.show_level()
+		await process_frame
+		await process_frame
+		inspect_readability(scene.hud.content)
+		check_action_bounds(scene.hud.content,"Выбрать")
 		var offers=scene.sim.current_offers.duplicate()
 		scene.show_development()
 		check(scene.stage=="level" and scene.sim.current_offers==offers,"development cannot discard pending level context")
@@ -61,6 +86,10 @@ func run():
 		scene.resume_game()
 		scene.sim.player=scene.sim.world.colonies[0].pos
 		scene.show_shop()
+		await process_frame
+		await process_frame
+		inspect_readability(scene.hud.content)
+		check_action_bounds(scene.hud.content,"Купить")
 		scene.show_development()
 		check(scene.stage=="shop","development preserves shop context")
 		scene.show_replacement("acid","shop",1)

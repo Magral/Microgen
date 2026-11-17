@@ -134,7 +134,7 @@ func hit_enemy(enemy: Dictionary,amount: float) -> float:
 func hurt_player(amount: float):
 	var damage=maxf(0.0,amount)
 	if build.rank("barrier")>0 and cooldowns.get("barrier",0)<=0:
-		damage=maxf(0.0,damage-(8+build.rank("barrier")*6))
+		damage=maxf(0.0,damage-Catalog.scaled_damage(8+build.rank("barrier")*6,build.rank("barrier")))
 		cooldowns.barrier=8.0
 		_effect({"type":"pulse","pos":player,"r":body_radius()*1.4,"life":0.4,"max":0.4})
 		_feedback("synergy",player)
@@ -167,8 +167,15 @@ func _update_minibosses():
 	_feedback("miniboss",p)
 	events.append({"type":"message","text":"Минибосс: "+enemy.title})
 
+var _radius_level=-1
+var _radius_xp=-1.0
+var _radius_value=22.0
 func body_radius() -> float:
-	return Growth.radius(level,xp/xp_needed())
+	if level!=_radius_level or xp!=_radius_xp:
+		_radius_level=level
+		_radius_xp=xp
+		_radius_value=Growth.radius(level,xp/xp_needed())
+	return _radius_value
 
 func view_zoom() -> float:
 	return Growth.zoom(body_radius())
@@ -280,7 +287,7 @@ func step(dt: float,direction: Vector2):
 	invuln = maxf(0,invuln-dt)
 	var condition = world.conditions[world.biome(player)]
 	previous_player=player
-	var speed = (72.0+body_radius()*0.6)*(1.0+build.rank("speed")*0.12)*(0.85 if condition == 1 else 1.0)
+	var speed = (72.0+body_radius()*0.6)*(1.0+Catalog.adaptation_bonus(build.rank("speed")))*(0.85 if condition == 1 else 1.0)
 	var desired = direction.limit_length()*speed
 	var response = exp(-dt/0.2)
 	var travel = desired*dt+(player_velocity-desired)*0.2*(1.0-response)
@@ -398,11 +405,11 @@ func _update_enemies(dt: float):
 		e.grasp=maxf(0.0,float(e.get("grasp",0))-dt)
 		if e.infect>0:
 			e.infect -= dt
-			hit_enemy(e,(4.0+build.rank("infection")*3.0)*dt)
+			hit_enemy(e,Catalog.scaled_damage(4.0+build.rank("infection")*3.0,build.rank("infection"))*dt)
 		if "regen" in e.get("traits",[]) and e.kind!="miniboss": e.hp = minf(e.max_hp,e.hp+e.max_hp*0.012*dt)
 		if e.get("enzyme_time",0)>0:
 			e.enzyme_time=maxf(0.0,e.enzyme_time-dt)
-			hit_enemy(e,(3+build.rank("enzymes")*2)*dt)
+			hit_enemy(e,Catalog.scaled_damage(3+build.rank("enzymes")*2,build.rank("enzymes"))*dt)
 		if "toxic" in e.get("traits",[]):
 			e.emission_cd -= dt
 			if e.emission_cd<=0:
@@ -454,7 +461,7 @@ func _update_enemies(dt: float):
 					for n in range(5):_shot(e.pos,Vector2.from_angle(n*TAU/5+elapsed)*100,7,true)
 				else: _shot(e.pos,offset.normalized()*155,8,true)
 		if dist<e.r+body_radius()*0.75 and rules.impact>0 and invuln<=0 and not _safe_zone(player):
-			hurt_player(rules.impact*(1.2 if e.kind in ["boss","miniboss"] else 1.0)*(1.0-build.rank("armor")*0.12))
+			hurt_player(rules.impact*(1.2 if e.kind in ["boss","miniboss"] else 1.0)*(1.0-Catalog.adaptation_bonus(build.rank("armor"))))
 			invuln = 0.65
 			e.impulse=-offset.normalized()*24.0
 			_effect({"type":"hurt","pos":player,"life":0.3,"max":0.3,"r":45.0})
@@ -587,8 +594,10 @@ func _bite():
 	if target.is_empty():return
 	cooldowns.bite=0.45
 	bite_flash=1.0
-	hit_enemy(target,(7.0+rank*5.0)*(1.25 if "enzyme_bite" in build.active_synergies() else 1.0))
-	if "enzyme_bite" in build.active_synergies():target.enzyme_time=3.0
+	hit_enemy(target,Catalog.scaled_damage(7.0+rank*5.0,rank)*(1.25 if "enzyme_bite" in build.active_synergies() else 1.0))
+	if "enzyme_bite" in build.active_synergies():
+		target.enzyme_time=3.0
+		_effect({"type":"enzyme_bite","pos":player,"end":target.pos,"r":body_radius(),"life":0.7,"max":0.7})
 	_effect({"type":"bite","pos":player+Vector2.from_angle(facing)*body_radius()*0.8,"end":target.pos,"r":body_radius()*0.25,"life":0.3,"max":0.3})
 
 func _attack():
@@ -600,13 +609,14 @@ func _attack():
 			var offset=enemy.pos-player
 			if enemy.get("captured",false) or offset.length()>(100+build.rank("cilia")*10)*ability_scale():continue
 			if offset.normalized().dot(Vector2.from_angle(facing))<0.5:continue
-			hit_enemy(enemy,10+build.rank("cilia")*6)
+			hit_enemy(enemy,Catalog.scaled_damage(10+build.rank("cilia")*6,build.rank("cilia")))
 			touched=true
 		if touched:
 			cooldowns.cilia=1.4
 			_effect({"type":"cilia","pos":player,"end":player+Vector2.from_angle(facing)*body_radius()*3,"r":body_radius()*3,"life":0.4,"max":0.4})
 			if "barbed_cilia" in combos:
-				for i in range(3):_shot(player,Vector2.from_angle(facing+(i-1)*0.35)*300,12+build.rank("spikes")*5,false)
+				_effect({"type":"barbed_cilia","pos":player,"end":player+Vector2.from_angle(facing)*body_radius()*3,"r":body_radius()*3,"life":0.8,"max":0.8})
+				for i in range(3):_shot(player,Vector2.from_angle(facing+(i-1)*0.35)*300,Catalog.scaled_damage(12+build.rank("spikes")*5,build.rank("spikes")),false)
 	if build.rank("enzymes")>0 and cooldowns.get("enzymes",0)<=0:
 		var target=_nearest(230*ability_scale())
 		if not target.is_empty():
@@ -618,7 +628,7 @@ func _attack():
 		if not target.is_empty():
 			var previous=player
 			var hit=[]
-			for i in range(1+build.rank("electric")):
+			for i in range(Catalog.electric_targets(build.rank("electric"))):
 				var nearest={}
 				var distance=pow(280*ability_scale(),2)
 				for enemy in enemies:
@@ -627,20 +637,24 @@ func _attack():
 					if d<distance:distance=d;nearest=enemy
 				if nearest.is_empty():break
 				hit.append(nearest.id)
-				hit_enemy(nearest,12+build.rank("electric")*6)
+				hit_enemy(nearest,Catalog.scaled_damage(12+build.rank("electric")*6,build.rank("electric")))
 				_effect({"type":"electric","pos":previous,"end":nearest.pos,"r":20.0,"life":0.35,"max":0.35})
 				if "conductive_bath" in combos:
 					nearest.slow=1.2
+					_effect({"type":"conductive_bath","pos":previous,"end":nearest.pos,"r":float(nearest.r)+25,"life":0.7,"max":0.7})
 					_field(nearest.pos,30,3,1.0,"acid_arc")
 				previous=nearest.pos
 			cooldowns.electric=2.6
+	if "metabolic_colony" in combos and cooldowns.get("colony_visual",0)<=0 and hp<max_hp:
+		cooldowns.colony_visual=2.0
+		_effect({"type":"metabolic_colony","pos":player,"r":body_radius()*2.5,"life":1.4,"max":1.4})
 	var metabolic = 0.88 if world.conditions[world.biome(player)] == 2 else 1.0
 	var synergies = build.active_synergies()
 	if build.rank("tentacle")>0 and cooldowns.get("tentacle",0)<=0:
 		var target = _nearest((165.0+build.rank("tentacle")*12)*ability_scale())
 		if not target.is_empty():
 			cooldowns.tentacle = 0.85*metabolic
-			hit_enemy(target,9.0+build.rank("tentacle")*7)
+			hit_enemy(target,Catalog.scaled_damage(9.0+build.rank("tentacle")*7,build.rank("tentacle")))
 			_effect({"type":"lash","pos":player,"end":target.pos,"life":0.22,"max":0.22,"r":0})
 			if "acid_grasp" in synergies:
 				_effect({"type":"acid_grasp","pos":player,"end":target.pos,"r":30.0,"life":0.65,"max":0.65})
@@ -649,27 +663,29 @@ func _attack():
 	if build.rank("acid")>0:
 		for e in enemies:
 			if _is_engulfing(e): continue
-			if player.distance_squared_to(e.pos)<pow((75+build.rank("acid")*9)*ability_scale(),2): hit_enemy(e,(4+build.rank("acid")*3)*_attack_dt)
+			if player.distance_squared_to(e.pos)<pow((75+build.rank("acid")*9)*ability_scale(),2): hit_enemy(e,Catalog.scaled_damage(4+build.rank("acid")*3,build.rank("acid"))*_attack_dt)
 	if build.rank("spikes")>0 and cooldowns.get("spikes",0)<=0:
 		var target = _nearest(650)
 		if not target.is_empty():
 			cooldowns.spikes = 1.3*metabolic
 			var dir = (target.pos-player).normalized()
-			for i in range(1+int(build.rank("spikes")/2.0)):
-				_shot(player,dir.rotated((i-build.rank("spikes")/4.0)*0.13)*450,12+build.rank("spikes")*5,false)
+			for i in range(Catalog.shot_count(build.rank("spikes"))):
+				_shot(player,dir.rotated((i-(Catalog.shot_count(build.rank("spikes"))-1)/2.0)*0.13)*450,Catalog.scaled_damage(12+build.rank("spikes")*5,build.rank("spikes")),false)
 	if build.rank("pulse")>0 and cooldowns.get("pulse",0)<=0:
 		cooldowns.pulse = 3.2*metabolic
-		if "shield_pulse" in synergies:cooldowns.barrier=maxf(0,float(cooldowns.get("barrier",0))-2.0)
+		if "shield_pulse" in synergies:
+			cooldowns.barrier=maxf(0,float(cooldowns.get("barrier",0))-2.0)
+			_effect({"type":"shield_pulse","pos":player,"r":body_radius()*2.4,"life":1.0,"max":1.0})
 		var radius = (130+build.rank("pulse")*18)*ability_scale()
 		for e in enemies:
 			if _is_engulfing(e): continue
 			if player.distance_squared_to(e.pos)<radius*radius:
-				hit_enemy(e,12+build.rank("pulse")*8)
+				hit_enemy(e,Catalog.scaled_damage(12+build.rank("pulse")*8,build.rank("pulse")))
 				e.impulse=e.get("impulse",Vector2.ZERO)+(e.pos-player).normalized()*100.0
 		_effect({"type":"pulse","pos":player,"r":float(radius),"life":0.55,"max":0.55})
 		if "spike_pulse" in synergies:
 			_effect({"type":"spike_pulse","pos":player,"r":float(radius),"life":0.8,"max":0.8})
-			for i in range(8): _shot(player,Vector2.from_angle(i*TAU/8.0)*370,18+build.rank("spikes")*4,false)
+			for i in range(8): _shot(player,Vector2.from_angle(i*TAU/8.0)*370,Catalog.scaled_damage(18+build.rank("spikes")*4,build.rank("spikes")),false)
 	if build.rank("infection")>0 and cooldowns.get("infection",0)<=0:
 		var target = _nearest(420*ability_scale())
 		if not target.is_empty():
@@ -678,23 +694,23 @@ func _attack():
 			cooldowns.infection = 1.6*metabolic
 	if build.rank("trail")>0 and cooldowns.get("trail",0)<=0:
 		cooldowns.trail = 0.6
-		_field(player,50+build.rank("trail")*6,5+build.rank("trail")*3,3.0,"poison")
+		_field(player,50+build.rank("trail")*6,Catalog.scaled_damage(5+build.rank("trail")*3,build.rank("trail")),3.0,"poison")
 		if "toxic_colony" in synergies:
 			for p in clone_positions():
-				_field(p,40,3+build.rank("trail")*1.5,2,"poison")
+				_field(p,40,Catalog.scaled_damage(3+build.rank("trail")*1.5,build.rank("trail")),2,"poison")
 			_effect({"type":"toxic_colony","pos":player,"r":105.0,"life":0.65,"max":0.65})
 	if build.rank("division")>0:
 		for p in clone_positions():
 			for e in enemies:
 				if _is_engulfing(e): continue
-				if p.distance_squared_to(e.pos)<pow(e.r+18,2): hit_enemy(e,(8+build.rank("division")*4)*_attack_dt)
+				if p.distance_squared_to(e.pos)<pow(e.r+18,2): hit_enemy(e,Catalog.scaled_damage(8+build.rank("division")*4,build.rank("division"))*_attack_dt)
 
 var _attack_dt = 0.016
 
 func clone_positions() -> Array:
 	var out = []
-	for i in range(1+build.rank("division")):
-		out.append(player+Vector2.from_angle(elapsed*1.6+i*TAU/(1+build.rank("division")))*105)
+	for i in range(Catalog.clone_count(build.rank("division"))):
+		out.append(player+Vector2.from_angle(elapsed*1.6+i*TAU/Catalog.clone_count(build.rank("division")))*105)
 	return out
 
 func _shot(p: Vector2,velocity: Vector2,damage: float,hostile: bool):
@@ -718,7 +734,7 @@ func _update_shots(dt: float):
 			if shot.pos.distance_squared_to(player)<pow(body_radius()*0.78+3,2):
 				hit = true
 				if invuln<=0 and not _safe_zone(player):
-					hurt_player(shot.damage*(1-build.rank("armor")*0.12))
+					hurt_player(shot.damage*(1-Catalog.adaptation_bonus(build.rank("armor"))))
 					invuln = 0.4
 		else:
 			var cell = Vector2i(shot.pos/100.0)
@@ -731,7 +747,11 @@ func _update_shots(dt: float):
 		if hit or shot.life<=0 or not world.walkable(shot.pos): shots.remove_at(i)
 
 func _field(p: Vector2,radius: float,damage: float,life: float,kind: String,hostile: bool=false):
-	if not hostile and "ferment_cloud" in build.active_synergies() and kind=="poison":damage*=1.25
+	if not hostile and "ferment_cloud" in build.active_synergies() and kind=="poison":
+		damage*=1.25
+		if cooldowns.get("ferment_visual",0)<=0:
+			cooldowns.ferment_visual=1.2
+			_effect({"type":"ferment_cloud","pos":p,"r":radius*1.25,"life":1.2,"max":1.2})
 	if kind=="spore": _effect({"type":"spore_feast","pos":p,"r":radius,"life":1.4,"max":1.4})
 	if fields.size()>=80: fields.pop_front()
 	fields.append({"pos":p,"r":radius,"damage":damage,"life":life,"max":life,"kind":kind,"hostile":hostile})
@@ -742,7 +762,7 @@ func _update_fields(dt: float):
 		var f = fields[i]
 		f.life -= dt
 		if f.get("hostile",false):
-			if f.pos.distance_squared_to(player)<pow(f.r+body_radius()*0.65,2) and not _safe_zone(player): hurt_player(f.damage*dt*(1-build.rank("armor")*0.12))
+			if f.pos.distance_squared_to(player)<pow(f.r+body_radius()*0.65,2) and not _safe_zone(player): hurt_player(f.damage*dt*(1-Catalog.adaptation_bonus(build.rank("armor"))))
 		else:
 			for e in enemies:
 				if f.pos.distance_squared_to(e.pos)<pow(f.r+e.r*0.5,2):
@@ -882,7 +902,7 @@ func _unpack(source: Array) -> Array:
 	var out = []
 	for entry in source:
 		var copy = entry.duplicate(true)
-		for k in ["pos","vel"]:
+		for k in ["pos","vel","impulse"]:
 			if copy.get(k,null) is Array and copy[k].size()==2: copy[k] = Vector2(copy[k][0],copy[k][1])
 		out.append(copy)
 	return out

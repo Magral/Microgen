@@ -6,6 +6,16 @@ const TissueDamage = preload("res://game/tissue_damage.gd")
 const MouthShape = preload("res://game/mouth_shape.gd")
 var cache: Dictionary = {}
 var glow: GradientTexture2D
+var _anchor_contour=PackedVector2Array()
+var _anchor_directions=PackedVector2Array()
+var _anchors_active=false
+
+# Distinct authored growth steps keep upgrades legible after appendage counts cap.
+static func visual_stage(rank: int) -> int:
+	if rank>=10: return 3
+	if rank>=6: return 2
+	if rank>=3: return 1
+	return 0
 
 func _init():
 	var gradient = Gradient.new()
@@ -67,6 +77,9 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 		body=tint
 		edge=tint.lightened(0.38)
 		shadow=tint.darkened(0.42)
+	var highest_rank=0
+	for rank in organs.values(): highest_rank=maxi(highest_rank,int(rank))
+	var stage=visual_stage(highest_rank)
 	var distress = TissueDamage.severity(health_ratio)
 	var wounds = TissueDamage.wounds(recipe,health_ratio)
 	body=body.lerp(shadow,distress*0.18)
@@ -81,9 +94,10 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 		var pose=entry.pose.duplicate()
 		pose.bulge/=maxf(1.0,float(feeding.size()))
 		contour=Absorption.membrane(contour,pose,radius)
+	_prepare_anchors(contour)
 	if int(organs.get("speed",0))>0:
 		for i in range(3):
-			_tendril(canvas,p,contour,radius,facing+PI+i*0.55-0.55,time+phase+i,0.9,edge,1.4)
+			_tendril(canvas,p,contour,radius,facing+PI+i*0.55-0.55,time+phase+i,0.9+visual_stage(int(organs.speed))*0.16,edge,1.4+visual_stage(int(organs.speed))*0.4)
 	if int(organs.get("regen",0))>0:
 		for i in range(3): _branch(canvas,p,contour,radius,i*TAU/3+phase,time,edge.lerp(Color("a4dfbc"),0.24))
 	if int(organs.get("magnet",0))>0 or int(recipe.family)==5:
@@ -121,7 +135,15 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 	if distress>(0.001 if detail else 0.55): _wounds(canvas,p,contour,radius*breathe,wounds,turn,time,body,edge,shadow,detail)
 	var loop = outer.duplicate()
 	loop.append(loop[0])
-	canvas.draw_polyline(loop,Color(edge,0.72),1.8 if detail else 1.2,true)
+	canvas.draw_polyline(loop,Color(edge,0.72+stage*0.055),(1.8+stage*0.45) if detail else 1.2,true)
+	if role=="player" and stage>0 and detail:
+		# Broad pigmented membrane folds stay part of the same continuous body.
+		for fold_index in range(3):
+			var fold=PackedVector2Array()
+			for j in range(11):
+				var a=phase+fold_index*TAU/3+(j/10.0-0.5)*(0.55+stage*0.12)
+				fold.append(p+_anchor(contour,a)*radius*(0.94+sin(j/10.0*PI)*0.018))
+			canvas.draw_polyline(fold,Color(edge.lerp(accent,0.35),0.18+stage*0.07),radius*(0.028+stage*0.012),true)
 	var inner = _transform(contour,p,radius*0.91*breathe)
 	inner.append(inner[0])
 	if detail:canvas.draw_polyline(inner,Color(edge,0.25),0.8,true)
@@ -133,11 +155,11 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 	if int(organs.get("spikes",0))>0: _spikes(canvas,p,contour,radius,phase,accent,int(organs.spikes))
 	if int(organs.get("tentacle",0))>0:
 		var count = mini(4,1+int(organs.tentacle))
-		for i in range(count): _tendril(canvas,p,contour,radius,phase+i*TAU/count,time+phase+i,0.9,edge,3.0 if detail else 2.0)
+		for i in range(count): _tendril(canvas,p,contour,radius,phase+i*TAU/count,time+phase+i,0.9+visual_stage(int(organs.tentacle))*0.20,edge,(3.0 if detail else 2.0)+visual_stage(int(organs.tentacle))*0.65)
 	if int(organs.get("cilia",0))>0 and detail:
-		for i in range(8):_tendril(canvas,p,contour,radius,facing-1.2+i*0.34,time+i,0.20,edge,0.7)
+		for i in range(8):_tendril(canvas,p,contour,radius,facing-1.2+i*0.34,time+i,0.20+visual_stage(int(organs.cilia))*0.065,edge,0.7+visual_stage(int(organs.cilia))*0.35)
 	if int(organs.get("enzymes",0))>0:
-		for i in range(2):_vesicle(canvas,p+_anchor(contour,phase+i*2.6)*radius*0.74,radius*0.16,body.lerp(Color("e7c28b"),0.25),detail)
+		for i in range(2):_vesicle(canvas,p+_anchor(contour,phase+i*2.6)*radius*0.74,radius*(0.16+visual_stage(int(organs.enzymes))*0.025),body.lerp(Color("e7c28b"),0.25+visual_stage(int(organs.enzymes))*0.10),detail)
 	if int(organs.get("electric",0))>0 and detail:
 		for i in range(3):
 			var root=p+_anchor(contour,phase+i*2.0)*radius*0.68
@@ -145,15 +167,16 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 	if int(organs.get("barrier",0))>0:
 		var reinforced=_transform(contour,p,radius*0.97)
 		reinforced.append(reinforced[0])
-		canvas.draw_polyline(reinforced,Color(edge,0.32),maxf(1.4,radius*0.035),true)
+		canvas.draw_polyline(reinforced,Color(edge,0.32+visual_stage(int(organs.barrier))*0.08),maxf(1.4,radius*(0.035+visual_stage(int(organs.barrier))*0.013)),true)
 	if int(organs.get("acid",0))>0:
 		for i in range(mini(5,2+int(organs.acid))):
-			_vesicle(canvas,p+_anchor(contour,phase+0.7+i*2.15)*radius*0.75,radius*0.17,body.lerp(Color("b4d952"),0.42),detail)
+			_vesicle(canvas,p+_anchor(contour,phase+0.7+i*2.15)*radius*0.75,radius*(0.17+visual_stage(int(organs.acid))*0.02),body.lerp(Color("b4d952"),0.42+visual_stage(int(organs.acid))*0.07),detail)
 	if int(organs.get("infection",0))>0:
 		for i in range(3):
 			var center = p+_anchor(contour,phase+i*2.1)*radius*0.87
 			_vesicle(canvas,center,radius*0.13,body.lerp(Color("c999d9"),0.4),detail)
-			for j in range(3): _soft_tissue(canvas,center+Vector2.from_angle(j*TAU/3)*radius*0.06,radius*0.025,Color("f1bddb",0.28),float(j))
+			if detail:
+				for j in range(3): _soft_tissue(canvas,center+Vector2.from_angle(j*TAU/3)*radius*0.06,radius*0.025,Color("f1bddb",0.28),float(j))
 	if int(organs.get("trail",0))>0: _vesicle(canvas,p+_anchor(contour,facing+PI)*radius*0.88,radius*0.19,body.lerp(Color("8fbd5b"),0.4),detail)
 	var front_feeding=0.0
 	for entry in feeding:
@@ -180,6 +203,8 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 	elif role=="prey":
 		canvas.draw_arc(p,radius*1.15,0.1,1.9,12,Color("e9d58e",0.65),1,true)
 
+	_anchors_active=false
+
 func _tissue_point(point: Vector2,wounds: Array,motion,phase: float) -> Vector2:
 	return _deform(TissueDamage.deform_point(point,wounds),motion,phase)
 
@@ -196,8 +221,8 @@ func _wounds(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,radius: f
 		var kink=root-outward*reach*0.45+normal*reach*0.15
 		# Translucent fissures branch inward from torn membrane; the cytoplasm
 		# remains visible through them rather than producing opaque black holes.
-		var scar=PackedVector2Array([root-normal*width,kink-normal*width*0.6,end,kink+normal*width*0.6,root+normal*width])
-		canvas.draw_colored_polygon(scar,Color(shadow.darkened(0.5),amount*0.63))
+		var scar=_wound_scar(root,kink,end,normal,width)
+		if scar.size()>=3: canvas.draw_colored_polygon(scar,Color(shadow.darkened(0.5),amount*0.63))
 		canvas.draw_polyline(PackedVector2Array([root,kink,end]),Color(shadow.darkened(0.7),amount*0.78),maxf(0.7,radius*0.025*amount),true)
 		for side in [-1,1]:
 			var branch=kink-outward*reach*0.35+normal*side*reach*0.34
@@ -273,10 +298,25 @@ func _inclusion(canvas: CanvasItem,p: Vector2,radius: float,entry: Dictionary,bo
 func _transform(points: PackedVector2Array,p: Vector2,radius: float) -> PackedVector2Array:
 	return Transform2D(0,Vector2.ONE*radius,0,p)*points
 
+func _prepare_anchors(contour: PackedVector2Array):
+	_anchor_contour=contour
+	_anchor_directions.resize(contour.size())
+	for i in range(contour.size()): _anchor_directions[i]=contour[i].normalized()
+	_anchors_active=true
+
 func _anchor(contour: PackedVector2Array,angle: float) -> Vector2:
 	var best = -2.0
 	var chosen = contour[0]
 	var direction = Vector2.from_angle(angle)
+	if _anchors_active and contour==_anchor_contour:
+		# Armor alone asks for up to45 anchors. Normalize each living contour
+		# once, preserving exactly the original nearest-direction choice.
+		for i in range(contour.size()):
+			var score=_anchor_directions[i].dot(direction)
+			if score>best:
+				best=score
+				chosen=contour[i]
+		return chosen
 	for point in contour:
 		var score = point.normalized().dot(direction)
 		if score>best:
@@ -306,6 +346,9 @@ func _nucleus(canvas: CanvasItem,p: Vector2,radius: float,color: Color,edge: Col
 		canvas.draw_polyline(strand,Color(color.darkened(0.45),0.26),maxf(0.6,radius*0.09),true)
 
 func _vesicle(canvas: CanvasItem,p: Vector2,radius: float,color: Color,detail: bool):
+	if not detail:
+		_soft_tissue(canvas,p,radius,Color(color,0.34),0.7)
+		return
 	_soft_tissue(canvas,p,radius,Color(color.darkened(0.25),0.24),p.x*0.1)
 	_soft_tissue(canvas,p-Vector2(radius*0.06,radius*0.12),radius*0.68,Color(color,0.22),p.x*0.1+0.6)
 	if detail:
@@ -345,7 +388,7 @@ func _mouth(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,radius: fl
 	if rank>0:
 		for i in range(5):
 			var root: Vector2=shape.upper[4+i*2]
-			var tip=root-direction*(0.013+mini(rank,2)*0.007)
+			var tip=root-direction*(0.013+mini(rank,2)*0.007+visual_stage(rank)*0.009)
 			canvas.draw_line(p+root*radius,p+tip*radius,Color(edge,0.38),maxf(0.6,radius*0.012),true)
 
 func _spikes(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,radius: float,phase: float,color: Color,rank: int):
@@ -354,7 +397,7 @@ func _spikes(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,radius: f
 		var a = _anchor(contour,i*TAU/count+phase)
 		var normal = a.normalized().orthogonal()
 		var root = p+a*radius*0.9
-		var tip = p+a*radius+a.normalized()*radius*(0.35+0.15*sin(i*3.7+phase))
+		var tip = p+a*radius+a.normalized()*radius*(0.35+visual_stage(rank)*0.095+0.15*sin(i*3.7+phase))
 		var bend=root.lerp(tip,0.56)+normal*radius*0.025*sin(i*2.3)
 		canvas.draw_colored_polygon(PackedVector2Array([root-normal*radius*0.085,bend-normal*radius*0.025,tip,bend+normal*radius*0.025,root+normal*radius*0.085]),Color(color.darkened(0.15),0.88))
 		canvas.draw_line(root,tip,Color(color.lightened(0.35),0.85),1,true)
@@ -369,8 +412,8 @@ func _plates(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,radius: f
 			var u=j/8.0
 			var a=angle+(u-0.5)*0.65
 			pad.append(p+_anchor(contour,a)*radius*(0.97+sin(u*PI)*0.045))
-		canvas.draw_polyline(pad,Color(color.darkened(0.25),0.55),maxf(2.0,radius*0.105),true)
-		canvas.draw_polyline(pad,Color(color.lightened(0.15),0.54),maxf(1.0,radius*0.042),true)
+		canvas.draw_polyline(pad,Color(color.darkened(0.25),0.55),maxf(2.0,radius*(0.105+visual_stage(rank)*0.026)),true)
+		canvas.draw_polyline(pad,Color(color.lightened(0.15),0.54),maxf(1.0,radius*(0.042+visual_stage(rank)*0.010)),true)
 
 func _tendril(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,radius: float,angle: float,time: float,length_scale: float,color: Color,width: float):
 	var a = _anchor(contour,angle)
@@ -398,3 +441,13 @@ func _branch(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,radius: f
 	for side in [-1,1]:
 		var end = tip+a.normalized().rotated(side*0.7)*radius*0.22
 		canvas.draw_line(tip,end+Vector2(0,sin(time+angle)*radius*0.02),Color(color,0.5),maxf(0.8,radius*0.025),true)
+
+static func _wound_scar(root: Vector2,kink: Vector2,end: Vector2,normal: Vector2,width: float) -> PackedVector2Array:
+	# At screen coordinates, subpixel fissures can collapse under float precision.
+	# Their visible center strand is drawn separately; skip an invisible fill.
+	if width<0.02: return PackedVector2Array()
+	var hull=Geometry2D.convex_hull(PackedVector2Array([root-normal*width,kink-normal*width*0.6,end,kink+normal*width*0.6,root+normal*width]))
+	if hull.size()<4: return PackedVector2Array()
+	hull.resize(hull.size()-1)
+	if Geometry2D.triangulate_polygon(hull).is_empty(): return PackedVector2Array()
+	return hull

@@ -1,6 +1,7 @@
 extends SceneTree
 
 const Build = preload("res://core/build_model.gd")
+const Catalog = preload("res://core/catalog.gd")
 const Save = preload("res://core/save_store.gd")
 var checks := 0
 var failures := 0
@@ -33,7 +34,7 @@ func _initialize():
 	b.biomass = 30
 	check(b.spend(20) and b.biomass == 10, "valid spend")
 	for i in range(10): b.apply("acid")
-	check(b.organs.acid == 5, "rank cap")
+	check(b.organs.acid == 10, "rank cap")
 	var rng = RandomNumberGenerator.new()
 	rng.seed = 42
 	var offers = b.offers(rng)
@@ -42,6 +43,17 @@ func _initialize():
 	var restored = Build.new()
 	restored.from_dict(b.to_dict())
 	check(restored.to_dict() == b.to_dict(), "build roundtrip")
+	var high = Build.new()
+	high.from_dict({"organs":{"tentacle":10,"acid":5},"adaptations":{"armor":6,"regen":3}})
+	check(high.rank("tentacle")==10 and high.rank("armor")==6,"new rank caps survive restore")
+	check(high.rank("acid")==5 and high.rank("regen")==3,"old valid ranks survive restore")
+	check(high.apply("spikes","tentacle") and high.rank("spikes")==5,"rank ten replacement inherits rank five")
+	for i in range(8): high.apply("regen")
+	check(high.rank("regen")==6 and not high.apply("regen"),"passive rank cap six")
+	check(Catalog.shot_count(10)==6 and Catalog.electric_targets(10)==6 and Catalog.clone_count(10)==5,"rank ten entity count caps")
+	check(is_equal_approx(Catalog.scaled_damage(100,3),110) and is_equal_approx(Catalog.scaled_damage(100,6),125) and is_equal_approx(Catalog.scaled_damage(100,10),150),"milestone multipliers do not stack")
+	check("118.5" in Catalog.effect_text("tentacle",10),"rank ten tooltip includes mature raw damage")
+	check("60%" in Catalog.effect_text("armor",6) and "60%" in Catalog.effect_text("speed",6),"passive tooltips respect caps")
 	var save = Save.new("user://test-profile.json")
 	save.clear_test_files()
 	save.load_profile()

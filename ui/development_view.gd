@@ -61,7 +61,7 @@ static func item_card(hud,id: String,rank: int):
 	card.add_child(row)
 	var art=Art.new()
 	art.organ_id=id
-	art.custom_minimum_size=Vector2(94,94)
+	art.custom_minimum_size=Vector2(112,112)
 	row.add_child(art)
 	var details=VBoxContainer.new()
 	details.size_flags_horizontal=Control.SIZE_EXPAND_FILL
@@ -69,7 +69,18 @@ static func item_card(hud,id: String,rank: int):
 	var item=Catalog.item(id)
 	details.add_child(hud.label("%s · %d/%d" % [item.name,rank,Catalog.max_rank(id)],23,Color(item.color),true))
 	details.add_child(hud.label(item.desc,18,Color("bed2d1"),true))
-	details.add_child(hud.label(effect_text(id,rank),18,Color("9fe0ca"),true))
+	details.add_child(hud.label("Сейчас: "+effect_text(id,rank),22,Color("9fe0ca"),true))
+	var progress=ProgressBar.new()
+	progress.max_value=Catalog.max_rank(id)
+	progress.value=rank
+	progress.show_percentage=false
+	progress.custom_minimum_size.y=12
+	details.add_child(progress)
+	if rank<Catalog.max_rank(id):
+		details.add_child(hud.label("Следующий ранг %d: %s" % [rank+1,effect_text(id,rank+1)],22,Color("c6d8eb"),true))
+	else:
+		details.add_child(hud.label("Максимальный ранг · орган полностью развит",22,Color("e5cc9c"),true))
+	details.add_child(hud.label(Catalog.milestone_text(id,rank),20,Color("d7c39f"),true))
 	return card
 
 static func effect_text(id: String,rank: int) -> String:
