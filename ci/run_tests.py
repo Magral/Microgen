@@ -16,22 +16,33 @@ def run(name, command):
     if result.returncode != 0 or ERRORS.search(result.stdout):
         raise RuntimeError(name + " failed")
 
+def display_command():
+    return [] if os.environ.get("DISPLAY") else ["xvfb-run", "-a"]
+
 def main():
     env = os.environ
     env["LIBGL_ALWAYS_SOFTWARE"] = "1"
-    for name in ["core", "simulation", "genome", "ui"]:
+    for name in ["core", "simulation", "genome", "ui", "input_regions", "jelly", "fluid", "harvest"]:
         path = "tests/test_" + name + ".gd"
         if Path(path).is_file():
             run(name, ["godot", "--headless", "--path", ".", "--script", path])
     if Path("tests/test_touch.gd").is_file():
-        run("touch", ["xvfb-run", "-a", "godot", "--path", ".",
+        run("touch", display_command() + ["godot", "--path", ".",
                       "--audio-driver", "Dummy", "--script", "tests/test_touch.gd"])
 
     if Path("core/genome.gd").is_file():
         for mode in ["game", "gallery"]:
             target = str(Path("build/Microgen-" + mode + ".png").resolve())
-            run("render-" + mode, ["xvfb-run", "-a", "godot", "--path", ".",
+            run("render-" + mode, display_command() + ["godot", "--path", ".",
                 "--audio-driver", "Dummy", "--", "--preview=" + mode, "--capture=" + target])
+
+    if Path("core/genome.gd").is_file():
+        run("motion", display_command() + ["godot", "--path", ".", "--audio-driver", "Dummy",
+            "--write-movie", "build/Microgen-motion.avi", "--fixed-fps", "30", "--quit-after", "180",
+            "--", "--preview=motion"])
+        run("encode-motion", ["ffmpeg", "-y", "-i", "build/Microgen-motion.avi", "-an",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "24", "build/Microgen-motion.mp4"])
+        Path("build/Microgen-motion.avi").unlink()
 
 if __name__ == "__main__":
     main()

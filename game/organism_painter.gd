@@ -44,7 +44,7 @@ func anatomy(recipe: Dictionary) -> Dictionary:
 	cache[key] = data
 	return data
 
-func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs: Dictionary,time: float,role: String="player",detail: bool=true):
+func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs: Dictionary,time: float,role: String="player",detail: bool=true,motion=null):
 	if not Genome.validate(recipe): return
 	var data = anatomy(recipe)
 	var body: Color = data.colors[0]
@@ -52,12 +52,16 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 	var core: Color = data.colors[2]
 	var accent: Color = data.colors[3]
 	var shadow: Color = data.colors[4]
-	var phase = float(recipe.phase)
+	var base_phase = float(recipe.phase)
+	var turn = motion.angle_delta() if motion != null else 0.0
+	var phase = base_phase+turn
+	var facing = float(recipe.rotation)+turn
 	var breathe = 1+sin(time*1.7+phase)*0.025
 	var contour = data.contour if detail else data.contour_lod
+	if motion != null: contour = motion.deform_points(contour,base_phase)
 	if int(organs.get("speed",0))>0:
 		for i in range(3):
-			_tendril(canvas,p,contour,radius,float(recipe.rotation)+PI+i*0.55-0.55,time+phase+i,0.9,edge,1.4)
+			_tendril(canvas,p,contour,radius,facing+PI+i*0.55-0.55,time+phase+i,0.9,edge,1.4)
 	if int(organs.get("regen",0))>0:
 		for i in range(3): _branch(canvas,p,contour,radius,i*TAU/3+phase,time,Color("a4dfbc"))
 	if int(organs.get("magnet",0))>0 or int(recipe.family)==5:
@@ -71,18 +75,18 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 	canvas.draw_texture_rect(glow,Rect2(p-Vector2.ONE*radius*0.55,Vector2.ONE*radius*1.1),false,Color(body.lightened(0.12),0.28))
 	if detail:
 		for vein in data.veins:
-			var a = p+vein[0]*radius*breathe
-			var b = p+vein[1]*radius*breathe
+			var a = p+_deform(vein[0],motion,base_phase)*radius*breathe
+			var b = p+_deform(vein[1],motion,base_phase)*radius*breathe
 			canvas.draw_line(a,b,Color(edge,0.12),2.0,true)
 			canvas.draw_line(a+Vector2(0,-0.8),b+Vector2(0,-0.8),Color(accent,0.18),0.6,true)
 		for particle in data.particles:
-			var point = p+particle.pos*radius*breathe
+			var point = p+_deform(particle.pos,motion,base_phase)*radius*breathe
 			var color = accent if particle.type==0 else edge
 			canvas.draw_circle(point,particle.size*radius,Color(color,0.35))
 			if particle.type==0: canvas.draw_circle(point-Vector2.ONE*particle.size*radius*0.25,particle.size*radius*0.35,Color(color.lightened(0.3),0.6))
 	var n = 0
 	for nucleus in data.nuclei:
-		_nucleus(canvas,p+nucleus*radius,radius*(0.235 if n==0 else 0.14),core,edge,time+phase+n,detail)
+		_nucleus(canvas,p+_deform(nucleus,motion,base_phase)*radius,radius*(0.235 if n==0 else 0.14),core,edge,time+phase+n,detail)
 		n += 1
 	var loop = outer.duplicate()
 	loop.append(loop[0])
@@ -107,12 +111,12 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 			var center = p+_anchor(contour,phase+i*2.1)*radius*0.87
 			_vesicle(canvas,center,radius*0.13,Color("c999d9"),detail)
 			for j in range(3): canvas.draw_circle(center+Vector2.from_angle(j*TAU/3)*radius*0.06,radius*0.027,Color("f1bddb"))
-	if int(organs.get("trail",0))>0: _vesicle(canvas,p+_anchor(contour,float(recipe.rotation)+PI)*radius*0.88,radius*0.19,Color("8fbd5b"),detail)
+	if int(organs.get("trail",0))>0: _vesicle(canvas,p+_anchor(contour,facing+PI)*radius*0.88,radius*0.19,Color("8fbd5b"),detail)
 	if int(organs.get("devour",0))>0:
-		var jaw = p+_anchor(contour,float(recipe.rotation))*radius*0.72
-		canvas.draw_arc(jaw,radius*0.19,float(recipe.rotation)-1.8,float(recipe.rotation)+1.8,14,Color(shadow,0.95),radius*0.12,true)
+		var jaw = p+_anchor(contour,facing)*radius*0.72
+		canvas.draw_arc(jaw,radius*0.19,facing-1.8,float(recipe.rotation)+1.8,14,Color(shadow,0.95),radius*0.12,true)
 		for i in range(5):
-			var direction = Vector2.from_angle(float(recipe.rotation)-1.3+i*0.65)
+			var direction = Vector2.from_angle(facing-1.3+i*0.65)
 			canvas.draw_line(jaw+direction*radius*0.23,jaw+direction*radius*0.14,Color("ead5ac"),1.4,true)
 	if int(organs.get("pulse",0))>0:
 		var ring = _transform(contour,p,radius*1.07)
@@ -133,6 +137,27 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 		canvas.draw_line(indicator-Vector2(7,0),indicator+Vector2(7,0),Color("ed939c",0.9),1.6,true)
 	elif role=="prey":
 		canvas.draw_arc(p,radius*1.15,0.1,1.9,12,Color("e9d58e",0.65),1,true)
+
+func _deform(point: Vector2,motion,phase: float) -> Vector2:
+	return point if motion == null else motion.deform_point(point,phase)
+
+func paint_fragment(canvas: CanvasItem,p: Vector2,fragment: Dictionary,active: bool):
+	var data = anatomy(fragment.genome)
+	var progress = float(fragment.progress)
+	var radius = float(fragment.r)*(1.0-progress*0.72)
+	var points = PackedVector2Array()
+	# A torn crescent of the original membrane, with an exposed ragged edge.
+	var contour = data.contour
+	var start = posmod(int(fragment.part)*13,contour.size())
+	for i in range(19): points.append(contour[(start+i)%contour.size()]*radius+p)
+	points.append(p+Vector2(-0.13,0.09)*radius)
+	canvas.draw_colored_polygon(points,Color(data.colors[0],0.52-progress*0.2))
+	canvas.draw_polyline(points,Color(data.colors[1],0.65),1.3,true)
+	for i in range(3):
+		var q = p+(points[3+i*5]-p)*0.65
+		canvas.draw_circle(q,radius*0.09,Color(data.colors[3],0.65))
+	if active:
+		canvas.draw_arc(p,float(fragment.r)+7,-PI/2,-PI/2+TAU*progress,28,Color("b6eed3"),2,true)
 
 func _transform(points: PackedVector2Array,p: Vector2,radius: float) -> PackedVector2Array:
 	return Transform2D(0,Vector2.ONE*radius,0,p)*points

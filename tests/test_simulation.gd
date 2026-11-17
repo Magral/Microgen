@@ -36,7 +36,7 @@ func _initialize():
 	var combat = Sim.new()
 	combat.new_run(4)
 	combat.spawn_enemy(combat.player + Vector2(35,0), "prey")
-	combat.step(0.1,Vector2.ZERO)
+	for i in range(30): combat.step(0.05,Vector2.ZERO)
 	check(combat.xp > 0 or combat.pending_levels > 0, "prey absorbed yields DNA")
 	combat.build.apply("acid")
 	combat.spawn_enemy(combat.player + Vector2(100,0), "hunter")
@@ -60,9 +60,10 @@ func _initialize():
 	s.build.apply("infection")
 	s.build.apply("devour")
 	s.spawn_enemy(s.player+Vector2(25,0),"hunter")
-	s.enemies[0].hp = 1.0
+	s.enemies[0].hp = 0.0
 	s.enemies[0].infect = 3.0
 	s.step(0.01,Vector2.ZERO)
+	for i in range(140): s._update_remains(0.05)
 	check(s.fields.size()>0, "infected meal makes spores")
 	var full = Sim.new()
 	full.new_run(8)
@@ -95,7 +96,7 @@ func _initialize():
 	soak.max_hp = 100000
 	soak.hp = 100000
 	for i in range(1200): soak.step(0.5,Vector2.ZERO)
-	check(soak.enemies.size() <= 140 and soak.fields.size() <= 80 and soak.shots.size() <= 200, "late wave caps")
+	check(soak.enemies.size() <= Sim.ENEMY_CAP and soak.fields.size() <= 80 and soak.shots.size() <= 200, "late wave caps")
 	check(soak.boss_spawned, "boss appears after ten minutes")
 	soak.enemies.clear()
 	soak.spawn_enemy(soak.player+Vector2(120,0),"boss")

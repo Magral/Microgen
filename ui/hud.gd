@@ -177,6 +177,7 @@ func box(color: Color,border: Color,padding: int=12) -> StyleBoxFlat:
 
 func _bar(color: Color,height: float) -> ProgressBar:
 	var bar = ProgressBar.new()
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bar.show_percentage = false
 	bar.custom_minimum_size = Vector2(380,height)
 	bar.add_theme_stylebox_override("background",box(Color("193540"),Color("193540"),0))

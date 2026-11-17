@@ -5,9 +5,14 @@ var recipe: Dictionary
 var organs: Dictionary
 var number = 0
 var time = 0.0
+var motion
+const Jelly = preload("res://game/jelly_motion.gd")
 
 func _process(dt):
 	time += dt
+	if not recipe.is_empty():
+		if motion == null: motion = Jelly.new(float(recipe.rotation))
+		motion.step(dt,Vector2.from_angle(sin(time*0.35+number)*1.4)*45)
 	queue_redraw()
 
 func _draw():
@@ -18,7 +23,7 @@ func _draw():
 	style.set_border_width_all(1)
 	style.set_corner_radius_all(14)
 	draw_style_box(style,Rect2(Vector2.ZERO,size))
-	painter.paint(self,Vector2(size.x/2,88),46,recipe,organs,time,"specimen",true)
+	painter.paint(self,Vector2(size.x/2,88),46,recipe,organs,time,"specimen",true,motion)
 	var font = ThemeDB.fallback_font
 	draw_string(font,Vector2(15,24),"%02d" % number,HORIZONTAL_ALIGNMENT_LEFT,-1,16,Color("95aaa9"))
 	var names = []

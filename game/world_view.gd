@@ -2,7 +2,34 @@ extends Node2D
 const Catalog = preload("res://core/catalog.gd")
 const World = preload("res://game/world.gd")
 const Painter = preload("res://game/organism_painter.gd")
+const Jelly = preload("res://game/jelly_motion.gd")
+const Fluid = preload("res://game/fluid_view.gd")
 var painter = Painter.new()
+var fluid = Fluid.new()
+var motions = {}
+var tracked_sim
+
+func _ready():
+	fluid.show_behind_parent = true
+	add_child(fluid)
+
+func _motion(key,position: Vector2,recipe: Dictionary,dt: float,radius: float):
+	if not motions.has(key):
+		motions[key] = {"jelly":Jelly.new(float(recipe.rotation)),"position":position,"distance":0.0}
+	var state = motions[key]
+	var displacement = position-state.position
+	state.position = position
+	if not sim.paused:
+		var velocity = displacement/maxf(dt,0.001) if displacement.length()<100 else Vector2.ZERO
+		state.jelly.step(dt,velocity)
+		state.distance += displacement.length() if displacement.length()<100 else 0.0
+		if state.distance>radius*0.7:
+			fluid.emit_wake(position,velocity,radius)
+			state.distance = 0.0
+	return state.jelly
+
+func motion_for(key):
+	return motions[key].jelly if motions.has(key) else null
 var sim
 var visual_time = 0.0
 var menu = false
@@ -12,7 +39,27 @@ var joystick_visible = false
 var font = ThemeDB.fallback_font
 
 func _process(dt):
-	visual_time += dt
+	if sim != null:
+		if tracked_sim != sim:
+			motions.clear()
+			tracked_sim = sim
+			fluid.reset(sim.world.seed_value,sim.player,get_viewport_rect().size)
+		fluid.update(dt,sim,get_viewport_rect().size)
+		if not sim.paused: visual_time += dt
+		var alive = {"player":true}
+		_motion("player",sim.player,sim.player_genome,dt,36)
+		for enemy in sim.enemies:
+			alive[enemy.id] = true
+			_motion(enemy.id,enemy.pos,enemy.genome,dt,enemy.r)
+		if sim.build.rank("division")>0:
+			var clone_index = 0
+			for position in sim.clone_positions():
+				var key = "clone:%d" % clone_index
+				alive[key] = true
+				_motion(key,position,sim.player_genome,dt,17)
+				clone_index += 1
+		for key in motions.keys():
+			if not alive.has(key): motions.erase(key)
 	queue_redraw()
 
 func screen(p: Vector2) -> Vector2:
@@ -20,15 +67,9 @@ func screen(p: Vector2) -> Vector2:
 
 func _draw():
 	var size = get_viewport_rect().size
-	draw_rect(Rect2(Vector2.ZERO,size),Color("07141e"))
 	if sim == null: return
 	var b = sim.world.biome(sim.player)
 	var area = Rect2(sim.player-size/2-Vector2.ONE*150,size+Vector2.ONE*300)
-	# Layered particles suggest a fluid rather than a flat board.
-	for i in range(85):
-		var base = Vector2(fposmod(i*237.71+sim.world.seed_value*0.13,2100),fposmod(i*371.91,1300))
-		var p = Vector2(fposmod(base.x-sim.player.x*0.22+sin(visual_time*0.1+i)*15,size.x+80)-40,fposmod(base.y-sim.player.y*0.22+visual_time*(2+i%4),size.y+80)-40)
-		draw_circle(p,1.3+i%4,Color(0.3,0.7,0.7,0.05+0.018*(i%4)))
 	var c1 = sim.world.tile(area.position)
 	var c2 = sim.world.tile(area.end)
 	for y in range(maxi(0,c1.y),mini(World.H,c2.y+1)):
@@ -80,18 +121,22 @@ func _draw():
 		elif pickup.type == "core":
 			draw_colored_polygon(PackedVector2Array([p+Vector2(0,-10),p+Vector2(8,0),p+Vector2(0,10),p+Vector2(-8,0)]),col)
 		else: draw_circle(p,4,col)
+	for fragment in sim.remains:
+		if area.has_point(fragment.pos): painter.paint_fragment(self,screen(fragment.pos),fragment,fragment.id==sim.digesting_id)
 	for e in sim.enemies:
 		if not area.has_point(e.pos): continue
 		var organs = enemy_organs(e)
-		painter.paint(self,screen(e.pos),e.r*1.17,e.genome,organs,visual_time,e.kind,e.kind=="boss" or (e.r>20 and sim.enemies.size()<90))
+		painter.paint(self,screen(e.pos),e.r*1.17*(1.0-float(e.get("engulf",0))*0.65),e.genome,organs,visual_time,e.kind,e.kind=="boss" or (e.r>20 and sim.enemies.size()<90),motion_for(e.id))
 		if e.infect>0: draw_arc(screen(e.pos),e.r+6,0,TAU,20,Color("b3d47c",0.5),1.4,true)
 		if e.hp<e.max_hp:
 			var p = screen(e.pos)+Vector2(-e.r,-e.r*1.5-10)
 			draw_line(p,p+Vector2(e.r*2,0),Color(0.1,0.1,0.15,0.8),3,true)
 			draw_line(p,p+Vector2(e.r*2*maxf(0,e.hp/e.max_hp),0),Color("e9a5ad"),3,true)
 	if sim.build.rank("division")>0:
+		var clone_index = 0
 		for p in sim.clone_positions():
-			painter.paint(self,screen(p),17,sim.player_genome,{"trail":sim.build.rank("trail")},visual_time+1,"clone",false)
+			painter.paint(self,screen(p),17,sim.player_genome,{"trail":sim.build.rank("trail")},visual_time+1,"clone",false,motion_for("clone:%d" % clone_index))
+			clone_index += 1
 	_draw_player()
 	for shot in sim.shots:
 		var p = screen(shot.pos)
@@ -128,7 +173,7 @@ func _draw_player():
 		draw_arc(p,75+sim.build.rank("acid")*9,0,TAU,48,Color(0.6,0.85,0.4,0.14),1.0,true)
 	var anatomy = sim.build.organs.duplicate()
 	anatomy.merge(sim.build.adaptations,true)
-	painter.paint(self,p,radius,sim.player_genome,anatomy,visual_time,"player",true)
+	painter.paint(self,p,radius,sim.player_genome,anatomy,visual_time,"player",true,motion_for("player"))
 	if sim.invuln>0: draw_arc(p,radius*1.4,0,TAU,40,Color("f2c3d1",0.2+0.2*sin(visual_time*24)),2,true)
 
 func enemy_organs(e: Dictionary) -> Dictionary:

@@ -1,12 +1,12 @@
 extends SceneTree
 var failures = 0
 func _initialize(): call_deferred("run")
-func tap(button):
+func tap(button,index: int=0):
 	await process_frame
 	await process_frame
 	var touch = InputEventScreenTouch.new()
 	touch.position = button.global_position+button.size/2
-	touch.index = 0
+	touch.index = index
 	touch.pressed = true
 	Input.parse_input_event(touch)
 	await process_frame
@@ -52,26 +52,52 @@ func run():
 		scene.show_shop()
 		await tap(find_button(scene.hud.content,"Купить"))
 		check(scene.sim.world.colonies[0].stock[0].sold,"native touch buys shop item")
+		scene.sim.player += Vector2(500,0)
 		scene.resume_game()
-		var p = Vector2(250,400)
-		var touch = InputEventScreenTouch.new()
-		touch.index=0
-		touch.position=p
-		touch.pressed=true
-		Input.parse_input_event(touch)
+		var size = root.get_visible_rect().size
+		for p in [Vector2(250,400),size*Vector2(0.8,0.55),size*Vector2(0.5,0.12),size*Vector2(0.5,0.92),scene.hud.hp_bar.global_position+scene.hud.hp_bar.size/2]:
+			var touch = InputEventScreenTouch.new()
+			touch.index=0
+			touch.position=p
+			touch.pressed=true
+			Input.parse_input_event(touch)
+			await process_frame
+			var drag = InputEventScreenDrag.new()
+			drag.index=0
+			drag.position=p+Vector2(55,0)
+			drag.relative=Vector2(55,0)
+			Input.parse_input_event(drag)
+			await process_frame
+			check(scene.movement.x>0.5,"native joystick moves from %s" % p)
+			var second = InputEventScreenTouch.new()
+			second.index=1
+			second.position=size*Vector2(0.7,0.7)
+			second.pressed=true
+			Input.parse_input_event(second)
+			await process_frame
+			check(scene.stick_id==0,"second finger cannot steal joystick")
+			second.pressed=false
+			Input.parse_input_event(second)
+			await process_frame
+			check(scene.movement.x>0.5,"second release does not stop first finger")
+			touch=touch.duplicate()
+			touch.pressed=false
+			Input.parse_input_event(touch)
+			await process_frame
+			check(scene.stick_id==-1 and scene.movement==Vector2.ZERO,"native release clears joystick")
+		var held = InputEventScreenTouch.new()
+		held.index=0
+		held.position=Vector2(400,400)
+		held.pressed=true
+		Input.parse_input_event(held)
 		await process_frame
-		var drag = InputEventScreenDrag.new()
-		drag.index=0
-		drag.position=p+Vector2(55,0)
-		drag.relative=Vector2(55,0)
-		Input.parse_input_event(drag)
+		check(scene.stick_id==0,"first finger holds joystick before HUD action")
+		await tap(scene.hud.pause_button,1)
+		held.pressed=false
+		Input.parse_input_event(held)
 		await process_frame
-		check(scene.movement.x>0.5,"native touch joystick moves")
-		touch=touch.duplicate()
-		touch.pressed=false
-		Input.parse_input_event(touch)
-		await process_frame
-		check(scene.stick_id==-1 and scene.movement==Vector2.ZERO,"native release clears joystick")
+		check(scene.stage=="pause" and scene.stick_id==-1,"HUD pause takes priority over joystick")
+
 	scene.store.clear_test_files()
 	print("TOUCH: %d failures" % failures)
 	scene.queue_free()

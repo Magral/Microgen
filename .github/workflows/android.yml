@@ -63,9 +63,9 @@ jobs:
       - name: Prepare graphical tests
         if: steps.source.outputs.ready == 'true'
         run: |
-          if ! command -v xvfb-run >/dev/null; then
+          if ! command -v xvfb-run >/dev/null || ! command -v ffmpeg >/dev/null; then
             sudo apt-get update
-            sudo apt-get install -y xvfb
+            sudo apt-get install -y xvfb ffmpeg
           fi
 
       - name: Import Godot resources
@@ -116,6 +116,7 @@ jobs:
             build/APK_PERMISSIONS.txt
             build/Microgen-game.png
             build/Microgen-gallery.png
+            build/Microgen-motion.mp4
           if-no-files-found: error
           retention-days: 30
 
@@ -125,7 +126,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="test-$GITHUB_RUN_NUMBER-$GITHUB_RUN_ATTEMPT"
-          gh release create "$tag" build/Microgen.apk build/Microgen-source.zip build/SHA256SUMS.txt build/Microgen-game.png build/Microgen-gallery.png \
+          gh release create "$tag" build/Microgen.apk build/Microgen-source.zip build/SHA256SUMS.txt build/Microgen-game.png build/Microgen-gallery.png build/Microgen-motion.mp4 \
             --target "$(git rev-parse HEAD)" \
             --title "Микроген · тестовая сборка $GITHUB_RUN_NUMBER" \
             --notes 'Автоматическая тестовая сборка. Номер версии указан в приложении. Проверки и подпись выполнены в GitHub Actions; физический Android-телефон не проверялся.' \

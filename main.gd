@@ -15,6 +15,8 @@ var hud
 var stage = "menu"
 var movement = Vector2.ZERO
 var stick_id = -1
+var button_touch_id = -1
+var touched_button: Button
 var stick_start = Vector2.ZERO
 var stick_pos = Vector2.ZERO
 var selected_branch = "predator"
@@ -27,6 +29,7 @@ var ui_timer = 0.0
 var message_timer = 0.0
 var capture_path = ""
 var capture_mode = ""
+var motion_elapsed = 0.0
 var capture_elapsed = 0.0
 var sound_enabled = true
 var gallery_seed = 1729
@@ -63,6 +66,10 @@ func _ready():
 			for i in range(16): sim.spawn_enemy(sim.player+Vector2.from_angle(i*TAU/16)*randf_range(160,440),"hunter" if i%3 else "prey")
 			for i in range(18): sim.step(0.016,Vector2.ZERO)
 			sim.paused = true
+		elif capture_mode == "motion":
+			sim.build.apply("acid")
+			sim.spawn_enemy(sim.player+Vector2(90,25),"hunter")
+			sim._die(sim.enemies.size()-1,false)
 		elif capture_mode == "level":
 			sim.build.apply("acid")
 			sim.gain_xp(12)
@@ -78,6 +85,13 @@ func _process(dt):
 		if capture_elapsed>1.0:
 			capture_elapsed = -1000
 			_capture.call_deferred()
+	if stage == "game" and capture_mode == "motion":
+		motion_elapsed += dt
+		var direction = Vector2.ZERO
+		if motion_elapsed<1.6: direction = Vector2.RIGHT
+		elif motion_elapsed<3.0: direction = Vector2.UP
+		elif motion_elapsed<4.2: direction = Vector2.LEFT
+		sim.step(dt,direction)
 	if stage == "game" and capture_mode == "":
 		var keyboard = Vector2(float(Input.is_physical_key_pressed(KEY_D) or Input.is_physical_key_pressed(KEY_RIGHT))-float(Input.is_physical_key_pressed(KEY_A) or Input.is_physical_key_pressed(KEY_LEFT)),float(Input.is_physical_key_pressed(KEY_S) or Input.is_physical_key_pressed(KEY_DOWN))-float(Input.is_physical_key_pressed(KEY_W) or Input.is_physical_key_pressed(KEY_UP)))
 		var dir = keyboard if keyboard.length_squared()>0 else movement
@@ -103,6 +117,23 @@ func _process(dt):
 	view.joystick_tip = stick_pos
 
 func _input(event):
+	# Godot emulates a GUI mouse only for the first finger. Capture a second
+	# finger on the three HUD buttons while the first keeps the joystick.
+	if event is InputEventScreenTouch:
+		if not event.pressed and event.index==button_touch_id:
+			var button = touched_button
+			button_touch_id = -1
+			touched_button = null
+			get_viewport().set_input_as_handled()
+			if is_instance_valid(button) and button.is_visible_in_tree() and button.get_global_rect().has_point(event.position): button.pressed.emit()
+			return
+		if event.pressed and stage=="game" and stick_id>=0 and event.index!=stick_id:
+			for button in [hud.pause_button,hud.map_button,hud.shop_button]:
+				if button.is_visible_in_tree() and not button.disabled and button.get_global_rect().has_point(event.position):
+					button_touch_id = event.index
+					touched_button = button
+					get_viewport().set_input_as_handled()
+					return
 	# Release is observed even if a finger ends over a button or a modal opens.
 	if event is InputEventScreenTouch and not event.pressed and event.index == stick_id: clear_stick()
 	if event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT and not event.pressed and stick_id == -2: clear_stick()
@@ -120,14 +151,14 @@ func _unhandled_input(event):
 		stick_id = event.index
 		stick_start = event.position
 		_move_stick(event.position)
-	elif event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT and event.pressed and _stick_region(event.position):
+	elif event is InputEventMouseButton and event.device != -1 and event.button_index==MOUSE_BUTTON_LEFT and event.pressed and _stick_region(event.position):
 		stick_id = -2
 		stick_start = event.position
 		_move_stick(event.position)
 
 func _stick_region(p: Vector2) -> bool:
-	var size = get_viewport_rect().size
-	return p.x<size.x*0.64 and p.y>150 and p.y<size.y-105
+	# Buttons consume their GUI events before _unhandled_input. The rest is water.
+	return get_viewport_rect().has_point(p)
 
 func _move_stick(p: Vector2):
 	var delta = (p-stick_start).limit_length(66)
@@ -152,7 +183,7 @@ func show_menu():
 	sim.paused = true
 	view.sim = sim
 	hud.game_visible(false)
-	var box = hud.open("МИКРОГЕН", "Маленькая жизнь. Непредсказуемая эволюция.\nТестовая версия 0.2.0 · офлайн",740)
+	var box = hud.open("МИКРОГЕН", "Маленькая жизнь. Непредсказуемая эволюция.\nТестовая версия 0.3.0 · офлайн",740)
 	box.add_child(hud.label("Собери организм, который сможет выжить.",25,Color("9ce3cf"),true))
 	box.add_child(hud.label("Исследуй случайный микромир, поглощай ДНК и соединяй мутации. Атаки автоматические — управляй только движением.",20,Color("a3bfc0"),true))
 	if not store.profile.checkpoint.is_empty(): box.add_child(hud.button("Продолжить забег",continue_run,true))
@@ -226,7 +257,7 @@ func start_run(seed_value: int = -1):
 	hud.game_visible(true)
 	hud.update_game(sim)
 	save_run()
-	message("Веди амёбу пальцем по левой части экрана. Собирай ДНК.",6)
+	message("Веди палец по свободному месту экрана.\nЗадержись у останков для поглощения.",6)
 
 func continue_run():
 	var loaded = Sim.new()
@@ -535,7 +566,7 @@ func show_atlas():
 func show_help():
 	set_stage("help")
 	var box = hud.open("Как выжить в капле", "Движение — единственное действие во время боя.",850)
-	box.add_child(hud.label("• Коснись левой части экрана и веди палец: появится джойстик.\n• На ПК: WASD или стрелки; M — карта; E — колония; Esc — пауза.\n• Зелёные фрагменты ДНК повышают уровень. Янтарная биомасса нужна для покупок и перебросов. Фиолетовые ядра сохраняются между забегами.\n• Мелкую добычу поглощай телом. Других врагов сначала ослабь; хищная пасть помогает поглощать их раньше.\n• Собирай пары органов: щупальца + кислота, шипы + импульс, деление + след, заражение + пасть.\n• На миникарте отмечаются изученные места. Светлые колонии безопасны; внутри доступен магазин.\n• Оформление, проходы, местные условия, находки и противники меняются с каждым seed.\n• На 10-й минуте появляется Архицит. Найди его по карте и победи. Таймер не завершает забег автоматически.\n• Игра сохраняет забег при паузе и уходе в фон; в меню есть «Продолжить».",20,Color("b8d0cd"),true))
+	box.add_child(hud.label("• Коснись любого свободного места экрана и веди палец: появится джойстик.\n• На ПК: WASD или стрелки; M — карта; E — колония; Esc — пауза.\n• Зелёные фрагменты ДНК повышают уровень. Янтарная биомасса нужна для покупок и перебросов. Фиолетовые ядра сохраняются между забегами.\n• Мелкую добычу поглощай телом, удерживая контакт. Останки перевариваются постепенно. Других врагов сначала ослабь; хищная пасть помогает поглощать их раньше.\n• Собирай пары органов: щупальца + кислота, шипы + импульс, деление + след, заражение + пасть.\n• На миникарте отмечаются изученные места. Светлые колонии безопасны; внутри доступен магазин.\n• Оформление, проходы, местные условия, находки и противники меняются с каждым seed.\n• На 10-й минуте появляется Архицит. Найди его по карте и победи. Таймер не завершает забег автоматически.\n• Игра сохраняет забег при паузе и уходе в фон; в меню есть «Продолжить».",20,Color("b8d0cd"),true))
 	box.add_child(hud.button("Понятно",show_menu,true))
 
 func message(text: String,seconds: float=3):
