@@ -5,6 +5,7 @@ var particles: Array=[]
 var wakes: Array=[]
 var clock=0.0
 var paused=false
+var zoom=1.0
 var camera=Vector2.ZERO
 var viewport_size=Vector2(1280,720)
 var seed_value=-1
@@ -33,9 +34,10 @@ func reset(value: int,center: Vector2,size: Vector2):
 	var rng=RandomNumberGenerator.new()
 	rng.seed=value+710917
 	for i in range(PARTICLE_COUNT):
-		particles.append({"pos":center+Vector2(rng.randf_range(-size.x*0.65,size.x*0.65),rng.randf_range(-size.y*0.7,size.y*0.7)),"r":rng.randf_range(0.8,2.5),"phase":rng.randf()*TAU,"depth":rng.randf_range(0.35,1.0)})
+		particles.append({"pos":center+Vector2(rng.randf_range(-size.x*0.65/zoom,size.x*0.65/zoom),rng.randf_range(-size.y*0.7/zoom,size.y*0.7/zoom)),"r":rng.randf_range(0.8,2.5),"phase":rng.randf()*TAU,"depth":rng.randf_range(0.35,1.0)})
 
-func update(dt: float,sim,size: Vector2):
+func update(dt: float,sim,size: Vector2,view_zoom: float=1.0):
+	zoom=maxf(0.2,view_zoom)
 	if seed_value!=int(sim.world.seed_value): reset(int(sim.world.seed_value),sim.player,size)
 	camera=sim.player
 	viewport_size=size
@@ -46,7 +48,7 @@ func update(dt: float,sim,size: Vector2):
 		for item in particles:
 			item.pos+=current_at(item.pos,clock)*dt*item.depth
 			var relative=item.pos-camera
-			item.pos=camera+Vector2(wrapf(relative.x,-size.x*0.65,size.x*0.65),wrapf(relative.y,-size.y*0.7,size.y*0.7))
+			item.pos=camera+Vector2(wrapf(relative.x,-size.x*0.65/zoom,size.x*0.65/zoom),wrapf(relative.y,-size.y*0.7/zoom,size.y*0.7/zoom))
 		for i in range(wakes.size()-1,-1,-1):
 			wakes[i].life-=dt
 			wakes[i].pos+=current_at(wakes[i].pos,clock)*dt*0.35
@@ -54,8 +56,8 @@ func update(dt: float,sim,size: Vector2):
 	if is_instance_valid(background):
 		background.size=size
 		material_instance.set_shader_parameter("fluid_time",clock)
-		material_instance.set_shader_parameter("world_origin",camera-size*Vector2(0.5,0.51))
-		material_instance.set_shader_parameter("viewport_size",size)
+		material_instance.set_shader_parameter("world_origin",camera-size*Vector2(0.5,0.51)/zoom)
+		material_instance.set_shader_parameter("viewport_size",size/zoom)
 		material_instance.set_shader_parameter("boundary_phase",sim.world.boundary_phase)
 	queue_redraw()
 
@@ -65,14 +67,14 @@ func emit_wake(p: Vector2,velocity: Vector2,radius: float):
 	wakes.append({"pos":p,"angle":velocity.angle(),"r":radius,"life":1.8})
 
 func screen(p: Vector2) -> Vector2:
-	return p-camera+viewport_size*Vector2(0.5,0.51)
+	return (p-camera)*zoom+viewport_size*Vector2(0.5,0.51)
 
 func _draw():
 	for wake in wakes:
 		var age=1.0-wake.life/1.8
 		var opacity=0.14*pow(1.0-age,2)
 		draw_set_transform(screen(wake.pos),wake.angle,Vector2(0.4+age*0.65,1.0+age*1.15))
-		draw_arc(Vector2.ZERO,wake.r*(0.65+age*0.5),PI*0.4,PI*1.6,22,Color(0.45,0.8,0.76,opacity),1.3,true)
+		draw_arc(Vector2.ZERO,wake.r*zoom*(0.65+age*0.5),PI*0.4,PI*1.6,22,Color(0.45,0.8,0.76,opacity),1.3,true)
 	draw_set_transform(Vector2.ZERO)
 	for item in particles:
 		var p=screen(item.pos)

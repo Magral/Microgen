@@ -2,6 +2,7 @@ extends Node2D
 const Catalog = preload("res://core/catalog.gd")
 const World = preload("res://game/world.gd")
 const Painter = preload("res://game/organism_painter.gd")
+const TissueDamage=preload("res://game/tissue_damage.gd")
 const Absorption = preload("res://game/absorption.gd")
 const OrganicFX = preload("res://game/organic_fx.gd")
 const Jelly = preload("res://game/jelly_motion.gd")
@@ -13,6 +14,7 @@ var tracked_sim
 var feeding: Array=[]
 var reaction=0.0
 var previous_build=""
+var zoom=3.09
 
 func _ready():
 	fluid.show_behind_parent = true
@@ -50,8 +52,10 @@ func _process(dt):
 			tracked_sim = sim
 			previous_build=str(sim.build.organs)
 			reaction=0.0
+			zoom=sim.view_zoom()
 			fluid.reset(sim.world.seed_value,sim.player,get_viewport_rect().size)
-		fluid.update(dt,sim,get_viewport_rect().size)
+		if not sim.paused:zoom=lerpf(zoom,sim.view_zoom(),1.0-exp(-dt*2.0))
+		fluid.update(dt,sim,get_viewport_rect().size,zoom)
 		if not sim.paused:
 			visual_time += dt
 			reaction=maxf(0,reaction-dt*1.4)
@@ -61,7 +65,17 @@ func _process(dt):
 				previous_build=build_key
 				sim._effect({"type":"mutation","pos":sim.player,"r":60.0,"life":1.1,"max":1.1})
 		var alive = {"player":true}
-		_motion("player",sim.player,sim.player_genome,dt,36)
+		_motion("player",sim.player,sim.player_genome,dt,sim.body_radius())
+		var physical=TissueDamage.contour(painter.anatomy(sim.player_genome).contour,sim.player_genome,sim.hp/sim.max_hp)
+		physical=motion_for("player").deform_points(physical,float(sim.player_genome.phase))
+		_prepare_feeding()
+		for entry in feeding:
+			var pose=entry.pose.duplicate()
+			pose.bulge/=maxf(1.0,float(feeding.size()))
+			physical=Absorption.membrane(physical,pose,sim.body_radius())
+		var phase=float(sim.player_genome.phase)+motion_for("player").angle_delta()
+		var breathe=1+sin(visual_time*1.7+phase)*0.025+reaction*0.055
+		sim.contact_contour=Transform2D(0,Vector2.ONE*breathe,0,Vector2.ZERO)*physical
 		for enemy in sim.enemies:
 			alive[enemy.id] = true
 			_motion(enemy.id,enemy.pos,enemy.genome,dt,enemy.r)
@@ -83,7 +97,9 @@ func _draw():
 	var size = get_viewport_rect().size
 	if sim == null: return
 	var b = sim.world.biome(sim.player)
-	var area = Rect2(sim.player-size/2-Vector2.ONE*150,size+Vector2.ONE*300)
+	var center=size*Vector2(0.5,0.51)
+	draw_set_transform(center*(1.0-zoom),0,Vector2.ONE*zoom)
+	var area = Rect2(sim.player-size/(2*zoom)-Vector2.ONE*150,size/zoom+Vector2.ONE*300)
 	var c1 = sim.world.tile(area.position)
 	var c2 = sim.world.tile(area.end)
 	for y in range(maxi(0,c1.y),mini(World.H,c2.y+1)):
@@ -123,11 +139,17 @@ func _draw():
 		_blob(screen(f.pos),f.r,Color(col,0.12*f.life/f.max),f.pos.x*0.2,0.5,false)
 		OrganicFX.field(self,screen(f.pos),f.r,str(f.kind),float(f.life),float(f.max),visual_time)
 	for pickup in sim.pickups:
+		if pickup.get("captured",false):continue
 		if not area.has_point(pickup.pos): continue
 		var p = screen(pickup.pos)+Vector2(0,sin(visual_time*2+pickup.id)*2)
-		var col = Color("87eed2") if pickup.type=="dna" else (Color("ecc185") if pickup.type=="bio" else Color("c794f2"))
+		var col = Color("6bffb8") if pickup.type=="heal" else (Color("87eed2") if pickup.type=="dna" else (Color("ecc185") if pickup.type=="bio" else Color("c794f2")))
 		draw_circle(p,10 if pickup.type=="core" else 6,Color(col,0.07))
-		if pickup.type == "dna":
+		if pickup.type=="heal":
+			draw_circle(p,12,Color(col,0.12))
+			_blob(p,6.0,Color(col,0.8),float(pickup.id),0.8,true)
+			draw_line(p-Vector2(2,0),p+Vector2(2,0),Color("e1fff0"),1.0,true)
+			draw_line(p-Vector2(0,2),p+Vector2(0,2),Color("e1fff0"),1.0,true)
+		elif pickup.type == "dna":
 			draw_line(p+Vector2(-4,-6),p+Vector2(4,6),col,2,true)
 			draw_line(p+Vector2(4,-6),p+Vector2(-4,6),Color(col,0.6),2,true)
 			draw_line(p+Vector2(-4,-4),p+Vector2(4,-4),col,1,true)
@@ -137,13 +159,18 @@ func _draw():
 		else: draw_circle(p,4,col)
 	_prepare_feeding()
 	for fragment in sim.remains:
-		if fragment.id==sim.digesting_id: continue
+		if fragment.get("captured",false): continue
 		if area.has_point(fragment.pos): painter.paint_fragment(self,screen(fragment.pos),fragment,fragment.id==sim.digesting_id)
+	for resident in sim.residents:
+		if not resident.active and not resident.dead and area.grow(resident.r).has_point(resident.pos):_silhouette(resident)
 	for e in sim.enemies:
+		if e.r>sim.body_radius()*2 and e.pos.distance_to(sim.player)>sim.body_radius()*6+e.r:
+			if area.grow(e.r).has_point(e.pos):_silhouette(e)
+			continue
 		if not area.has_point(e.pos): continue
 		if feeding.any(func(entry): return entry.get("enemy_id",-1)==e.id): continue
 		var organs = enemy_organs(e)
-		painter.paint(self,screen(e.pos),e.r*1.17*(1.0-float(e.get("engulf",0))*0.65),e.genome,organs,visual_time,e.kind,e.kind=="boss" or (e.r>20 and sim.enemies.size()<90),motion_for(e.id))
+		painter.paint(self,screen(e.pos),e.r*1.17*(1.0-float(e.get("engulf",0))*0.65),e.genome,organs,visual_time,"prey" if e.r<sim.body_radius()*0.82 else e.kind,e.kind=="boss" or (e.r>20 and sim.enemies.size()<90),motion_for(e.id),[],Color(-1,-1,-1),0.0,e.hp/e.max_hp)
 		if e.infect>0: OrganicFX.infected(self,screen(e.pos),e.r,e.genome,visual_time,float(e.infect),motion_for(e.id))
 		if e.hp<e.max_hp:
 			var p = screen(e.pos)+Vector2(-e.r,-e.r*1.5-10)
@@ -152,7 +179,7 @@ func _draw():
 	if sim.build.rank("division")>0:
 		var clone_index = 0
 		for p in sim.clone_positions():
-			painter.paint(self,screen(p),17,sim.player_genome,{"trail":sim.build.rank("trail")},visual_time+1,"clone",false,motion_for("clone:%d" % clone_index),[],sim.body_color())
+			painter.paint(self,screen(p),17,sim.player_genome,{"trail":sim.build.rank("trail")},visual_time+1,"clone",false,motion_for("clone:%d" % clone_index),[],sim.body_color(),0.0,sim.hp/sim.max_hp)
 			clone_index += 1
 	_draw_player()
 	for shot in sim.shots:
@@ -174,6 +201,7 @@ func _draw():
 		else:
 			var col = Color("f5989e") if effect.type=="hurt" else Color("9be8db")
 			draw_arc(p,effect.r*(1-alpha*0.6),0,TAU,40,Color(col,alpha*0.55),2,true)
+	draw_set_transform(Vector2.ZERO)
 	if joystick_visible:
 		draw_circle(joystick_origin,66,Color(0.6,0.9,0.85,0.05))
 		draw_arc(joystick_origin,66,0,TAU,48,Color(0.6,0.9,0.85,0.28),2,true)
@@ -181,38 +209,51 @@ func _draw():
 	if b==1: draw_rect(Rect2(Vector2.ZERO,size),Color(0.15,0.2,0.02,0.025))
 	if menu: draw_rect(Rect2(Vector2.ZERO,size),Color(0.015,0.03,0.05,0.45))
 
+func _silhouette(organism: Dictionary):
+	var contour=painter.anatomy(organism.genome).contour
+	var points=Transform2D(0,Vector2.ONE*float(organism.r)*1.17,0,screen(organism.pos))*contour
+	draw_colored_polygon(points,Color(0.07,0.16,0.19,0.5))
+	points.append(points[0])
+	draw_polyline(points,Color(0.27,0.45,0.47,0.2),1.2,true)
+	draw_circle(screen(organism.pos),float(organism.r)*0.2,Color(0.27,0.23,0.36,0.3))
+
 func player_radius() -> float:
-	var rank_sum=0
-	for rank in sim.build.organs.values(): rank_sum+=rank
-	return minf(44,34+rank_sum*0.36)
+	return sim.body_radius()
 
 func _prepare_feeding():
 	feeding.clear()
 	var radius=player_radius()
-	var contour=painter.anatomy(sim.player_genome).contour
+	var contour=TissueDamage.contour(painter.anatomy(sim.player_genome).contour,sim.player_genome,sim.hp/sim.max_hp)
 	var motion=motion_for("player")
 	if motion!=null: contour=motion.deform_points(contour,float(sim.player_genome.phase))
 	for fragment in sim.remains:
-		if fragment.id!=sim.digesting_id: continue
+		if not fragment.get("captured",false): continue
 		var offset=fragment.pos-sim.player
 		if fragment.get("internal",false): offset=Vector2.from_angle(float(fragment.get("entry_angle",0)))*float(fragment.get("entry_distance",36))
 		feeding.append({"pose":Absorption.pose(offset,float(fragment.progress),contour,radius),"fragment":fragment})
+	for pickup in sim.pickups:
+		if not pickup.get("captured",false):continue
+		var recipe=sim.player_genome.duplicate()
+		recipe.palette=7 if pickup.type=="heal" else (0 if pickup.type=="dna" else (1 if pickup.type=="core" else 5))
+		var offset=Vector2.from_angle(float(pickup.get("entry_angle",0)))*float(pickup.get("entry_distance",0))
+		feeding.append({"pose":Absorption.pose(offset,float(pickup.progress),contour,radius),"fragment":{"genome":recipe,"r":6.0,"part":int(pickup.id)%3,"progress":0.0}})
 	for enemy in sim.enemies:
 		if float(enemy.get("engulf",0))<=0 or not sim._is_engulfing(enemy): continue
-		feeding.append({"enemy_id":enemy.id,"pose":Absorption.pose(enemy.pos-sim.player,float(enemy.engulf),contour,radius),"fragment":{"genome":enemy.genome,"r":enemy.r*0.8,"part":0,"progress":0.0}})
-		if feeding.size()>=4: break
+		var source=Vector2.from_angle(float(enemy.get("entry_angle",0)))*float(enemy.get("entry_distance",enemy.r)) if enemy.get("captured",false) else enemy.pos-sim.player
+		feeding.append({"enemy_id":enemy.id,"pose":Absorption.pose(source,float(enemy.engulf),contour,radius),"fragment":{"genome":enemy.genome,"r":enemy.r*0.8,"part":0,"progress":0.0}})
+		if feeding.size()>=12: break
 
 func _draw_player():
 	var p = screen(sim.player)
 	var rank_sum = 0
 	for rank in sim.build.organs.values(): rank_sum += rank
-	var radius = minf(44,34+rank_sum*0.36)
+	var radius = player_radius()
 	if sim.build.rank("acid")>0:
-		draw_circle(p,75+sim.build.rank("acid")*9,Color(0.55,0.83,0.3,0.04))
-		draw_arc(p,75+sim.build.rank("acid")*9,0,TAU,48,Color(0.6,0.85,0.4,0.14),1.0,true)
+		draw_circle(p,(75+sim.build.rank("acid")*9)*sim.ability_scale(),Color(0.55,0.83,0.3,0.04))
+		draw_arc(p,(75+sim.build.rank("acid")*9)*sim.ability_scale(),0,TAU,48,Color(0.6,0.85,0.4,0.14),1.0,true)
 	var anatomy = sim.build.organs.duplicate()
 	anatomy.merge(sim.build.adaptations,true)
-	painter.paint(self,p,radius,sim.player_genome,anatomy,visual_time,"player",true,motion_for("player"),feeding,sim.body_color(),reaction)
+	painter.paint(self,p,radius,sim.player_genome,anatomy,visual_time,"player",true,motion_for("player"),feeding,sim.body_color(),reaction,sim.hp/sim.max_hp)
 	if sim.invuln>0: draw_arc(p,radius*1.4,0,TAU,40,Color("f2c3d1",0.2+0.2*sin(visual_time*24)),2,true)
 
 func enemy_organs(e: Dictionary) -> Dictionary:

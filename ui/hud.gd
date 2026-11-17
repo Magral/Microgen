@@ -81,7 +81,7 @@ func update_game(sim):
 	hp_bar.value = sim.hp/sim.max_hp*100
 	xp_bar.value = sim.xp/sim.xp_needed()*100
 	area_label.text = ("ПИТАТЕЛЬНАЯ СРЕДА" if sim.world.biome(sim.player)==0 else "ТОКСИЧНАЯ ЗОНА")+"  ·  "+sim.world.condition_name(sim.world.biome(sim.player))
-	stats.text = "Ур. %d   ·   %d/%d HP   ·   Биомасса %d   ·   %02d:%02d" % [sim.level,int(sim.hp),int(sim.max_hp),sim.build.biomass,int(sim.elapsed)/60,int(sim.elapsed)%60]
+	stats.text = "Размер ×%.1f   ·   Ур. %d   ·   %d/%d HP   ·   Биомасса %d   ·   %02d:%02d" % [sim.body_radius()/22.0,sim.level,int(sim.hp),int(sim.max_hp),sim.build.biomass,int(sim.elapsed)/60,int(sim.elapsed)%60]
 	var names = []
 	for id in sim.build.organs: names.append(Catalog.item(id).name+" "+str(sim.build.rank(id)))
 	slots.text = "Органы %d/6   ·   Адаптации %d/4\n" % [sim.build.organs.size(),sim.build.adaptations.size()]+"  /  ".join(names)

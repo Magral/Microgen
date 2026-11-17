@@ -35,7 +35,7 @@ func _initialize():
 	check(restored.build.to_dict() == a.build.to_dict(), "build roundtrip")
 	var combat = Sim.new()
 	combat.new_run(4)
-	combat.spawn_enemy(combat.player + Vector2(35,0), "prey")
+	combat.spawn_enemy(combat.player + Vector2(20,0), "prey")
 	for i in range(30): combat.step(0.05,Vector2.ZERO)
 	check(combat.xp > 0 or combat.pending_levels > 0, "prey absorbed yields DNA")
 	combat.build.apply("acid")

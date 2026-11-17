@@ -3,6 +3,11 @@ const World = preload("res://game/world.gd")
 const Build = preload("res://core/build_model.gd")
 const Catalog = preload("res://core/catalog.gd")
 const Genome = preload("res://core/genome.gd")
+const TissueDamage=preload("res://game/tissue_damage.gd")
+const Growth=preload("res://core/growth.gd")
+var residents: Array=[]
+var previous_player=Vector2.ZERO
+var contact_contour=PackedVector2Array()
 const Pigment = preload("res://core/pigment.gd")
 var tissue_pigment: Dictionary = {}
 const ENEMY_CAP = 28
@@ -57,6 +62,8 @@ func new_run(seed_value: int, unlocked: Array = Catalog.base_unlocked(), permane
 	max_hp = 100.0+float(upgrades.get("health",0))*5.0
 	hp = max_hp
 	player = world.start
+	previous_player=player
+	_create_residents()
 	run_id = "%d-%d" % [seed_value,Time.get_ticks_usec()]
 	for nutrient in world.nutrients:
 		pickups.append({"pos":nutrient.pos,"type":"dna","amount":8 if nutrient.rich else 3,"id":next_id})
@@ -73,12 +80,83 @@ func new_run(seed_value: int, unlocked: Array = Catalog.base_unlocked(), permane
 			stock.append({"id":id,"price":18+rng.randi_range(0,6),"sold":false})
 		stock.append({"id":"heal","price":12,"sold":false})
 		colony.stock = stock
+	for i in range(12):
+		var p=player+Vector2.from_angle(i*2.399)*float(85+i*27)
+		if world.walkable(p,7): _drop(p,"heal",6)
 	_reveal()
 	# Enough near-start food for a quick first mutation.
 	for i in range(8):
 		var p = player + Vector2.from_angle(i*TAU/8.0)*rng.randf_range(70,220)
 		pickups.append({"pos":p,"type":"dna","amount":3,"id":next_id})
 		next_id += 1
+
+func body_radius() -> float:
+	return Growth.radius(level,xp/xp_needed())
+
+func view_zoom() -> float:
+	return Growth.zoom(body_radius())
+
+func ability_scale() -> float:
+	return body_radius()/34.0
+
+func _create_residents():
+	residents.clear()
+	var ecology_rng=RandomNumberGenerator.new()
+	ecology_rng.seed=world.seed_value+991721
+	for i in range(4):
+		var anchor=player+Vector2.from_angle(0.15+i*1.65)*float(215+i*320)
+		for attempt in range(30):
+			var candidate=anchor+Vector2(ecology_rng.randf_range(-60,60),ecology_rng.randf_range(-60,60))
+			if not world.walkable(candidate,26): continue
+			residents.append({"id":-100-i,"pos":candidate,"r":72.0+i*2.0,"hp":360.0+i*60,"max_hp":360.0+i*60,"genome":Genome.create(world.seed_value,-100-i,"hunter",world.biome(candidate)),"active":false,"dead":false})
+			break
+		if residents.size()<=i:
+			var candidate=player+Vector2(195,i*18-27)
+			residents.append({"id":-100-i,"pos":candidate,"r":72.0+i*2.0,"hp":360.0+i*60,"max_hp":360.0+i*60,"genome":Genome.create(world.seed_value,-100-i,"hunter",0),"active":false,"dead":false})
+
+func _update_ecology():
+	for resident in residents:
+		if resident.dead or resident.active or enemies.size()>=ENEMY_CAP: continue
+		if player.distance_to(resident.pos)>650: continue
+		if elapsed<8 and not _touches(resident.pos,resident.r):continue
+		spawn_enemy(resident.pos,"hunter")
+		var actor=enemies.back()
+		actor.id=resident.id
+		actor.resident_id=resident.id
+		actor.r=resident.r
+		actor.hp=resident.hp
+		actor.max_hp=resident.max_hp
+		actor.genome=resident.genome.duplicate(true)
+		actor.speed=23.0
+		resident.active=true
+
+func _touches(position: Vector2,object_radius: float=0.0) -> bool:
+	var start=previous_player
+	var nearest=Geometry2D.get_closest_point_to_segment(position,start,player)
+	var broad=body_radius()*1.7+object_radius
+	if nearest.distance_squared_to(position)>broad*broad: return false
+	var shape=contact_contour if not contact_contour.is_empty() else TissueDamage.contour(Genome.contour(player_genome),player_genome,hp/max_hp)
+	var polygon=Transform2D(0,Vector2.ONE*body_radius(),0,Vector2.ZERO)*shape
+	var steps=maxi(1,ceili(start.distance_to(player)/maxf(4.0,body_radius()*0.3)))
+	for step in range(steps+1):
+		var relative=position-start.lerp(player,float(step)/steps)
+		if Geometry2D.is_point_in_polygon(relative,polygon): return true
+		for i in range(polygon.size()):
+			if relative.distance_squared_to(Geometry2D.get_closest_point_to_segment(relative,polygon[i],polygon[(i+1)%polygon.size()]))<=pow(object_radius+3.0,2): return true
+	return false
+
+func attraction_radius() -> float:
+	var rank=build.rank("magnet")
+	return body_radius() if rank<=0 else body_radius()+55.0*rank+float(upgrades.get("collect",0))*8
+
+func _capture(item: Dictionary):
+	item.captured=true
+	item.internal=true
+	item.entry_angle=(item.pos-player).angle()
+	item.entry_distance=player.distance_to(item.pos)
+	item.progress=clampf(float(item.get("progress",0)),0.0,0.7)
+	item.duration=minf(0.65,float(item.get("duration",0.55)))
+	item.vel=Vector2.ZERO
 
 func body_color() -> Color:
 	if tissue_pigment.is_empty(): tissue_pigment=Pigment.create(Genome.colors(player_genome)[0])
@@ -114,12 +192,13 @@ func step(dt: float,direction: Vector2):
 	elapsed += dt
 	invuln = maxf(0,invuln-dt)
 	var condition = world.conditions[world.biome(player)]
-	var speed = 145.0*(1.0+build.rank("speed")*0.12)*(0.85 if condition == 1 else 1.0)
+	previous_player=player
+	var speed = (72.0+body_radius()*0.6)*(1.0+build.rank("speed")*0.12)*(0.85 if condition == 1 else 1.0)
 	var desired = direction.limit_length()*speed
 	var response = exp(-dt/0.2)
 	var travel = desired*dt+(player_velocity-desired)*0.2*(1.0-response)
 	player_velocity = desired+(player_velocity-desired)*response
-	player = world.move_body(player,travel,22)
+	player = world.move_body(player,travel,minf(26.0,body_radius()*0.65))
 	hp = minf(max_hp,hp+(build.rank("regen")*0.5+float(upgrades.get("regen",0))*0.1)*dt)
 	_reveal()
 	for k in cooldowns: cooldowns[k] = maxf(0,cooldowns[k]-dt)
@@ -135,6 +214,7 @@ func step(dt: float,direction: Vector2):
 		spawn_enemy(world.boss_pos,"boss")
 		events.append({"type":"message","text":"Пробудился Архицит! Найди его на карте."})
 	_check_nests()
+	_update_ecology()
 	_update_enemies(dt)
 	if outcome != "": return
 	_attack_dt = dt
@@ -187,16 +267,22 @@ func spawn_enemy(p: Vector2,kind: String):
 	var health = (8.0 if prey else 40.0+elapsed*0.17)*(1.4 if variant == 1 else 1.0)
 	if boss: health = 1600.0
 	if "shell" in traits: health *= 1.3
-	enemies.append({"pos":p,"kind":kind,"hp":health,"max_hp":health,"r":12.0 if prey else (66.0 if boss else 23.0+rng.randf()*6),"speed":42.0 if prey else (48.0 if boss else 44.0+minf(25,elapsed*0.035)+(12 if variant==2 else 0)),"vel":Vector2.ZERO,"engulf":0.0,"phase":rng.randf()*TAU,"variant":variant,"infect":0.0,"slow":0.0,"shot_cd":2.5,"id":next_id,"biome":world.biome(p),"genome":Genome.create(world.seed_value,next_id,kind,world.biome(p)),"traits":traits,"emission_cd":rng.randf_range(1.0,3.0)})
+	enemies.append({"pos":p,"kind":kind,"hp":health,"max_hp":health,"r":12.0 if prey else (140.0 if boss else 23.0+rng.randf()*6),"speed":42.0 if prey else (48.0 if boss else 44.0+minf(25,elapsed*0.035)+(12 if variant==2 else 0)),"vel":Vector2.ZERO,"engulf":0.0,"phase":rng.randf()*TAU,"variant":variant,"infect":0.0,"slow":0.0,"shot_cd":2.5,"id":next_id,"biome":world.biome(p),"genome":Genome.create(world.seed_value,next_id,kind,world.biome(p)),"traits":traits,"emission_cd":rng.randf_range(1.0,3.0)})
+	if not prey and not boss and posmod(next_id*31+world.seed_value,7)==0:
+		enemies.back().r=44.0+float(posmod(next_id,5))
+		enemies.back().hp*=1.7
+		enemies.back().max_hp=enemies.back().hp
 	next_id += 1
 
 # Eligibility also governs attack exclusion: retracting visual progress alone
 # must never protect an enemy that healed or moved out of absorption range.
 func _is_engulfing(e: Dictionary) -> bool:
-	if e.hp <= 0 or player.distance_to(e.pos) >= 27.0+e.r: return false
-	if e.kind == "prey": return true
-	var threshold = e.max_hp*(0.12+build.rank("devour")*0.07)
-	return e.kind != "boss" and build.rank("devour")>0 and e.hp <= threshold
+	if e.hp<=0 or e.kind=="boss": return false
+	if e.get("captured",false): return true
+	if not _touches(e.pos,e.r*1.17): return false
+	if e.r<=body_radius()*0.82: return true
+	var threshold=e.max_hp*(0.12+build.rank("devour")*0.07)
+	return e.r<=body_radius()*1.45 and build.rank("devour")>0 and e.hp<=threshold
 
 func _update_enemies(dt: float):
 	for i in range(enemies.size()-1,-1,-1):
@@ -219,25 +305,29 @@ func _update_enemies(dt: float):
 			continue
 		var offset = player-e.pos
 		var dist = offset.length()
-		if dist>1600 and e.kind != "boss":
+		if dist>1600 and e.kind != "boss" and not e.has("resident_id"):
 			enemies.remove_at(i)
 			continue
 		if _is_engulfing(e):
-			e.engulf = minf(1.0,float(e.get("engulf",0.0))+dt/(1.3 if e.kind == "prey" else 1.6))
+			if not e.get("captured",false):
+				e.entry_angle=offset.angle()+PI
+				e.entry_distance=dist
+				e.captured=true
+			e.engulf = minf(1.0,float(e.get("engulf",0.0))+dt/0.6)
 			e.vel = e.get("vel",Vector2.ZERO)*exp(-dt/0.18)
-			e.pos = world.move_body(e.pos,offset*minf(1.0,dt*2.0),e.r*0.6)
+			e.pos = player+Vector2.from_angle(float(e.get("entry_angle",0)))*body_radius()*0.35
 			if e.engulf >= 1.0: _die(i,true)
 			continue
 		e.engulf = maxf(0.0,float(e.get("engulf",0.0))-dt*0.12)
 		var dir = offset.normalized()
-		if e.kind == "prey": dir = -dir if dist<180 else dir.rotated(e.phase)
+		if e.r<body_radius()*0.82: dir = -dir if dist<180+body_radius() else dir.rotated(e.phase)
 		if e.kind == "spitter" and dist<300: dir = -dir*0.3
 		if _safe_zone(player) and e.kind != "prey": dir = -dir
 		var desired = dir*e.speed*(0.35 if e.slow>0 else 1.0)*(1.2 if "swift" in e.get("traits",[]) else 1.0)
 		var old_velocity = e.get("vel",Vector2.ZERO)
 		var response = exp(-dt/0.28)
 		e.vel = desired+(old_velocity-desired)*response
-		e.pos = world.move_body(e.pos,desired*dt+(old_velocity-desired)*0.28*(1.0-response),e.r*0.6)
+		e.pos = world.move_body(e.pos,desired*dt+(old_velocity-desired)*0.28*(1.0-response),minf(26.0,e.r*0.6))
 		if e.kind=="boss": boss_marker = e.pos
 		if e.kind == "spitter" or e.kind == "boss":
 			e.shot_cd -= dt
@@ -246,26 +336,30 @@ func _update_enemies(dt: float):
 				if e.kind == "boss":
 					for n in range(10): _shot(e.pos,Vector2.from_angle(n*TAU/10.0+elapsed*0.2)*135,10,true)
 				else: _shot(e.pos,offset.normalized()*155,8,true)
-		if dist<e.r+21 and e.kind != "prey" and invuln<=0 and not _safe_zone(player):
-			hp -= (10.0 if e.kind!="boss" else 22.0)*(1.0-build.rank("armor")*0.12)
+		if dist<e.r+body_radius()*0.75 and e.r>body_radius()*0.82 and invuln<=0 and not _safe_zone(player):
+			hp -= (10.0 if e.kind!="boss" else 22.0)*clampf(e.r/body_radius(),0.8,2.4)*(1.0-build.rank("armor")*0.12)
 			invuln = 0.65
-			e.pos = world.move_body(e.pos,-offset.normalized()*30,e.r*0.6)
+			e.pos = world.move_body(e.pos,-offset.normalized()*30,minf(26.0,e.r*0.6))
 			_effect({"type":"hurt","pos":player,"life":0.3,"max":0.3,"r":45.0})
 		if e.hp<=0: _die(i,false)
 
 func _die(index: int,absorbed: bool):
 	var e = enemies[index]
 	enemies.remove_at(index)
+	for resident in residents:
+		if resident.id==e.get("resident_id",0):resident.dead=true; resident.active=false
 	kills += 1
 	if "spores" in e.get("traits",[]): _field(e.pos,75,8.0,2.5,"enemy_spore",true)
 	if absorbed:
+		var meal_scale=maxf(1.0,e.r/26.0) if e.r>40 else 1.0
 		_assimilate(e.genome,maxf(1.0,e.r/12.0),e.pos)
-		gain_xp(4 if e.kind=="prey" else 6)
-		build.biomass += 1 if e.kind=="prey" else 3
+		gain_xp(4 if e.kind=="prey" else int(6*meal_scale))
+		build.biomass += 1 if e.kind=="prey" else int(3*meal_scale)
 		hp = minf(max_hp,hp+build.rank("devour")*0.8)
 		if e.infect>0 and "spore_feast" in build.active_synergies(): _field(e.pos,100,14,2.5,"spore")
 	else:
 		_leave_remains(e)
+		if kills%3==0: _drop(e.pos,"heal",6)
 	if e.kind == "boss":
 		outcome = "victory"
 		events.append({"type":"core","token":run_id+":boss","amount":12})
@@ -276,8 +370,9 @@ func _die(index: int,absorbed: bool):
 
 # Body rewards remain embodied until a single fragment is fully digested.
 func _leave_remains(e: Dictionary):
-	var dna_total = 80 if e.kind == "boss" else (4 if e.kind == "prey" else 9)
-	var bio_total = 40 if e.kind == "boss" else (1 if e.kind == "prey" else 4)
+	var size_reward=maxf(1.0,e.r/26.0) if e.r>40 else 1.0
+	var dna_total = 80 if e.kind == "boss" else (4 if e.kind == "prey" else int(9*size_reward))
+	var bio_total = 40 if e.kind == "boss" else (1 if e.kind == "prey" else int(4*size_reward))
 	for part in range(3):
 		var angle = rng.randf()*TAU
 		var fragment = {"id":next_id,"pos":e.pos+Vector2.from_angle(angle)*e.r*0.45,"vel":Vector2.from_angle(angle)*rng.randf_range(6.0,15.0),"r":maxf(7.0,e.r*0.36),"genome":e.genome.duplicate(true),"part":part,"dna":int(dna_total/3)+ (1 if part < dna_total%3 else 0),"bio":int(bio_total/3)+(1 if part < bio_total%3 else 0),"progress":0.0,"duration":rng.randf_range(1.2,2.0),"internal":false,"infected":e.infect>0 and part == 0}
@@ -299,40 +394,28 @@ func _leave_remains(e: Dictionary):
 			remains.append(fragment)
 
 func _update_remains(dt: float):
-	var target = {}
-	var nearest = INF
-	for part in remains:
-		if part.get("internal",false):
-			part.pos=player+Vector2.from_angle(float(part.get("entry_angle",0)))*24.0
-			part.vel=Vector2.ZERO
-		part.pos = world.move_body(part.pos,part.vel*0.8*(1.0-exp(-dt/0.8)),part.r*0.5)
-		part.vel *= exp(-dt/0.8)
-		var distance = player.distance_to(part.pos)
-		if distance <= 32.0+part.r:
-			if int(part.id) == digesting_id:
-				target = part
-				nearest = -1.0
-			elif distance < nearest:
-				target = part
-				nearest = distance
-	digesting_id = int(target.id) if not target.is_empty() else -1
+	digesting_id=-1
 	for i in range(remains.size()-1,-1,-1):
-		var part = remains[i]
-		if int(part.id) != digesting_id:
-			part.progress = maxf(0.0,part.progress-dt*0.06)
-			continue
-		if not part.get("internal",false):
-			part.entry_angle=(part.pos-player).angle()
-			part.entry_distance=player.distance_to(part.pos)
-		part.progress = minf(1.0,part.progress+dt/part.duration)
-		if part.progress>=0.42: part.internal=true
-		if part.progress >= 1.0:
-			_assimilate(part.genome,maxf(0.5,part.r*0.12),part.pos,part.get("pigment",{}))
-			gain_xp(part.dna)
-			build.biomass += int(part.bio)
-			if part.infected and "spore_feast" in build.active_synergies(): _field(part.pos,100,14,2.5,"spore")
-			remains.remove_at(i)
-			digesting_id = -1
+		var part=remains[i]
+		if part.get("internal",false) and not part.has("captured"):
+			part.captured=true
+			part.duration=minf(0.65,float(part.duration))
+		if not part.get("captured",false):
+			part.pos=world.move_body(part.pos,part.vel*dt,part.r*0.5)
+			part.vel*=exp(-dt/0.8)
+			if _touches(part.pos,part.r): _capture(part)
+			elif build.rank("magnet")>0 and player.distance_to(part.pos)<attraction_radius():part.pos=part.pos.move_toward(player,dt*(70+build.rank("magnet")*25))
+		if not part.get("captured",false): continue
+		if digesting_id==-1:digesting_id=int(part.id)
+		part.pos=player+Vector2.from_angle(float(part.get("entry_angle",0)))*body_radius()*0.35
+		part.progress=minf(1.0,float(part.progress)+dt/float(part.duration))
+		if part.progress<1.0: continue
+		_assimilate(part.genome,maxf(0.5,part.r*0.12),part.pos,part.get("pigment",{}))
+		gain_xp(part.dna)
+		build.biomass+=int(part.bio)
+		if part.infected and "spore_feast" in build.active_synergies():_field(part.pos,100,14,2.5,"spore")
+		remains.remove_at(i)
+	if remains.is_empty():digesting_id=-1
 
 func _drop(p: Vector2,kind: String,amount: int):
 	if pickups.size()>=600:
@@ -369,7 +452,7 @@ func _attack():
 	var metabolic = 0.88 if world.conditions[world.biome(player)] == 2 else 1.0
 	var synergies = build.active_synergies()
 	if build.rank("tentacle")>0 and cooldowns.get("tentacle",0)<=0:
-		var target = _nearest(165.0+build.rank("tentacle")*12)
+		var target = _nearest((165.0+build.rank("tentacle")*12)*ability_scale())
 		if not target.is_empty():
 			cooldowns.tentacle = 0.85*metabolic
 			target.hp -= 9.0+build.rank("tentacle")*7
@@ -381,7 +464,7 @@ func _attack():
 	if build.rank("acid")>0:
 		for e in enemies:
 			if _is_engulfing(e): continue
-			if player.distance_squared_to(e.pos)<pow(75+build.rank("acid")*9,2): e.hp -= (4+build.rank("acid")*3)*_attack_dt
+			if player.distance_squared_to(e.pos)<pow((75+build.rank("acid")*9)*ability_scale(),2): e.hp -= (4+build.rank("acid")*3)*_attack_dt
 	if build.rank("spikes")>0 and cooldowns.get("spikes",0)<=0:
 		var target = _nearest(650)
 		if not target.is_empty():
@@ -391,18 +474,18 @@ func _attack():
 				_shot(player,dir.rotated((i-build.rank("spikes")/4.0)*0.13)*450,12+build.rank("spikes")*5,false)
 	if build.rank("pulse")>0 and cooldowns.get("pulse",0)<=0:
 		cooldowns.pulse = 3.2*metabolic
-		var radius = 130+build.rank("pulse")*18
+		var radius = (130+build.rank("pulse")*18)*ability_scale()
 		for e in enemies:
 			if _is_engulfing(e): continue
 			if player.distance_squared_to(e.pos)<radius*radius:
 				e.hp -= 12+build.rank("pulse")*8
-				e.pos = world.move_body(e.pos,(e.pos-player).normalized()*65,e.r*0.6)
+				e.pos = world.move_body(e.pos,(e.pos-player).normalized()*65,minf(26.0,e.r*0.6))
 		_effect({"type":"pulse","pos":player,"r":float(radius),"life":0.55,"max":0.55})
 		if "spike_pulse" in synergies:
 			_effect({"type":"spike_pulse","pos":player,"r":float(radius),"life":0.8,"max":0.8})
 			for i in range(8): _shot(player,Vector2.from_angle(i*TAU/8.0)*370,18+build.rank("spikes")*4,false)
 	if build.rank("infection")>0 and cooldowns.get("infection",0)<=0:
-		var target = _nearest(420)
+		var target = _nearest(420*ability_scale())
 		if not target.is_empty():
 			target.infect = 4.5
 			_effect({"type":"infection","pos":player,"end":target.pos,"r":float(target.r),"life":0.85,"max":0.85})
@@ -446,7 +529,7 @@ func _update_shots(dt: float):
 		shot.pos += shot.vel*dt
 		var hit = false
 		if shot.hostile:
-			if shot.pos.distance_squared_to(player)<28*28:
+			if shot.pos.distance_squared_to(player)<pow(body_radius()*0.78+3,2):
 				hit = true
 				if invuln<=0 and not _safe_zone(player):
 					hp -= shot.damage*(1-build.rank("armor")*0.12)
@@ -471,26 +554,38 @@ func _update_fields(dt: float):
 		var f = fields[i]
 		f.life -= dt
 		if f.get("hostile",false):
-			if f.pos.distance_squared_to(player)<pow(f.r+18,2) and not _safe_zone(player): hp -= f.damage*dt*(1-build.rank("armor")*0.12)
+			if f.pos.distance_squared_to(player)<pow(f.r+body_radius()*0.65,2) and not _safe_zone(player): hp -= f.damage*dt*(1-build.rank("armor")*0.12)
 		else:
 			for e in enemies:
 				if f.pos.distance_squared_to(e.pos)<pow(f.r+e.r*0.5,2): e.hp -= f.damage*dt
 		if f.life<=0: fields.remove_at(i)
 
 func _collect(dt: float):
-	var radius = 80+build.rank("magnet")*35+float(upgrades.get("collect",0))*8
 	for i in range(pickups.size()-1,-1,-1):
-		var item = pickups[i]
-		var dist = player.distance_to(item.pos)
-		if dist<radius:
-			item.pos = item.pos.move_toward(player,dt*(220+400*(1-dist/radius)))
-			if dist<28:
-				if item.type == "dna": gain_xp(item.amount)
-				elif item.type == "bio": build.biomass += int(item.amount)
-				else:
-					cores_found += item.amount
-					events.append({"type":"core","token":run_id+":"+str(item.id),"amount":int(item.amount)})
-				pickups.remove_at(i)
+		var item=pickups[i]
+		if not item.get("captured",false):
+			if item.type=="heal" and hp>=max_hp:continue
+			if _touches(item.pos,7.0):_capture(item)
+			elif build.rank("magnet")>0 and player.distance_to(item.pos)<attraction_radius():item.pos=item.pos.move_toward(player,dt*(95+35*build.rank("magnet")))
+		if not item.get("captured",false):continue
+		item.pos=player+Vector2.from_angle(float(item.get("entry_angle",0)))*body_radius()*0.3
+		item.progress=minf(1.0,float(item.progress)+dt/float(item.duration))
+		if item.progress<1.0:continue
+		if item.type=="heal" and hp>=max_hp:
+			item.captured=false
+			item.internal=false
+			item.progress=0.0
+			item.pos=player+Vector2.from_angle(float(item.get("entry_angle",0)))*(body_radius()*1.6+12.0)
+			continue
+		if item.type=="dna":gain_xp(item.amount)
+		elif item.type=="bio":build.biomass+=int(item.amount)
+		elif item.type=="heal":
+			hp=minf(max_hp,hp+float(item.amount))
+			_effect({"type":"assimilate","pos":player,"end":item.pos,"r":body_radius(),"color":Color("7dfcd4"),"life":0.8,"max":0.8})
+		else:
+			cores_found+=item.amount
+			events.append({"type":"core","token":run_id+":"+str(item.id),"amount":int(item.amount)})
+		pickups.remove_at(i)
 
 func _check_nests():
 	for nest in world.nests:
@@ -515,7 +610,7 @@ func nearby_colony() -> int:
 	return -1
 
 func snapshot() -> Dictionary:
-	return {"version":1,"player_genome":player_genome.duplicate(true),"tissue_pigment":tissue_pigment.duplicate(true),"outcome":outcome,"events":_pack(events),"seed":world.seed_value,"rng_state":str(rng.state),"run_id":run_id,"player":_vec(player),"player_velocity":_vec(player_velocity),"remains":_pack(remains),"digesting_id":digesting_id,"hp":hp,"max_hp":max_hp,"elapsed":elapsed,"xp":xp,"level":level,"pending_levels":pending_levels,"build":build.to_dict(),"enemies":_pack(enemies),"pickups":_pack(pickups),"colonies":_pack(world.colonies),"nests":_pack(world.nests),"explored":explored.keys(),"boss_spawned":boss_spawned,"kills":kills,"cores_found":cores_found,"next_id":next_id,"upgrades":upgrades,"cooldowns":cooldowns.duplicate(),"offers":current_offers.duplicate(),"rerolls":rerolls,"fields":_pack(fields),"shots":_pack(shots)}
+	return {"version":1,"player_genome":player_genome.duplicate(true),"tissue_pigment":tissue_pigment.duplicate(true),"residents":_pack(residents),"outcome":outcome,"events":_pack(events),"seed":world.seed_value,"rng_state":str(rng.state),"run_id":run_id,"player":_vec(player),"player_velocity":_vec(player_velocity),"remains":_pack(remains),"digesting_id":digesting_id,"hp":hp,"max_hp":max_hp,"elapsed":elapsed,"xp":xp,"level":level,"pending_levels":pending_levels,"build":build.to_dict(),"enemies":_pack(enemies),"pickups":_pack(pickups),"colonies":_pack(world.colonies),"nests":_pack(world.nests),"explored":explored.keys(),"boss_spawned":boss_spawned,"kills":kills,"cores_found":cores_found,"next_id":next_id,"upgrades":upgrades,"cooldowns":cooldowns.duplicate(),"offers":current_offers.duplicate(),"rerolls":rerolls,"fields":_pack(fields),"shots":_pack(shots)}
 
 func restore(data: Dictionary) -> bool:
 	if data.get("version",0) != 1 or not data.get("player",null) is Array: return false
@@ -529,6 +624,9 @@ func restore(data: Dictionary) -> bool:
 	rng.seed = int(data.seed)
 	rng.state = int(data.get("rng_state","0"))
 	player = Vector2(data.player[0],data.player[1])
+	previous_player=player
+	_create_residents()
+	if data.get("residents") is Array:residents=_unpack(data.residents)
 	if not world.walkable(player,22): player = world.start
 	var saved_velocity = data.get("player_velocity",[])
 	player_velocity = Vector2(saved_velocity[0],saved_velocity[1]) if saved_velocity is Array and saved_velocity.size()==2 else Vector2.ZERO

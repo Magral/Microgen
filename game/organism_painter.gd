@@ -2,6 +2,7 @@ extends RefCounted
 const Pigment = preload("res://core/pigment.gd")
 const Absorption = preload("res://game/absorption.gd")
 const Genome = preload("res://core/genome.gd")
+const TissueDamage = preload("res://game/tissue_damage.gd")
 var cache: Dictionary = {}
 var glow: GradientTexture2D
 
@@ -46,7 +47,7 @@ func anatomy(recipe: Dictionary) -> Dictionary:
 	cache[key] = data
 	return data
 
-func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs: Dictionary,time: float,role: String="player",detail: bool=true,motion=null,feeding: Array=[],tint: Color=Color(-1,-1,-1),reaction: float=0.0):
+func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs: Dictionary,time: float,role: String="player",detail: bool=true,motion=null,feeding: Array=[],tint: Color=Color(-1,-1,-1),reaction: float=0.0,health_ratio: float=1.0):
 	if not Genome.validate(recipe): return
 	var data = anatomy(recipe)
 	var body: Color = data.colors[0]
@@ -58,14 +59,20 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 		body=tint
 		edge=tint.lightened(0.38)
 		shadow=tint.darkened(0.42)
+	var distress = TissueDamage.severity(health_ratio)
+	var wounds = TissueDamage.wounds(recipe,health_ratio)
+	body=body.lerp(shadow,distress*0.18)
 	var base_phase = float(recipe.phase)
 	var turn = motion.angle_delta() if motion != null else 0.0
 	var phase = base_phase+turn
 	var facing = float(recipe.rotation)+turn
 	var breathe = 1+sin(time*1.7+phase)*0.025+reaction*0.055
-	var contour = data.contour if detail else data.contour_lod
+	var contour = TissueDamage.contour(data.contour if detail else data.contour_lod,recipe,health_ratio)
 	if motion != null: contour = motion.deform_points(contour,base_phase)
-	for entry in feeding: contour=Absorption.membrane(contour,entry.pose,radius)
+	for entry in feeding:
+		var pose=entry.pose.duplicate()
+		pose.bulge/=maxf(1.0,float(feeding.size()))
+		contour=Absorption.membrane(contour,pose,radius)
 	if int(organs.get("speed",0))>0:
 		for i in range(3):
 			_tendril(canvas,p,contour,radius,facing+PI+i*0.55-0.55,time+phase+i,0.9,edge,1.4)
@@ -88,19 +95,20 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 			canvas.draw_circle(q,radius*(0.07+reaction*0.09),Color(accent,0.18*reaction))
 	if detail:
 		for vein in data.veins:
-			var a = p+_deform(vein[0],motion,base_phase)*radius*breathe
-			var b = p+_deform(vein[1],motion,base_phase)*radius*breathe
+			var a = p+_tissue_point(vein[0],wounds,motion,base_phase)*radius*breathe
+			var b = p+_tissue_point(vein[1],wounds,motion,base_phase)*radius*breathe
 			canvas.draw_line(a,b,Color(edge,0.12),2.0,true)
 			canvas.draw_line(a+Vector2(0,-0.8),b+Vector2(0,-0.8),Color(accent,0.18),0.6,true)
 		for particle in data.particles:
-			var point = p+_deform(particle.pos,motion,base_phase)*radius*breathe
+			var point = p+_tissue_point(particle.pos,wounds,motion,base_phase)*radius*breathe
 			var color = accent if particle.type==0 else edge
 			canvas.draw_circle(point,particle.size*radius,Color(color,0.35))
 			if particle.type==0: canvas.draw_circle(point-Vector2.ONE*particle.size*radius*0.25,particle.size*radius*0.35,Color(color.lightened(0.3),0.6))
 	var n = 0
 	for nucleus in data.nuclei:
-		_nucleus(canvas,p+_deform(nucleus,motion,base_phase)*radius,radius*(0.235 if n==0 else 0.14),core,edge,time+phase+n,detail)
+		_nucleus(canvas,p+_tissue_point(nucleus,wounds,motion,base_phase)*radius,radius*(0.235 if n==0 else 0.14)*(1.0+distress*0.06*sin(time*(4.5+distress*2.0)+n*2.3)),core.lerp(shadow,distress*0.35),edge,time+phase+n,detail)
 		n += 1
+	if distress>0.001: _wounds(canvas,p,contour,radius*breathe,wounds,turn,time,body,edge,shadow,detail)
 	var loop = outer.duplicate()
 	loop.append(loop[0])
 	canvas.draw_polyline(loop,Color(edge,0.72),1.8 if detail else 1.2,true)
@@ -150,6 +158,40 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 		canvas.draw_line(indicator-Vector2(7,0),indicator+Vector2(7,0),Color("ed939c",0.9),1.6,true)
 	elif role=="prey":
 		canvas.draw_arc(p,radius*1.15,0.1,1.9,12,Color("e9d58e",0.65),1,true)
+
+func _tissue_point(point: Vector2,wounds: Array,motion,phase: float) -> Vector2:
+	return _deform(TissueDamage.deform_point(point,wounds),motion,phase)
+
+func _wounds(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,radius: float,wounds: Array,turn: float,time: float,body: Color,edge: Color,shadow: Color,detail: bool):
+	for wound in wounds:
+		var amount=float(wound.strength)
+		var lip=_anchor(contour,float(wound.angle)+turn)
+		var outward=lip.normalized()
+		var normal=outward.orthogonal()
+		var root=p+lip*radius
+		var reach=radius*(0.16+amount*0.15)
+		var width=radius*0.035*amount
+		var end=root-outward*reach
+		var kink=root-outward*reach*0.45+normal*reach*0.15
+		# Translucent fissures branch inward from torn membrane; the cytoplasm
+		# remains visible through them rather than producing opaque black holes.
+		var scar=PackedVector2Array([root-normal*width,kink-normal*width*0.6,end,kink+normal*width*0.6,root+normal*width])
+		canvas.draw_colored_polygon(scar,Color(shadow.darkened(0.5),amount*0.63))
+		canvas.draw_polyline(PackedVector2Array([root,kink,end]),Color(shadow.darkened(0.7),amount*0.78),maxf(0.7,radius*0.025*amount),true)
+		for side in [-1,1]:
+			var branch=kink-outward*reach*0.35+normal*side*reach*0.34
+			canvas.draw_line(kink,branch,Color(shadow,amount*0.65),maxf(0.7,radius*0.014),true)
+			var strand=root+normal*width*side
+			canvas.draw_line(strand,strand+outward*radius*0.09*amount+normal*side*radius*0.035,Color(edge,amount*0.75),0.9,true)
+		if detail or amount>0.6:
+			for i in range(3):
+				var travel=fposmod(time*(0.26+amount*0.12)+float(wound.index)*0.273+i/3.0,1.0)
+				var drift=outward*radius*(0.02+travel*(0.24+amount*0.16))+normal*sin(travel*3.0+float(i))*radius*0.07*travel
+				var opacity=sin(travel*PI)*amount*0.7
+				var mote_radius=radius*(0.018+0.026*amount)*(1.0-travel*0.58)
+				canvas.draw_line(root,root+drift*0.5,Color(body,opacity*0.13),mote_radius*1.2,true)
+				canvas.draw_circle(root+drift,mote_radius,Color(body.lightened(0.15),opacity))
+				canvas.draw_arc(root+drift,mote_radius,0.3,4.8,7,Color(edge,opacity*0.7),0.6,true)
 
 func _deform(point: Vector2,motion,phase: float) -> Vector2:
 	return point if motion == null else motion.deform_point(point,phase)

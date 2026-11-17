@@ -53,7 +53,7 @@ func _initialize():
 	s.paused = false
 	s.player += Vector2(300,0)
 	s.step(0.2, Vector2.ZERO)
-	check(part.progress > 0 and part.progress <= saved_progress, "interrupted digestion decays slowly")
+	check(part.progress > saved_progress or s.remains.is_empty(), "captured tissue keeps digesting after swimming away")
 	s.player = part.pos
 	advance(s, 2.2)
 	check(s.remains.size() < 3 and s.xp > 0, "sustained contact completes harvest")
@@ -69,6 +69,7 @@ func _initialize():
 	weak.build.unlocked.append("devour")
 	weak.build.apply("devour")
 	weak.spawn_enemy(weak.player, "hunter")
+	weak.enemies[0].r = 26.0
 	weak.enemies[0].hp = 3
 	var health = weak.hp
 	weak.step(0.2, Vector2.ZERO)
@@ -77,24 +78,21 @@ func _initialize():
 	weak.build.apply("tentacle")
 	var weak_health = weak.enemies[0].hp
 	weak._attack()
-	check(weak.enemies[0].hp < weak_health, "interrupted engulf target remains vulnerable to attacks")
+	check(weak.enemies[0].get("captured",false) and weak.enemies[0].hp==weak_health, "captured weak enemy remains securely held when player swims away")
 	var recovered = clean()
 	recovered.build.apply("devour")
 	recovered.spawn_enemy(recovered.player,"hunter")
 	var regenerator = recovered.enemies[0]
+	regenerator.r=26.0
 	regenerator.max_hp = 100.0
 	regenerator.hp = 17.9
 	regenerator.traits = ["regen"]
 	regenerator.speed = 0.0
 	var player_health = recovered.hp
 	for i in range(20): recovered._update_enemies(0.05)
-	check(regenerator.hp > 19.0 and regenerator.engulf > 0.0, "regeneration interrupts engulf while visual progress retracts")
-	check(recovered.hp < player_health, "regenerated enemy resumes contact damage")
-	check(recovered._nearest(100).get("id",-1) == regenerator.id, "regenerated enemy becomes targetable despite residual engulf")
-	recovered.build.apply("tentacle")
-	var recovered_health = regenerator.hp
-	recovered._attack()
-	check(regenerator.hp < recovered_health, "regenerated enemy receives attacks during engulf retraction")
+	check(recovered.enemies.is_empty(),"regenerating tissue is fully absorbed after guaranteed contact capture")
+	check(recovered.hp>=player_health,"captured regenerator cannot damage player")
+	check(recovered.xp==6,"captured regenerator pays exactly once")
 	var distant = clean()
 	distant.spawn_enemy(distant.player+Vector2(1700,0),"hunter")
 	distant.enemies[0].hp = 0.1
@@ -104,6 +102,7 @@ func _initialize():
 	var capped = clean()
 	for i in range(40):
 		capped.spawn_enemy(capped.player + Vector2(200,0), "hunter")
+		capped.enemies[0].r=26.0
 		capped._die(0, false)
 	dna = 0
 	bio = 0
@@ -145,10 +144,10 @@ func _initialize():
 	carried._die(0,false)
 	carried.remains.resize(1)
 	var tissue = carried.remains[0]
-	tissue.pos=carried.player+Vector2(30,0)
+	tissue.pos=carried.player+Vector2(20,0)
 	tissue.vel=Vector2.ZERO
 	tissue.duration=2.0
-	carried._update_remains(0.9)
+	carried._update_remains(0.1)
 	check(tissue.get("internal",false),"crossed tissue is captured inside organism")
 	var carried_id=tissue.id
 	carried.player+=Vector2(200,0)
@@ -164,7 +163,7 @@ func _initialize():
 	centered.remains[0].pos=centered.player
 	centered.remains[0].vel=Vector2.ZERO
 	centered.remains[0].duration=2.0
-	centered._update_remains(0.9)
+	centered._update_remains(0.1)
 	check(centered.remains[0].get("entry_distance",-1)==0.0,"central tissue preserves true entry distance without outward jump")
 	var old = s.snapshot()
 	old.erase("remains")
