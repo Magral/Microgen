@@ -2,6 +2,9 @@ extends SceneTree
 var failures = 0
 func _initialize(): call_deferred("run")
 func tap(button,index: int=0):
+	if button==null:
+		check(false,"requested touch button exists")
+		return
 	await process_frame
 	await process_frame
 	var touch = InputEventScreenTouch.new()
@@ -41,7 +44,7 @@ func run():
 	await tap(find_button(scene.hud.content,"Новый организм"))
 	check(scene.stage=="start","native touch activates start menu")
 	if scene.stage=="start":
-		await tap(find_button(scene.hud.content,"Начать эволюцию"))
+		await tap(find_button(scene.hud.content,"Начать жизнь"))
 		check(scene.stage=="game","native touch starts game")
 		scene.sim.gain_xp(12)
 		scene.show_level()

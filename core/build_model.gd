@@ -7,6 +7,7 @@ var stats: Dictionary = {"evolutions": {}}
 var biomass: int = 0
 var unlocked: Array = Catalog.base_unlocked()
 var branch: String = "predator"
+var branch_weight=1.35
 var _synergy_organs_hash: int = -1
 var _synergy_adaptations_hash: int = -1
 var _synergy_cache: Array = []
@@ -70,7 +71,7 @@ func offers(rng: RandomNumberGenerator, filter_branch: String = "") -> Array:
 		var weights = []
 		var total = 0.0
 		for id in pool:
-			var w = 1.35 if Catalog.item(id).get("branch", "") == branch else 1.0
+			var w = branch_weight if Catalog.item(id).get("branch", "") == branch else 1.0
 			weights.append(w)
 			total += w
 		var roll = rng.randf() * total

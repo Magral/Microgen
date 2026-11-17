@@ -18,6 +18,7 @@ func run():
 	scene.store.path = "user://test-ui-rewards.json"
 	scene.store.profile = scene.store.defaults()
 	scene.start_run(904)
+	scene.sim.build.organs={"tentacle":1}
 	scene.sim.gain_xp(12)
 	scene.show_level()
 	await process_frame

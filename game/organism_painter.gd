@@ -40,7 +40,7 @@ func _init():
 	glow.fill_to = Vector2(1,0.5)
 
 func anatomy(recipe: Dictionary) -> Dictionary:
-	var key = "%s:%s:%s:%s:%s" % [recipe.seed,recipe.identity,recipe.family,recipe.palette,recipe.rotation]
+	var key = hash(recipe)
 	if key in cache: return cache[key]
 	if cache.size()>=260: cache.erase(cache.keys()[0])
 	var rng = RandomNumberGenerator.new()
@@ -226,6 +226,7 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 			_soft_tissue(canvas,bud,radius*(0.19+0.02*sin(time*2+i)),Color(_organ_color("division",body,appearance),0.82),phase+i)
 			_soft_tissue(canvas,bud-Vector2.ONE*radius*0.015,radius*0.14,Color(edge,0.14),phase+i)
 			_nucleus(canvas,bud,radius*0.08,core,edge,time+i,false)
+	if role=="player" and detail:_hereditary_marks(canvas,p,contour,radius,time,phase,body,edge,appearance.get("hereditary_traits",[]))
 	if role=="player" and detail:_evolved_organs(canvas,p,contour,radius,organs,time,phase,body,edge,appearance)
 	if role=="player" and detail:_living_marks(canvas,p,contour,radius,organs,time,phase,body,edge,appearance)
 	if role=="player":
@@ -582,3 +583,19 @@ func _evolved_organs(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,r
 			canvas.draw_line(p+(q-p)*0.22,q,Color(col,0.4),radius*0.045,true)
 			_vesicle(canvas,q,r,body.lerp(col,fullness*0.75),true)
 			if i<charge:_soft_tissue(canvas,q,r*0.35,Color(col.lightened(0.45),0.8),time+i)
+
+func _hereditary_marks(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,radius: float,time: float,phase: float,body: Color,edge: Color,traits: Array):
+	if "sensory" in traits:
+		for i in range(6):_tendril(canvas,p,contour,radius,phase+i*TAU/6,time+i,0.20+sin(time*2+i)*0.035,edge.lerp(Color("c5e3f3"),0.5),1.2)
+	if "folds" in traits:
+		for i in range(3):
+			var a=phase+i*TAU/3
+			var points=PackedVector2Array()
+			for j in range(9):points.append(p+_anchor(contour,a+j*0.04)*radius*(0.50+sin(j*0.5+time*1.8)*0.08))
+			canvas.draw_polyline(points,Color(body.darkened(0.5),0.55),radius*0.06,true)
+			canvas.draw_polyline(points,Color(edge,0.42),radius*0.02,true)
+	if "receptive" in traits:
+		for i in range(3):
+			var a=phase+i*2.1;var q=p+_anchor(contour,a)*radius*0.55
+			canvas.draw_line(p,q,Color("c4abe7",0.35),1.2,true)
+			_soft_tissue(canvas,q,radius*(0.075+sin(time*2+i)*0.012),Color("dcabe6",0.55),time+i)

@@ -1,4 +1,10 @@
 extends Node2D
+const Legacy=preload("res://core/genome_legacy.gd")
+const GenomeView=preload("res://ui/genome_view.gd")
+const UpdateFeed=preload("res://core/update_feed.gd")
+const UpdateView=preload("res://ui/update_view.gd")
+var update_feed
+var imprint_origin="menu"
 const CystReveal=preload("res://ui/cyst_reveal.gd")
 var reward_reveal
 const Sim = preload("res://game/simulation.gd")
@@ -65,6 +71,9 @@ func _ready():
 	sound_player = AudioStreamPlayer.new()
 	sound_player.volume_db = -18
 	add_child(sound_player)
+	update_feed=UpdateFeed.new()
+	add_child(update_feed)
+	update_feed.state_changed.connect(_update_screen)
 	combat_audio = CombatAudio.new()
 	add_child(combat_audio)
 	show_menu()
@@ -134,6 +143,16 @@ func _ready():
 			sim.reward_queue=[{"token":"preview-reward","tier":2}]
 			show_reward()
 			reward_reveal.skip()
+		elif capture_mode in ["foundation-start","foundation-genome","inheritance"]:
+			store.path="user://test-preview-1.0.json";store.profile=store.defaults();store.bank(80)
+			for id in ["toxic","colony","sensory","elastic","folds","memory"]:store.research(id)
+			store.select_form("toxic");store.toggle_trait("sensory");store.toggle_trait("folds");store.focus_research("receptive")
+			sim.elapsed=125;sim.build.organs={"tentacle":4,"acid":3};sim.outcome="death"
+			sim.combat_stats.damage_dealt=200;sim.combat_stats.organs={"tentacle":{"damage":150},"acid":{"damage":50}}
+			var specimen_profile=store.profile.duplicate(true);Legacy.complete(specimen_profile,sim);store.write_profile(specimen_profile)
+			if capture_mode=="inheritance":show_imprints("menu")
+			elif capture_mode=="foundation-genome":show_genome()
+			else:show_start()
 		elif capture_mode == "cyst":
 			sim.reward_queue=[{"token":"preview-cyst","tier":3}]
 			show_reward()
@@ -272,6 +291,7 @@ func clear_stick():
 	if view!=null: view.joystick_visible = false
 
 func set_stage(value: String):
+	if stage=="updates" and value!="updates" and update_feed!=null:update_feed.cancel()
 	if value!="reward":reward_reveal=null
 	stage = value
 	clear_stick()
@@ -285,10 +305,10 @@ func show_menu():
 	sim.paused = true
 	view.sim = sim
 	hud.game_visible(false)
-	var box = hud.open("МИКРОГЕН", "Маленькая жизнь. Непредсказуемая эволюция.\nТестовая версия 0.11.0 · офлайн",740)
+	var box = hud.open("МИКРОГЕН", "Маленькая жизнь. Непредсказуемая эволюция.\nВерсия 1.0.0 · игра работает без интернета",740)
 	box.add_child(hud.label("Собери организм, который сможет выжить.",25,Color("9ce3cf"),true))
 	box.add_child(hud.label("Исследуй случайный микромир, поглощай ДНК и соединяй мутации. Атаки автоматические — управляй только движением.",20,Color("a3bfc0"),true))
-	if not store.profile.checkpoint.is_empty(): box.add_child(hud.button("Продолжить забег",continue_run,true))
+	if not store.profile.checkpoint.is_empty(): box.add_child(hud.button("Завершить итоги жизни" if str(store.profile.checkpoint.get("outcome",""))!="" else "Продолжить забег",continue_run,true))
 	box.add_child(hud.button("Новый организм",show_start,true))
 	var row = hud.row()
 	box.add_child(row)
@@ -296,6 +316,8 @@ func show_menu():
 		var b = hud.button(entry[0],entry[1])
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(b)
+	box.add_child(hud.button("Обновления",show_updates))
+	if not store.profile.legacy.pending.is_empty():box.add_child(hud.button("Наследие прошлой жизни",func():show_imprints("menu"),true))
 	box.add_child(hud.label("Ядра наследия: %d   ·   Забеги: %d   ·   Победы: %d" % [store.profile.cores,store.profile.runs,store.profile.wins],18,Color("ccb2e7")))
 	var footer_actions=hud.row()
 	box.add_child(footer_actions)
@@ -342,25 +364,52 @@ func show_gallery():
 		specimen.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		grid.add_child(specimen)
 
+func _legacy_preview():
+	var specimen=Sim.new()
+	specimen.new_run(14481,store.profile.unlocked,store.profile.upgrades,store.profile.legacy.selected_form,Legacy.loadout(store.profile))
+	specimen.paused=true
+	return specimen
+
+func _legacy_edit(action: String,value="",screen: String="start"):
+	var scroll=0 if hud.scroll_container==null else hud.scroll_container.scroll_vertical
+	var ok=false
+	match action:
+		"form":ok=store.select_form(str(value))
+		"trait":ok=store.toggle_trait(str(value))
+		"imprint":ok=store.select_imprint(str(value))
+		"reroll":ok=store.reroll_morphology()
+		"research":ok=store.research(str(value))
+		"focus":ok=store.focus_research(str(value))
+		"upgrade":ok=store.buy_upgrade(str(value))
+		"save_preset":ok=store.save_preset("Набор %d" % (int(value)+1))
+		"load_preset":ok=store.load_preset(int(value))
+	if not ok:message(store.last_error if store.last_error!="" else "Действие сейчас недоступно.",4)
+	if screen=="genome":show_genome()
+	else:show_start()
+	hud.scroll_container.set_deferred("scroll_vertical",scroll)
+
 func show_start():
 	set_stage("start")
-	var box = hud.open("Наследственный геном", "Выбранная ветка немного чаще встречается при прокачке. Мир создаётся заново для каждого организма.",800)
-	if not store.profile.checkpoint.is_empty(): box.add_child(hud.label("Новый забег заменит незавершённый. Открытия и ядра сохранятся.",18,Color("e9b99b"),true))
-	var row = hud.row()
-	box.add_child(row)
-	for branch in ["predator","toxic","colony"]:
-		var title = {"predator":"Хищник","toxic":"Токсин","colony":"Колония"}[branch]
-		var b = hud.button(("● " if selected_branch==branch else "")+title,func(): selected_branch=branch; show_start())
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(b)
-	box.add_child(hud.label("Хищник: щупальца, шипы, поглощение.\nТоксин: кислота, заражение, ядовитый след.\nКолония: деление; сначала открой его в разделе «Геном».",20,Color("b8d2cf"),true))
-	box.add_child(hud.button("Начать эволюцию",func(): start_run(),true))
-	box.add_child(hud.button("Назад",show_menu))
+	var box=hud.open("Новое поколение", "Выбери основу, до двух признаков и один отпечаток. Остальные мутации возникнут в новой жизни.")
+	if not store.profile.checkpoint.is_empty():box.add_child(hud.label("Начало новой жизни заменит незавершённый забег. Наследие сохранится.",22,Color("e9b99b"),true))
+	GenomeView.populate_start(hud,box,store,_legacy_preview(),{
+		"form":func(id):_legacy_edit("form",id),"trait":func(id):_legacy_edit("trait",id),
+		"imprint":func(id):_legacy_edit("imprint",id),"reroll":func():_legacy_edit("reroll"),
+		"save_preset":func(index):_legacy_edit("save_preset",index),"load_preset":func(index):_legacy_edit("load_preset",index),
+		"start":func():start_run(),"imprints":func():show_imprints("start"),"back":show_menu})
+
 
 func start_run(seed_value: int = -1):
+	if str(store.profile.checkpoint.get("outcome",""))!="":
+		continue_run()
+		return
+	if not Legacy.can_start(store.profile):
+		show_imprints("start")
+		message("Память заполнена. Сохраните один ожидающий отпечаток, чтобы начать новую жизнь.",6)
+		return
 	if seed_value<0: seed_value = int(Time.get_unix_time_from_system()*1000)%2147483647
 	sim = Sim.new()
-	sim.new_run(seed_value,store.profile.unlocked,store.profile.upgrades,selected_branch)
+	sim.new_run(seed_value,store.profile.unlocked,store.profile.upgrades,store.profile.legacy.selected_form,Legacy.loadout(store.profile))
 	view.sim = sim
 	checkpoint_timer = 0
 	deferred_choices = false
@@ -390,7 +439,7 @@ func continue_run():
 	elif not deferred_choices and sim.pending_levels>0: show_level()
 
 func save_run():
-	if sim==null or stage in ["menu","start","genome","atlas","help","results","gallery"]: return
+	if sim==null or stage not in ["game","pause","development","map","shop","level","reward","replace","save_error"]: return
 	var next = store.profile.duplicate(true)
 	next.checkpoint = sim.snapshot()
 	for id in sim.build.organs:
@@ -427,6 +476,17 @@ func finish_run():
 			next.cores += event.amount
 	var token = sim.run_id+":finished"
 	if token not in next.credited:
+		if not Legacy.complete(next,sim):
+			var deferred=store.profile.duplicate(true)
+			deferred.checkpoint=sim.snapshot()
+			if not store.write_profile(deferred):
+				set_stage("save_error")
+				var error_box=hud.open("Не удалось сохранить завершённую жизнь",store.last_error)
+				error_box.add_child(hud.button("Повторить",finish_run,true))
+				return
+			show_imprints("results")
+			message("Выберите ожидающий отпечаток. Итоги этой жизни сохранены и будут зачислены после выбора.",6)
+			return
 		next.credited.append(token)
 		next.runs += 1
 		if sim.outcome=="victory": next.wins += 1
@@ -449,7 +509,10 @@ func finish_run():
 	box.add_child(hud.label("%02d:%02d  ·  Уровень %d  ·  Поглощено и побеждено: %d" % [int(sim.elapsed)/60,int(sim.elapsed)%60,sim.level,sim.kills],24,Color("9ee0cc"),true))
 	box.add_child(hud.label("Ядра наследия: %d\nИзученные синергии: %d/%d" % [store.profile.cores,store.profile.synergies.size(),Catalog.SYNERGIES.size()],22))
 	box.add_child(hud.label(Development.combat_summary(sim),21,Color("b8dacf"),true))
-	box.add_child(hud.button("Новый организм",show_start,true))
+	var progress=Legacy.focus_progress(store.profile)
+	if str(progress.get("id",""))!="":box.add_child(hud.label("Цель: "+Legacy.RESEARCH[progress.id].name+" · не хватает %d ядер" % int(progress.remaining),22,Color("cbb4e7"),true))
+	if not store.profile.legacy.pending.is_empty():box.add_child(hud.button("Сохранить отпечаток этой линии",func():show_imprints("results"),true))
+	box.add_child(hud.button("Новое поколение",show_start,true))
 	box.add_child(hud.button("Развить геном",show_genome))
 	box.add_child(hud.button("В меню",show_menu))
 
@@ -704,19 +767,35 @@ func show_map():
 
 func show_genome():
 	set_stage("genome")
-	var box = hud.open("Наследственный геном", "Ядра: %d. Открытия сохраняются после гибели; бонусы имеют предел." % store.profile.cores)
-	var division_unlocked = "division" in store.profile.unlocked
-	var b = hud.button("Деление: открыто" if division_unlocked else "Открыть деление · 8 ядер",func(): store.unlock("division"); show_genome(),true)
-	b.disabled = division_unlocked or store.profile.cores<8
-	box.add_child(b)
-	box.add_child(hud.label("Деление + ядовитый след → Токсичная колония",18,Color("cfb0e6"),true))
-	for id in ["health","collect","regen"]:
-		var rank = int(store.profile.upgrades[id])
-		var title = {"health":"Жизнеспособность: +5 здоровья","collect":"Чувствительность: +8 к радиусу рецепторов","regen":"Обмен веществ: +0,1 HP/сек."}[id]
-		var btn = hud.button("%s  ·  %d/5  ·  %s" % [title,rank,"Максимум" if rank>=5 else str(4+rank*4)+" ядер"],func(): store.buy_upgrade(id); show_genome())
-		btn.disabled = rank>=5 or store.profile.cores<4+rank*4
-		box.add_child(btn)
-	box.add_child(hud.button("В меню",show_menu))
+	var box=hud.open("Наследственный геном","Исследования и открытия сохраняются после гибели. Ядра: %d." % store.profile.cores)
+	GenomeView.populate_genome(hud,box,store,_legacy_preview(),{
+		"research":func(id):_legacy_edit("research",id,"genome"),"focus":func(id):_legacy_edit("focus",id,"genome"),
+		"upgrade":func(id):_legacy_edit("upgrade",id,"genome"),"imprints":func():show_imprints("genome"),"back":show_menu})
+
+func show_imprints(origin: String="menu"):
+	imprint_origin=origin
+	set_stage("inherit")
+	var box=hud.open("Генетические отпечатки","Выбор можно отложить крестиком. Новые жизни не стирают ожидающее наследие.")
+	GenomeView.populate_imprints(hud,box,store,{"claim":func(id):
+		if not store.claim_imprint(id):message(store.last_error if store.last_error!="" else "Отпечаток недоступен",4)
+		show_imprints(imprint_origin),"back":_close_imprints})
+
+func _close_imprints():
+	if imprint_origin=="start":show_start()
+	elif imprint_origin=="genome":show_genome()
+	elif imprint_origin=="results" and sim!=null and sim.outcome!="":finish_run()
+	else:show_menu()
+
+func show_updates():
+	set_stage("updates")
+	_update_screen()
+
+func _update_screen():
+	if stage!="updates":return
+	var box=hud.open("Обновления Микрогена","Проверка выполняется только по кнопке. Игре интернет не нужен.")
+	UpdateView.populate(hud,box,update_feed,{"check":update_feed.check_updates,"cancel":update_feed.cancel,
+		"open_download":update_feed.open_download,"open_release":update_feed.open_release,"back":show_menu})
+
 
 func show_atlas():
 	set_stage("atlas")
@@ -776,7 +855,8 @@ func _notification(what):
 		elif stage=="development": close_development()
 		elif stage in ["level","reward","replace"]: close_modal()
 		elif stage in ["pause","map","shop"]: resume_game()
-		elif stage in ["genome","atlas","help","start","gallery"]: show_menu()
+		elif stage=="inherit":_close_imprints()
+		elif stage in ["genome","atlas","help","start","gallery","updates"]: show_menu()
 	elif what==NOTIFICATION_WM_CLOSE_REQUEST:
 		save_run()
 		get_tree().quit()
@@ -786,6 +866,7 @@ func _capture():
 	var image = get_viewport().get_texture().get_image()
 	var result = image.save_png(capture_path)
 	print("CAPTURE: ",capture_path," status=",result)
+	if capture_mode in ["foundation-start","foundation-genome","inheritance"]:store.clear_test_files()
 	get_tree().quit()
 
 func open_pending():
@@ -798,6 +879,8 @@ func close_modal():
 		"menu": get_tree().quit()
 		"start","genome","atlas","help","gallery","results": show_menu()
 		"development": close_development()
+		"inherit": _close_imprints()
+		"updates": show_menu()
 		"level","reward","replace":
 			deferred_choices = true
 			save_run()

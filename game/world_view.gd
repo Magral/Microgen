@@ -269,6 +269,15 @@ func _draw():
 		var q=p+Vector2(-width/2,(12.0+tier*3.0)*zoom*1.3+18)
 		draw_string(font,q+Vector2.ONE,label,HORIZONTAL_ALIGNMENT_LEFT,-1,18,Color(0.02,0.06,0.08,0.9))
 		draw_string(font,q,label,HORIZONTAL_ALIGNMENT_LEFT,-1,18,RewardArt.color(tier))
+	if "sensory" in sim.inherited_traits:
+		var sensed={};var best=pow(sim.sensing_radius(),2)
+		for cyst in sim.cysts:
+			var distance=sim.player.distance_squared_to(cyst.pos)
+			if not cyst.get("captured",false) and distance<best:best=distance;sensed=cyst
+		if not sensed.is_empty():
+			var q=size*Vector2(0.5,0.51)+(sensed.pos-sim.player).normalized()*180
+			draw_circle(q,6,RewardArt.color(int(sensed.tier)))
+			draw_string(font,q+Vector2(-60,25),"Ценная ткань · %d"%sqrt(best),HORIZONTAL_ALIGNMENT_LEFT,-1,20,RewardArt.color(int(sensed.tier)))
 	_draw_incoming_damage(size)
 	for enemy in sim.enemies:
 		if not area.has_point(enemy.pos) or enemy.get("captured",false):continue
@@ -348,7 +357,7 @@ func _draw_player():
 		draw_circle(p,(75+sim.build.rank("acid")*9)*sim.ability_scale(),Color(0.55,0.83,0.3,0.04))
 		draw_arc(p,(75+sim.build.rank("acid")*9)*sim.ability_scale(),0,TAU,48,Color(0.6,0.85,0.4,0.14),1.0,true)
 	var anatomy = player_anatomy if not player_anatomy.is_empty() else sim.build.organs.merged(sim.build.adaptations,true)
-	var appearance={"qualities":sim.build.qualities,"evolved":sim.build.stats.evolutions,"growth":evolution_growth,"spore_charge":sim.spore_charge,"mantle_flash":0.0,"lashes":{}}
+	var appearance={"qualities":sim.build.qualities,"evolved":sim.build.stats.evolutions,"hereditary_traits":sim.inherited_traits,"growth":evolution_growth,"spore_charge":sim.spore_charge,"mantle_flash":0.0,"lashes":{}}
 	for effect in sim.effects:
 		if effect.type=="mantle":appearance.mantle_flash=sin(PI*(1-float(effect.life)/float(effect.max)))
 		if effect.type=="lash":

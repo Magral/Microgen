@@ -6,6 +6,9 @@ const Genome = preload("res://core/genome.gd")
 const TissueDamage=preload("res://game/tissue_damage.gd")
 const CombatTissue=preload("res://core/combat_tissue.gd")
 const CombatStats=preload("res://core/combat_stats.gd")
+const Heredity=preload("res://game/heredity.gd")
+var run_loadout: Dictionary={}
+var inherited_traits: Array=[]
 const MouthShape=preload("res://game/mouth_shape.gd")
 var _cached_contact_unit=PackedVector2Array()
 const EvolutionAnatomy=preload("res://game/evolution_anatomy.gd")
@@ -76,20 +79,31 @@ var rerolls = 0
 var boss_marker = Vector2.ZERO
 var last_tile = Vector2i(-100,-100)
 
-func new_run(seed_value: int, unlocked: Array = Catalog.base_unlocked(), permanent: Dictionary = {}, selected_branch: String = "predator"):
+func new_run(seed_value: int, unlocked: Array = Catalog.base_unlocked(), permanent: Dictionary = {}, selected_branch: String = "predator",loadout: Dictionary={}):
+	run_loadout=Heredity.normalize(loadout)
+	inherited_traits=Heredity.traits(run_loadout)
 	spore_charge=0
 	combat_stats=CombatStats.create();last_damage={};damage_markers=[];cysts=[];reward_queue=[];reward_options=[];offer_quality={};claimed_rewards=[]
 	rng.seed = seed_value
 	world.generate(seed_value)
-	player_genome = Genome.create(seed_value,0,"player",0)
+	player_genome = Genome.create(seed_value,0,"player",0) if run_loadout.is_empty() else Heredity.recipe(run_loadout)
 	facing=float(player_genome.rotation)
 	_cached_contact_polygon=PackedVector2Array()
 	contact_contour=PackedVector2Array()
 	tissue_pigment = Pigment.create(Genome.colors(player_genome)[0])
+	if run_loadout.has("ancestry_recipe"):Pigment.feed(tissue_pigment,Genome.colors(run_loadout.ancestry_recipe)[0],6.0)
 	build = Build.new()
 	build.unlocked = unlocked.duplicate()
 	build.branch = selected_branch
-	build.apply("tentacle")
+	if run_loadout.is_empty():build.apply("tentacle")
+	else:
+		build.branch=str(run_loadout.branch)
+		var starter={"predator":"devour","toxic":"acid","colony":"division"}[run_loadout.form]
+		if starter not in build.unlocked:build.unlocked.append(starter)
+		build.apply(starter)
+		var imprint=str(run_loadout.imprint)
+		if imprint in Catalog.ORGANS and imprint in build.unlocked and build.rank(imprint)==0:build.apply(imprint)
+	build.branch_weight=1.75 if "receptive" in inherited_traits else 1.35
 	upgrades = permanent.duplicate()
 	max_hp = 100.0+float(upgrades.get("health",0))*5.0
 	hp = max_hp
@@ -153,7 +167,7 @@ func hit_enemy(enemy: Dictionary,amount: float,source: String="unknown") -> floa
 	return dealt
 
 func heal_player(amount: float):
-	var actual=maxf(0.0,minf(max_hp-hp,amount))
+	var actual=maxf(0.0,minf(max_hp-hp,amount*(0.9 if "folds" in inherited_traits else 1.0)))
 	hp+=actual
 	CombatStats.record_heal(combat_stats,actual)
 	if actual<=0:return
@@ -166,7 +180,7 @@ func heal_player(amount: float):
 
 func hurt_player(amount: float,source: Dictionary={}):
 	if hp<=0:return
-	var incoming=maxf(0.0,amount)
+	var incoming=maxf(0.0,amount)*(1.08 if source.get("kind","")=="collision" and "elastic" in inherited_traits else 1.0)
 	var damage=incoming*(1.0-build.passive("armor"))
 	if build.rank("barrier")>0 and cooldowns.get("barrier",0)<=0:
 		damage=maxf(0.0,damage-Catalog.scaled_damage(8+build.rank("barrier")*6,build.rank("barrier"))*build.power("barrier"))
@@ -311,7 +325,7 @@ func _touches(position: Vector2,object_radius: float=0.0) -> bool:
 
 func attraction_radius() -> float:
 	var rank=build.rank("magnet")
-	return body_radius() if rank<=0 else body_radius()+build.passive("magnet")+float(upgrades.get("collect",0))*8
+	return body_radius()+build.passive("magnet")+float(upgrades.get("collect",0))*8
 
 func _capture(item: Dictionary):
 	item.captured=true
@@ -320,6 +334,7 @@ func _capture(item: Dictionary):
 	item.entry_distance=player.distance_to(item.pos)
 	item.progress=clampf(float(item.get("progress",0)),0.0,0.7)
 	item.duration=minf(0.65,float(item.get("duration",0.55)))
+	if item.has("material") and "folds" in inherited_traits:item.duration*=0.8
 	item.vel=Vector2.ZERO
 
 func body_color() -> Color:
@@ -346,7 +361,7 @@ func xp_needed() -> float:
 	return 12.0+float(level-1)*6.0
 
 func gain_xp(amount: float):
-	xp += amount*(1.0+build.passive("metabolism"))
+	xp += amount*(1.0+build.passive("metabolism"))*(0.95 if "receptive" in inherited_traits else 1.0)
 	while xp >= xp_needed():
 		xp -= xp_needed()
 		level += 1
@@ -360,9 +375,11 @@ func step(dt: float,direction: Vector2):
 	var condition = world.conditions[world.biome(player)]
 	previous_player=player
 	var speed = (72.0+body_radius()*0.6)*(1.0+build.passive("speed"))*(0.85 if condition == 1 else 1.0)
-	var desired = direction.limit_length()*speed
-	var response = exp(-dt/0.2)
-	var travel = desired*dt+(player_velocity-desired)*0.2*(1.0-response)
+	var inertia=0.13 if "elastic" in inherited_traits else 0.2
+	if "sensory" in inherited_traits:speed*=0.95
+	var desired=direction.limit_length()*speed
+	var response = exp(-dt/inertia)
+	var travel = desired*dt+(player_velocity-desired)*inertia*(1.0-response)
 	player_velocity = desired+(player_velocity-desired)*response
 	bite_flash=maxf(0.0,bite_flash-dt*4.5)
 	player = world.move_body(player,travel,minf(26.0,body_radius()*0.65))
@@ -630,7 +647,7 @@ func _update_remains(dt: float):
 			part.pos=world.move_body(part.pos,part.vel*dt,part.r*0.5)
 			part.vel*=exp(-dt/0.8)
 			if _touches(part.pos,part.r): _capture(part)
-			elif build.rank("magnet")>0 and player.distance_to(part.pos)<attraction_radius():part.pos=part.pos.move_toward(player,dt*(70+build.rank("magnet")*25))
+			elif (build.rank("magnet")>0 or int(upgrades.get("collect",0))>0) and player.distance_to(part.pos)<attraction_radius():part.pos=part.pos.move_toward(player,dt*(70+build.rank("magnet")*25))
 		if not part.get("captured",false): continue
 		if digesting_id==-1:digesting_id=int(part.id)
 		part.pos=player+Vector2.from_angle(float(part.get("entry_angle",0)))*body_radius()*0.35
@@ -894,7 +911,7 @@ func _collect(dt: float):
 		if not item.get("captured",false):
 			if item.type=="heal" and hp>=max_hp:continue
 			if _touches(item.pos,7.0):_capture(item)
-			elif build.rank("magnet")>0 and player.distance_to(item.pos)<attraction_radius():item.pos=item.pos.move_toward(player,dt*(95+35*build.rank("magnet")))
+			elif (build.rank("magnet")>0 or int(upgrades.get("collect",0))>0) and player.distance_to(item.pos)<attraction_radius():item.pos=item.pos.move_toward(player,dt*(95+35*build.rank("magnet")))
 		if not item.get("captured",false):continue
 		item.pos=player+Vector2.from_angle(float(item.get("entry_angle",0)))*body_radius()*0.3
 		item.progress=minf(1.0,float(item.progress)+dt/float(item.duration))
@@ -939,7 +956,7 @@ func nearby_colony() -> int:
 	return -1
 
 func snapshot() -> Dictionary:
-	return {"version":1,"spore_charge":spore_charge,"combat_stats":combat_stats.duplicate(true),"last_damage":last_damage.duplicate(true),"cysts":_pack(cysts),"reward_queue":reward_queue.duplicate(true),"reward_options":reward_options.duplicate(true),"offer_quality":offer_quality.duplicate(),"claimed_rewards":claimed_rewards.duplicate(),"player_genome":player_genome.duplicate(true),"minibosses_spawned":minibosses_spawned,"next_miniboss_at":next_miniboss_at,"facing":facing,"tissue_pigment":tissue_pigment.duplicate(true),"residents":_pack(residents),"outcome":outcome,"events":_pack(events),"seed":world.seed_value,"rng_state":str(rng.state),"run_id":run_id,"player":_vec(player),"player_velocity":_vec(player_velocity),"remains":_pack(remains),"digesting_id":digesting_id,"hp":hp,"max_hp":max_hp,"elapsed":elapsed,"xp":xp,"level":level,"pending_levels":pending_levels,"build":build.to_dict(),"enemies":_pack(enemies),"pickups":_pack(pickups),"colonies":_pack(world.colonies),"nests":_pack(world.nests),"explored":explored.keys(),"boss_spawned":boss_spawned,"kills":kills,"cores_found":cores_found,"next_id":next_id,"upgrades":upgrades,"cooldowns":cooldowns.duplicate(),"offers":current_offers.duplicate(),"rerolls":rerolls,"fields":_pack(fields),"shots":_pack(shots)}
+	return {"version":1,"run_loadout":run_loadout.duplicate(true),"spore_charge":spore_charge,"combat_stats":combat_stats.duplicate(true),"last_damage":last_damage.duplicate(true),"cysts":_pack(cysts),"reward_queue":reward_queue.duplicate(true),"reward_options":reward_options.duplicate(true),"offer_quality":offer_quality.duplicate(),"claimed_rewards":claimed_rewards.duplicate(),"player_genome":player_genome.duplicate(true),"minibosses_spawned":minibosses_spawned,"next_miniboss_at":next_miniboss_at,"facing":facing,"tissue_pigment":tissue_pigment.duplicate(true),"residents":_pack(residents),"outcome":outcome,"events":_pack(events),"seed":world.seed_value,"rng_state":str(rng.state),"run_id":run_id,"player":_vec(player),"player_velocity":_vec(player_velocity),"remains":_pack(remains),"digesting_id":digesting_id,"hp":hp,"max_hp":max_hp,"elapsed":elapsed,"xp":xp,"level":level,"pending_levels":pending_levels,"build":build.to_dict(),"enemies":_pack(enemies),"pickups":_pack(pickups),"colonies":_pack(world.colonies),"nests":_pack(world.nests),"explored":explored.keys(),"boss_spawned":boss_spawned,"kills":kills,"cores_found":cores_found,"next_id":next_id,"upgrades":upgrades,"cooldowns":cooldowns.duplicate(),"offers":current_offers.duplicate(),"rerolls":rerolls,"fields":_pack(fields),"shots":_pack(shots)}
 
 func restore(data: Dictionary) -> bool:
 	if data.get("version",0) != 1 or not data.get("player",null) is Array: return false
@@ -975,6 +992,9 @@ func restore(data: Dictionary) -> bool:
 	level = int(data.get("level",1))
 	pending_levels = int(data.get("pending_levels",0))
 	build.from_dict(data.get("build",{}))
+	run_loadout=Heredity.normalize(data.get("run_loadout",{}) if data.get("run_loadout",{}) is Dictionary else {})
+	inherited_traits=Heredity.traits(run_loadout)
+	build.branch_weight=1.75 if "receptive" in inherited_traits else 1.35
 	spore_charge=clampi(int(data.get("spore_charge",0)),0,2) if build.evolved("infection") else 0
 	for id in Catalog.base_unlocked():
 		if not id in build.unlocked:build.unlocked.append(id)
@@ -1158,3 +1178,6 @@ func _infected_meal():
 	spore_charge=0
 	_field(player,body_radius()*2.3,Catalog.scaled_damage(4+build.rank("infection")*2,build.rank("infection")),2.4,"spore")
 	_effect({"type":"womb_burst","pos":player,"r":body_radius()*2.3,"life":1.0,"max":1.0})
+
+func sensing_radius() -> float:
+	return 400.0 if "sensory" in inherited_traits else 240.0

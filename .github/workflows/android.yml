@@ -82,25 +82,38 @@ jobs:
         if: steps.source.outputs.ready == 'true'
         run: python3 ci/run_tests.py
 
-      - name: Build signed test APK
+      - name: Build signed release APK
         if: steps.source.outputs.ready == 'true'
         run: |
-          godot --headless --path . --export-debug Android build/Microgen.apk 2>&1 | tee build/logs/export.log
+          godot --headless --path . --export-release Android build/Microgen.apk 2>&1 | tee build/logs/export.log
           test -s build/Microgen.apk
-          if grep -Eq 'SCRIPT ERROR:|ERROR:' build/logs/export.log; then
-            exit 1
-          fi
-          "$ANDROID_HOME/build-tools/35.0.1/apksigner" verify --verbose build/Microgen.apk
+          if grep -Eq 'SCRIPT ERROR:|ERROR:' build/logs/export.log; then exit 1; fi
+          "$ANDROID_HOME/build-tools/35.0.1/apksigner" verify --verbose --print-certs build/Microgen.apk | tee build/APK_SIGNATURE.txt
           "$ANDROID_HOME/build-tools/35.0.1/aapt" dump badging build/Microgen.apk > build/APK_METADATA.txt
           "$ANDROID_HOME/build-tools/35.0.1/aapt" dump permissions build/Microgen.apk > build/APK_PERMISSIONS.txt
-          if grep -Eq 'android.permission.(INTERNET|ACCESS_NETWORK_STATE)' build/APK_PERMISSIONS.txt; then
-            echo 'Unexpected network permission in offline game'
+          apk_certificate_sha256=$(keytool -exportcert -alias androiddebugkey -keystore tools/development.keystore -storepass android | sha256sum | cut -d' ' -f1)
+          grep -q "certificate SHA-256 digest: $apk_certificate_sha256" build/APK_SIGNATURE.txt
+          if grep -Eq 'android.permission.(ACCESS_NETWORK_STATE|REQUEST_INSTALL_PACKAGES|WRITE_EXTERNAL_STORAGE)' build/APK_PERMISSIONS.txt; then
+            echo 'Unexpected permission in release game'
+            exit 1
+          fi
+          grep -q 'android.permission.INTERNET' build/APK_PERMISSIONS.txt
+          grep -q "versionCode='100'" build/APK_METADATA.txt
+          grep -q "versionName='1.0.0'" build/APK_METADATA.txt
+          if "$ANDROID_HOME/build-tools/35.0.1/aapt" dump xmltree build/Microgen.apk AndroidManifest.xml | grep -q 'android:debuggable.*0xffffffff'; then
+            echo 'Release must not be debuggable'
             exit 1
           fi
           git rev-parse HEAD > build/SOURCE_COMMIT.txt
           git archive --format=zip --prefix=Microgen/ -o build/Microgen-source.zip HEAD
           cd build
           sha256sum Microgen.apk Microgen-source.zip > SHA256SUMS.txt
+          python3 - <<'PYMANIFEST'
+          import hashlib,json,pathlib
+          apk=pathlib.Path('Microgen.apk')
+          data={'version':'1.0.0','version_code':100,'apk_url':'https://github.com/Magral/Microgen/releases/download/v1.0.0/Microgen.apk','size_bytes':apk.stat().st_size,'sha256':hashlib.sha256(apk.read_bytes()).hexdigest()}
+          pathlib.Path('microgen-update.json').write_text(json.dumps(data,indent=2))
+          PYMANIFEST
 
       - name: Upload APK and sources
         if: steps.source.outputs.ready == 'true'
@@ -109,11 +122,13 @@ jobs:
           name: Microgen-android-${{ github.run_number }}
           path: |
             build/Microgen.apk
+            build/microgen-update.json
             build/Microgen-source.zip
             build/SHA256SUMS.txt
             build/SOURCE_COMMIT.txt
             build/APK_METADATA.txt
             build/APK_PERMISSIONS.txt
+            build/APK_SIGNATURE.txt
             build/Microgen-game.png
             build/Microgen-habitat.png
             build/Microgen-rewards.png
@@ -122,22 +137,25 @@ jobs:
             build/Microgen-mutations.png
             build/Microgen-cyst.png
             build/Microgen-anatomy.png
+            build/Microgen-evolutions.png
+            build/Microgen-foundation-start.png
+            build/Microgen-foundation-genome.png
+            build/Microgen-inheritance.png
             build/Microgen-gallery.png
             build/Microgen-development.png
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish test release
-        if: steps.source.outputs.ready == 'true' && github.event_name != 'pull_request'
+      - name: Publish stable 1.0 release
+        if: steps.source.outputs.ready == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          tag="test-$GITHUB_RUN_NUMBER-$GITHUB_RUN_ATTEMPT"
-          gh release create "$tag" build/Microgen.apk build/Microgen-source.zip build/SHA256SUMS.txt build/Microgen-game.png build/Microgen-habitat.png build/Microgen-rewards.png build/Microgen-feedback.png build/Microgen-journal.png build/Microgen-mutations.png build/Microgen-cyst.png build/Microgen-anatomy.png build/Microgen-gallery.png build/Microgen-development.png \
+          tag="v1.0.0"
+          gh release create "$tag" build/microgen-update.json build/Microgen-evolutions.png build/Microgen-foundation-start.png build/Microgen-foundation-genome.png build/Microgen-inheritance.png build/Microgen.apk build/Microgen-source.zip build/SHA256SUMS.txt build/Microgen-game.png build/Microgen-habitat.png build/Microgen-rewards.png build/Microgen-feedback.png build/Microgen-journal.png build/Microgen-mutations.png build/Microgen-cyst.png build/Microgen-anatomy.png build/Microgen-gallery.png build/Microgen-development.png \
             --target "$(git rev-parse HEAD)" \
-            --title "Микроген · тестовая сборка $GITHUB_RUN_NUMBER" \
-            --notes-file RELEASE_NOTES.md \
-            --prerelease
+            --title "Микроген 1.0.0 · Живое наследие" --latest \
+            --notes-file RELEASE_NOTES.md
           echo '## APK собран' >> "$GITHUB_STEP_SUMMARY"
           echo 'Скачайте APK в разделе Releases или артефактах этого запуска.' >> "$GITHUB_STEP_SUMMARY"
 

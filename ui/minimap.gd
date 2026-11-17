@@ -69,7 +69,7 @@ func _draw():
 
 func _visibility(position: Vector2) -> float:
 	var tile=sim.world.tile(position)
-	return 1.0 if tile.y*World.W+tile.x in sim.explored else 0.45
+	return 1.0 if tile.y*World.W+tile.x in sim.explored or sim.player.distance_squared_to(position)<sim.sensing_radius()*sim.sensing_radius() else 0.45
 
 func _box() -> StyleBoxFlat:
 	var s = StyleBoxFlat.new()
