@@ -30,6 +30,7 @@ var message_timer = 0.0
 var capture_path = ""
 var capture_mode = ""
 var motion_elapsed = 0.0
+var organic_preview
 var capture_elapsed = 0.0
 var sound_enabled = true
 var gallery_seed = 1729
@@ -66,6 +67,10 @@ func _ready():
 			for i in range(16): sim.spawn_enemy(sim.player+Vector2.from_angle(i*TAU/16)*randf_range(160,440),"hunter" if i%3 else "prey")
 			for i in range(18): sim.step(0.016,Vector2.ZERO)
 			sim.paused = true
+		elif capture_mode == "organic":
+			organic_preview=load("res://tests/organic_preview.gd").new()
+			organic_preview.setup(sim)
+			hud.message.text=""
 		elif capture_mode == "motion":
 			sim.build.apply("acid")
 			sim.spawn_enemy(sim.player+Vector2(90,25),"hunter")
@@ -85,6 +90,7 @@ func _process(dt):
 		if capture_elapsed>1.0:
 			capture_elapsed = -1000
 			_capture.call_deferred()
+	if stage=="game" and capture_mode=="organic": organic_preview.step(sim,dt)
 	if stage == "game" and capture_mode == "motion":
 		motion_elapsed += dt
 		var direction = Vector2.ZERO
@@ -183,7 +189,7 @@ func show_menu():
 	sim.paused = true
 	view.sim = sim
 	hud.game_visible(false)
-	var box = hud.open("МИКРОГЕН", "Маленькая жизнь. Непредсказуемая эволюция.\nТестовая версия 0.3.0 · офлайн",740)
+	var box = hud.open("МИКРОГЕН", "Маленькая жизнь. Непредсказуемая эволюция.\nТестовая версия 0.4.0 · офлайн",740)
 	box.add_child(hud.label("Собери организм, который сможет выжить.",25,Color("9ce3cf"),true))
 	box.add_child(hud.label("Исследуй случайный микромир, поглощай ДНК и соединяй мутации. Атаки автоматические — управляй только движением.",20,Color("a3bfc0"),true))
 	if not store.profile.checkpoint.is_empty(): box.add_child(hud.button("Продолжить забег",continue_run,true))
@@ -195,8 +201,17 @@ func show_menu():
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(b)
 	box.add_child(hud.label("Ядра наследия: %d   ·   Забеги: %d   ·   Победы: %d" % [store.profile.cores,store.profile.runs,store.profile.wins],18,Color("ccb2e7")))
-	box.add_child(hud.button("Случайные формы · коллекция",show_gallery))
+	var footer_actions=hud.row()
+	box.add_child(footer_actions)
+	var gallery_button=hud.button("Случайные формы · коллекция",show_gallery)
+	gallery_button.size_flags_horizontal=Control.SIZE_EXPAND_FILL
+	footer_actions.add_child(gallery_button)
+	footer_actions.add_child(hud.button("Выход",exit_game))
 	box.add_child(hud.label("2 области · 8 органов · 4 синергии · процедурные организмы",16,Color("78989f"),true))
+
+func exit_game():
+	save_run()
+	get_tree().quit()
 
 func show_gallery():
 	set_stage("gallery")

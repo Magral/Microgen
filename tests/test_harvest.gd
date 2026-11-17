@@ -140,6 +140,32 @@ func _initialize():
 	waves.enemies.clear()
 	for i in range(60): waves.spawn_enemy(waves.player + Vector2(200,0), "hunter")
 	check(waves.enemies.size() == 28 and waves.enemies[0].max_hp >= 91, "enemy population capped at twenty eight tougher organisms")
+	var carried = clean()
+	carried.spawn_enemy(carried.player,"hunter")
+	carried._die(0,false)
+	carried.remains.resize(1)
+	var tissue = carried.remains[0]
+	tissue.pos=carried.player+Vector2(30,0)
+	tissue.vel=Vector2.ZERO
+	tissue.duration=2.0
+	carried._update_remains(0.9)
+	check(tissue.get("internal",false),"crossed tissue is captured inside organism")
+	var carried_id=tissue.id
+	carried.player+=Vector2(200,0)
+	carried._update_remains(0.1)
+	check(carried.digesting_id==carried_id and tissue.pos.distance_to(carried.player)<40,"internal digestion follows moving organism")
+	var carried_restore=Sim.new()
+	carried_restore.restore(JSON.parse_string(JSON.stringify(carried.snapshot())))
+	check(carried_restore.remains[0].get("internal",false),"internal tissue persists in checkpoint")
+	var centered=clean()
+	centered.spawn_enemy(centered.player,"hunter")
+	centered._die(0,false)
+	centered.remains.resize(1)
+	centered.remains[0].pos=centered.player
+	centered.remains[0].vel=Vector2.ZERO
+	centered.remains[0].duration=2.0
+	centered._update_remains(0.9)
+	check(centered.remains[0].get("entry_distance",-1)==0.0,"central tissue preserves true entry distance without outward jump")
 	var old = s.snapshot()
 	old.erase("remains")
 	old.erase("digesting_id")

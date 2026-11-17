@@ -22,7 +22,7 @@ def display_command():
 def main():
     env = os.environ
     env["LIBGL_ALWAYS_SOFTWARE"] = "1"
-    for name in ["core", "simulation", "genome", "ui", "input_regions", "jelly", "fluid", "harvest"]:
+    for name in ["core", "simulation", "genome", "ui", "input_regions", "jelly", "fluid", "harvest", "absorption", "organic_fx", "pigment"]:
         path = "tests/test_" + name + ".gd"
         if Path(path).is_file():
             run(name, ["godot", "--headless", "--path", ".", "--script", path])
@@ -38,8 +38,8 @@ def main():
 
     if Path("core/genome.gd").is_file():
         run("motion", display_command() + ["godot", "--path", ".", "--audio-driver", "Dummy",
-            "--write-movie", "build/Microgen-motion.avi", "--fixed-fps", "30", "--quit-after", "180",
-            "--", "--preview=motion"])
+            "--write-movie", "build/Microgen-motion.avi", "--fixed-fps", "30", "--quit-after", "360",
+            "--", "--preview=organic"])
         run("encode-motion", ["ffmpeg", "-y", "-i", "build/Microgen-motion.avi", "-an",
             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "24", "build/Microgen-motion.mp4"])
         Path("build/Microgen-motion.avi").unlink()

@@ -4,6 +4,12 @@ func check(ok: bool,text: String):
 	if not ok:
 		fails += 1
 		push_error(text)
+func find_exit(node):
+	if node is Button and node.text=="Выход": return node
+	for child in node.get_children():
+		var found=find_exit(child)
+		if found!=null:return found
+	return null
 func _initialize():
 	call_deferred("run")
 func run():
@@ -12,6 +18,7 @@ func run():
 	scene.sound_enabled = false
 	await process_frame
 	check(scene.stage=="menu", "start menu")
+	check(find_exit(scene.hud.content)!=null,"main menu has exit button")
 	scene.store.path = "user://test-ui.json"
 	scene.store.clear_test_files()
 	scene.store.profile = scene.store.defaults()

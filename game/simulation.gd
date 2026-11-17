@@ -3,6 +3,8 @@ const World = preload("res://game/world.gd")
 const Build = preload("res://core/build_model.gd")
 const Catalog = preload("res://core/catalog.gd")
 const Genome = preload("res://core/genome.gd")
+const Pigment = preload("res://core/pigment.gd")
+var tissue_pigment: Dictionary = {}
 const ENEMY_CAP = 28
 const REMAINS_CAP = 96
 var player_velocity = Vector2.ZERO
@@ -46,6 +48,7 @@ func new_run(seed_value: int, unlocked: Array = Catalog.base_unlocked(), permane
 	rng.seed = seed_value
 	world.generate(seed_value)
 	player_genome = Genome.create(seed_value,0,"player",0)
+	tissue_pigment = Pigment.create(Genome.colors(player_genome)[0])
 	build = Build.new()
 	build.unlocked = unlocked.duplicate()
 	build.branch = selected_branch
@@ -76,6 +79,24 @@ func new_run(seed_value: int, unlocked: Array = Catalog.base_unlocked(), permane
 		var p = player + Vector2.from_angle(i*TAU/8.0)*rng.randf_range(70,220)
 		pickups.append({"pos":p,"type":"dna","amount":3,"id":next_id})
 		next_id += 1
+
+func body_color() -> Color:
+	if tissue_pigment.is_empty(): tissue_pigment=Pigment.create(Genome.colors(player_genome)[0])
+	return Pigment.color(tissue_pigment)
+
+func _assimilate(recipe: Dictionary,amount: float,source: Vector2,material: Dictionary={}):
+	if tissue_pigment.is_empty(): tissue_pigment=Pigment.create(Genome.colors(player_genome)[0])
+	var pigment=Genome.colors(recipe)[0]
+	if material.is_empty(): Pigment.feed(tissue_pigment,pigment,amount)
+	else:
+		Pigment.combine(tissue_pigment,material)
+		tissue_pigment.mass=minf(80.0,tissue_pigment.mass)
+		pigment=Pigment.color(material)
+	_effect({"type":"assimilate","pos":player,"end":source,"color":pigment,"r":36.0,"life":1.1,"max":1.1})
+
+func _effect(value: Dictionary):
+	if effects.size()>=160: effects.pop_front()
+	effects.append(value)
 
 func xp_needed() -> float:
 	return 12.0+float(level-1)*6.0
@@ -229,7 +250,7 @@ func _update_enemies(dt: float):
 			hp -= (10.0 if e.kind!="boss" else 22.0)*(1.0-build.rank("armor")*0.12)
 			invuln = 0.65
 			e.pos = world.move_body(e.pos,-offset.normalized()*30,e.r*0.6)
-			effects.append({"type":"hurt","pos":player,"life":0.3,"max":0.3,"r":45.0})
+			_effect({"type":"hurt","pos":player,"life":0.3,"max":0.3,"r":45.0})
 		if e.hp<=0: _die(i,false)
 
 func _die(index: int,absorbed: bool):
@@ -238,6 +259,7 @@ func _die(index: int,absorbed: bool):
 	kills += 1
 	if "spores" in e.get("traits",[]): _field(e.pos,75,8.0,2.5,"enemy_spore",true)
 	if absorbed:
+		_assimilate(e.genome,maxf(1.0,e.r/12.0),e.pos)
 		gain_xp(4 if e.kind=="prey" else 6)
 		build.biomass += 1 if e.kind=="prey" else 3
 		hp = minf(max_hp,hp+build.rank("devour")*0.8)
@@ -250,7 +272,7 @@ func _die(index: int,absorbed: bool):
 		events.append({"type":"end","outcome":"victory"})
 	elif kills%18 == 0:
 		_drop(e.pos,"core",1)
-	effects.append({"type":"burst","pos":e.pos,"life":0.4,"max":0.4,"r":e.r+20})
+	_effect({"type":"burst","pos":e.pos,"life":0.4,"max":0.4,"r":e.r+20})
 
 # Body rewards remain embodied until a single fragment is fully digested.
 func _leave_remains(e: Dictionary):
@@ -258,7 +280,9 @@ func _leave_remains(e: Dictionary):
 	var bio_total = 40 if e.kind == "boss" else (1 if e.kind == "prey" else 4)
 	for part in range(3):
 		var angle = rng.randf()*TAU
-		var fragment = {"id":next_id,"pos":e.pos+Vector2.from_angle(angle)*e.r*0.45,"vel":Vector2.from_angle(angle)*rng.randf_range(6.0,15.0),"r":maxf(7.0,e.r*0.36),"genome":e.genome.duplicate(true),"part":part,"dna":int(dna_total/3)+ (1 if part < dna_total%3 else 0),"bio":int(bio_total/3)+(1 if part < bio_total%3 else 0),"progress":0.0,"duration":rng.randf_range(1.2,2.0),"infected":e.infect>0 and part == 0}
+		var fragment = {"id":next_id,"pos":e.pos+Vector2.from_angle(angle)*e.r*0.45,"vel":Vector2.from_angle(angle)*rng.randf_range(6.0,15.0),"r":maxf(7.0,e.r*0.36),"genome":e.genome.duplicate(true),"part":part,"dna":int(dna_total/3)+ (1 if part < dna_total%3 else 0),"bio":int(bio_total/3)+(1 if part < bio_total%3 else 0),"progress":0.0,"duration":rng.randf_range(1.2,2.0),"internal":false,"infected":e.infect>0 and part == 0}
+		fragment.pigment=Pigment.create(Genome.colors(e.genome)[0])
+		fragment.pigment.mass=maxf(0.5,fragment.r*0.12)
 		next_id += 1
 		# At the cap merge materials into an existing body, preserving its progress.
 		# Infected material stays infected, but never produces repeated feast procs.
@@ -267,6 +291,10 @@ func _leave_remains(e: Dictionary):
 			receiver.dna += fragment.dna
 			receiver.bio += fragment.bio
 			receiver.infected = receiver.infected or fragment.infected
+			if not receiver.has("pigment"):
+				receiver.pigment=Pigment.create(Genome.colors(receiver.genome)[0])
+				receiver.pigment.mass=maxf(0.5,receiver.r*0.12)
+			Pigment.combine(receiver.pigment,fragment.pigment)
 		else:
 			remains.append(fragment)
 
@@ -274,6 +302,9 @@ func _update_remains(dt: float):
 	var target = {}
 	var nearest = INF
 	for part in remains:
+		if part.get("internal",false):
+			part.pos=player+Vector2.from_angle(float(part.get("entry_angle",0)))*24.0
+			part.vel=Vector2.ZERO
 		part.pos = world.move_body(part.pos,part.vel*0.8*(1.0-exp(-dt/0.8)),part.r*0.5)
 		part.vel *= exp(-dt/0.8)
 		var distance = player.distance_to(part.pos)
@@ -290,8 +321,13 @@ func _update_remains(dt: float):
 		if int(part.id) != digesting_id:
 			part.progress = maxf(0.0,part.progress-dt*0.06)
 			continue
+		if not part.get("internal",false):
+			part.entry_angle=(part.pos-player).angle()
+			part.entry_distance=player.distance_to(part.pos)
 		part.progress = minf(1.0,part.progress+dt/part.duration)
+		if part.progress>=0.42: part.internal=true
 		if part.progress >= 1.0:
+			_assimilate(part.genome,maxf(0.5,part.r*0.12),part.pos,part.get("pigment",{}))
 			gain_xp(part.dna)
 			build.biomass += int(part.bio)
 			if part.infected and "spore_feast" in build.active_synergies(): _field(part.pos,100,14,2.5,"spore")
@@ -337,8 +373,9 @@ func _attack():
 		if not target.is_empty():
 			cooldowns.tentacle = 0.85*metabolic
 			target.hp -= 9.0+build.rank("tentacle")*7
-			effects.append({"type":"lash","pos":player,"end":target.pos,"life":0.22,"max":0.22,"r":0})
+			_effect({"type":"lash","pos":player,"end":target.pos,"life":0.22,"max":0.22,"r":0})
 			if "acid_grasp" in synergies:
+				_effect({"type":"acid_grasp","pos":player,"end":target.pos,"r":30.0,"life":0.65,"max":0.65})
 				target.slow = 1.3
 				target.pos = world.move_body(target.pos,(player-target.pos).limit_length(65),target.r*0.6)
 	if build.rank("acid")>0:
@@ -360,19 +397,23 @@ func _attack():
 			if player.distance_squared_to(e.pos)<radius*radius:
 				e.hp -= 12+build.rank("pulse")*8
 				e.pos = world.move_body(e.pos,(e.pos-player).normalized()*65,e.r*0.6)
-		effects.append({"type":"pulse","pos":player,"r":float(radius),"life":0.55,"max":0.55})
+		_effect({"type":"pulse","pos":player,"r":float(radius),"life":0.55,"max":0.55})
 		if "spike_pulse" in synergies:
+			_effect({"type":"spike_pulse","pos":player,"r":float(radius),"life":0.8,"max":0.8})
 			for i in range(8): _shot(player,Vector2.from_angle(i*TAU/8.0)*370,18+build.rank("spikes")*4,false)
 	if build.rank("infection")>0 and cooldowns.get("infection",0)<=0:
 		var target = _nearest(420)
 		if not target.is_empty():
 			target.infect = 4.5
+			_effect({"type":"infection","pos":player,"end":target.pos,"r":float(target.r),"life":0.85,"max":0.85})
 			cooldowns.infection = 1.6*metabolic
 	if build.rank("trail")>0 and cooldowns.get("trail",0)<=0:
 		cooldowns.trail = 0.6
 		_field(player,50+build.rank("trail")*6,5+build.rank("trail")*3,3.0,"poison")
 		if "toxic_colony" in synergies:
-			for p in clone_positions(): _field(p,40,3+build.rank("trail")*1.5,2,"poison")
+			for p in clone_positions():
+				_field(p,40,3+build.rank("trail")*1.5,2,"poison")
+			_effect({"type":"toxic_colony","pos":player,"r":105.0,"life":0.65,"max":0.65})
 	if build.rank("division")>0:
 		for p in clone_positions():
 			for e in enemies:
@@ -421,6 +462,7 @@ func _update_shots(dt: float):
 		if hit or shot.life<=0 or not world.walkable(shot.pos): shots.remove_at(i)
 
 func _field(p: Vector2,radius: float,damage: float,life: float,kind: String,hostile: bool=false):
+	if kind=="spore": _effect({"type":"spore_feast","pos":p,"r":radius,"life":1.4,"max":1.4})
 	if fields.size()>=80: fields.pop_front()
 	fields.append({"pos":p,"r":radius,"damage":damage,"life":life,"max":life,"kind":kind,"hostile":hostile})
 
@@ -473,7 +515,7 @@ func nearby_colony() -> int:
 	return -1
 
 func snapshot() -> Dictionary:
-	return {"version":1,"player_genome":player_genome.duplicate(true),"outcome":outcome,"events":_pack(events),"seed":world.seed_value,"rng_state":str(rng.state),"run_id":run_id,"player":_vec(player),"player_velocity":_vec(player_velocity),"remains":_pack(remains),"digesting_id":digesting_id,"hp":hp,"max_hp":max_hp,"elapsed":elapsed,"xp":xp,"level":level,"pending_levels":pending_levels,"build":build.to_dict(),"enemies":_pack(enemies),"pickups":_pack(pickups),"colonies":_pack(world.colonies),"nests":_pack(world.nests),"explored":explored.keys(),"boss_spawned":boss_spawned,"kills":kills,"cores_found":cores_found,"next_id":next_id,"upgrades":upgrades,"cooldowns":cooldowns.duplicate(),"offers":current_offers.duplicate(),"rerolls":rerolls,"fields":_pack(fields),"shots":_pack(shots)}
+	return {"version":1,"player_genome":player_genome.duplicate(true),"tissue_pigment":tissue_pigment.duplicate(true),"outcome":outcome,"events":_pack(events),"seed":world.seed_value,"rng_state":str(rng.state),"run_id":run_id,"player":_vec(player),"player_velocity":_vec(player_velocity),"remains":_pack(remains),"digesting_id":digesting_id,"hp":hp,"max_hp":max_hp,"elapsed":elapsed,"xp":xp,"level":level,"pending_levels":pending_levels,"build":build.to_dict(),"enemies":_pack(enemies),"pickups":_pack(pickups),"colonies":_pack(world.colonies),"nests":_pack(world.nests),"explored":explored.keys(),"boss_spawned":boss_spawned,"kills":kills,"cores_found":cores_found,"next_id":next_id,"upgrades":upgrades,"cooldowns":cooldowns.duplicate(),"offers":current_offers.duplicate(),"rerolls":rerolls,"fields":_pack(fields),"shots":_pack(shots)}
 
 func restore(data: Dictionary) -> bool:
 	if data.get("version",0) != 1 or not data.get("player",null) is Array: return false
@@ -483,6 +525,7 @@ func restore(data: Dictionary) -> bool:
 	var saved_recipe = data.get("player_genome",{})
 	player_genome = saved_recipe if saved_recipe is Dictionary else {}
 	if not Genome.validate(player_genome): player_genome = Genome.create(world.seed_value,0,"player",0)
+	tissue_pigment = Pigment.restore(data.get("tissue_pigment",{}),Genome.colors(player_genome)[0])
 	rng.seed = int(data.seed)
 	rng.state = int(data.get("rng_state","0"))
 	player = Vector2(data.player[0],data.player[1])

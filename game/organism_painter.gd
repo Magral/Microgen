@@ -1,4 +1,6 @@
 extends RefCounted
+const Pigment = preload("res://core/pigment.gd")
+const Absorption = preload("res://game/absorption.gd")
 const Genome = preload("res://core/genome.gd")
 var cache: Dictionary = {}
 var glow: GradientTexture2D
@@ -44,7 +46,7 @@ func anatomy(recipe: Dictionary) -> Dictionary:
 	cache[key] = data
 	return data
 
-func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs: Dictionary,time: float,role: String="player",detail: bool=true,motion=null):
+func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs: Dictionary,time: float,role: String="player",detail: bool=true,motion=null,feeding: Array=[],tint: Color=Color(-1,-1,-1),reaction: float=0.0):
 	if not Genome.validate(recipe): return
 	var data = anatomy(recipe)
 	var body: Color = data.colors[0]
@@ -52,13 +54,18 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 	var core: Color = data.colors[2]
 	var accent: Color = data.colors[3]
 	var shadow: Color = data.colors[4]
+	if tint.r>=0:
+		body=tint
+		edge=tint.lightened(0.38)
+		shadow=tint.darkened(0.42)
 	var base_phase = float(recipe.phase)
 	var turn = motion.angle_delta() if motion != null else 0.0
 	var phase = base_phase+turn
 	var facing = float(recipe.rotation)+turn
-	var breathe = 1+sin(time*1.7+phase)*0.025
+	var breathe = 1+sin(time*1.7+phase)*0.025+reaction*0.055
 	var contour = data.contour if detail else data.contour_lod
 	if motion != null: contour = motion.deform_points(contour,base_phase)
+	for entry in feeding: contour=Absorption.membrane(contour,entry.pose,radius)
 	if int(organs.get("speed",0))>0:
 		for i in range(3):
 			_tendril(canvas,p,contour,radius,facing+PI+i*0.55-0.55,time+phase+i,0.9,edge,1.4)
@@ -73,6 +80,12 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 	canvas.draw_colored_polygon(_transform(contour,p,radius*0.94*breathe),Color(shadow,0.48))
 	canvas.draw_colored_polygon(_transform(contour,p+Vector2(-radius*0.035,-radius*0.045),radius*0.85*breathe),Color(body,0.31))
 	canvas.draw_texture_rect(glow,Rect2(p-Vector2.ONE*radius*0.55,Vector2.ONE*radius*1.1),false,Color(body.lightened(0.12),0.28))
+	for entry in feeding: _inclusion(canvas,p,radius,entry,body,edge,time)
+	if reaction>0.01:
+		for i in range(5):
+			var a=phase+i*TAU/5
+			var q=p+_anchor(contour,a)*radius*(0.45+reaction*0.2)
+			canvas.draw_circle(q,radius*(0.07+reaction*0.09),Color(accent,0.18*reaction))
 	if detail:
 		for vein in data.veins:
 			var a = p+_deform(vein[0],motion,base_phase)*radius*breathe
@@ -114,7 +127,7 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 	if int(organs.get("trail",0))>0: _vesicle(canvas,p+_anchor(contour,facing+PI)*radius*0.88,radius*0.19,Color("8fbd5b"),detail)
 	if int(organs.get("devour",0))>0:
 		var jaw = p+_anchor(contour,facing)*radius*0.72
-		canvas.draw_arc(jaw,radius*0.19,facing-1.8,float(recipe.rotation)+1.8,14,Color(shadow,0.95),radius*0.12,true)
+		canvas.draw_arc(jaw,radius*0.19,facing-1.8,facing+1.8,14,Color(shadow,0.95),radius*0.12,true)
 		for i in range(5):
 			var direction = Vector2.from_angle(facing-1.3+i*0.65)
 			canvas.draw_line(jaw+direction*radius*0.23,jaw+direction*radius*0.14,Color("ead5ac"),1.4,true)
@@ -141,8 +154,9 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 func _deform(point: Vector2,motion,phase: float) -> Vector2:
 	return point if motion == null else motion.deform_point(point,phase)
 
-func paint_fragment(canvas: CanvasItem,p: Vector2,fragment: Dictionary,active: bool):
+func paint_fragment(canvas: CanvasItem,p: Vector2,fragment: Dictionary,active: bool,opacity: float=1.0):
 	var data = anatomy(fragment.genome)
+	var fragment_color: Color=Pigment.color(fragment.pigment) if fragment.has("pigment") else data.colors[0]
 	var progress = float(fragment.progress)
 	var radius = float(fragment.r)*(1.0-progress*0.72)
 	var points = PackedVector2Array()
@@ -151,13 +165,45 @@ func paint_fragment(canvas: CanvasItem,p: Vector2,fragment: Dictionary,active: b
 	var start = posmod(int(fragment.part)*13,contour.size())
 	for i in range(19): points.append(contour[(start+i)%contour.size()]*radius+p)
 	points.append(p+Vector2(-0.13,0.09)*radius)
-	canvas.draw_colored_polygon(points,Color(data.colors[0],0.52-progress*0.2))
-	canvas.draw_polyline(points,Color(data.colors[1],0.65),1.3,true)
+	canvas.draw_colored_polygon(points,Color(fragment_color,(0.72-progress*0.2)*opacity))
+	canvas.draw_polyline(points,Color(data.colors[1],0.8*opacity),1.3,true)
 	for i in range(3):
 		var q = p+(points[3+i*5]-p)*0.65
-		canvas.draw_circle(q,radius*0.09,Color(data.colors[3],0.65))
-	if active:
-		canvas.draw_arc(p,float(fragment.r)+7,-PI/2,-PI/2+TAU*progress,28,Color("b6eed3"),2,true)
+		canvas.draw_circle(q,radius*0.09,Color(data.colors[3],0.75*opacity))
+
+
+func _inclusion(canvas: CanvasItem,p: Vector2,radius: float,entry: Dictionary,body: Color,edge: Color,time: float):
+	var state=entry.pose
+	var t=float(state.progress)
+	var q=p+state.offset
+	var color: Color=Pigment.color(entry.fragment.pigment) if entry.fragment.has("pigment") else Genome.colors(entry.fragment.genome)[0]
+	var fragment=entry.fragment.duplicate()
+	fragment.progress=0.0
+	fragment.r*=float(state.scale)
+	# Lip folds and translucent film physically join the body to incoming tissue.
+	if t<0.68:
+		var normal=state.direction.orthogonal()
+		var spread=radius*(0.16+sin(t*PI)*0.12)
+		for side in [-1,1]:
+			var points=PackedVector2Array()
+			var root=p+state.edge*0.72+normal*spread*side
+			var tip=q+normal*float(fragment.r)*0.4*side
+			for i in range(13):
+				var u=i/12.0
+				points.append(root.lerp(tip,u)+normal*side*sin(u*PI)*spread*0.6)
+			canvas.draw_polyline(points,Color(body,0.4*(1-t)),6,true)
+			canvas.draw_polyline(points,Color(edge,0.65*(1-t)),1.3,true)
+	paint_fragment(canvas,q,fragment,false,float(state.alpha))
+	if t>0.32:
+		# A vesicle membrane closes around the inclusion, then breaks into pigment.
+		var capsule=float(entry.fragment.r)*(1.1-float(state.progress)*0.65)
+		canvas.draw_arc(q,capsule,0.15+time*0.2,TAU-0.3+time*0.2,24,Color(edge,0.4*float(state.alpha)),1.0,true)
+		for i in range(9):
+			var a=i*2.399+float(entry.fragment.part)
+			var destination=Vector2.from_angle(a)*radius*(0.22+0.05*(i%4))
+			var mote=q.lerp(p+destination,smoothstep(0.35,1.0,t))
+			var opacity=sin(smoothstep(0.3,1.0,t)*PI)
+			canvas.draw_circle(mote,1.1+sin(a+time)*0.3,Color(color.lightened(0.24),opacity*0.8))
 
 func _transform(points: PackedVector2Array,p: Vector2,radius: float) -> PackedVector2Array:
 	return Transform2D(0,Vector2.ONE*radius,0,p)*points
