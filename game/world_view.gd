@@ -184,6 +184,7 @@ func _draw():
 		var organs = enemy_organs(e)
 		painter.paint(self,screen(e.pos),e.r*1.17*(1.0-float(e.get("engulf",0))*0.65),e.genome,organs,visual_time,"prey" if e.r<sim.body_radius()*0.82 else e.kind,e.kind=="boss" or detailed_enemies.has(e.id),motion_for(e.id),[],Color(-1,-1,-1),0.0,e.hp/e.max_hp)
 		if e.infect>0: OrganicFX.infected(self,screen(e.pos),e.r,e.genome,visual_time,float(e.infect),motion_for(e.id))
+		if e.kind=="miniboss":draw_string(font,screen(e.pos)+Vector2(-e.r,-e.r*1.5-20),e.get("title","Минибосс"),HORIZONTAL_ALIGNMENT_LEFT,-1,14,Color("f1c987"))
 		if e.hp<e.max_hp:
 			var p = screen(e.pos)+Vector2(-e.r,-e.r*1.5-10)
 			draw_line(p,p+Vector2(e.r*2,0),Color(0.1,0.1,0.15,0.8),3,true)
@@ -200,6 +201,7 @@ func _draw():
 		draw_line(p-shot.vel.normalized()*13,p,col,3,true)
 		draw_circle(p,3,col)
 	for effect in sim.effects:
+		if effect.type=="damage":continue
 		if not area.grow(float(effect.r)).has_point(effect.pos):continue
 		if OrganicFX.paint(self,effect,sim.player,size*Vector2(0.5,0.51),visual_time,sim.clone_positions() if sim.build.rank("division")>0 else []): continue
 		var p = screen(effect.pos)
@@ -215,6 +217,17 @@ func _draw():
 			var col = Color("f5989e") if effect.type=="hurt" else Color("9be8db")
 			draw_arc(p,effect.r*(1-alpha*0.6),0,TAU,40,Color(col,alpha*0.55),2,true)
 	draw_set_transform(Vector2.ZERO)
+	# Damage labels keep a small constant screen size as the world camera scales.
+	for effect in sim.effects:
+		if effect.type!="damage":continue
+		var age=1.0-float(effect.life)/float(effect.max)
+		var p=(effect.pos-sim.player)*zoom+size*Vector2(0.5,0.51)+Vector2(7,-18-age*24)
+		if not Rect2(Vector2.ZERO,size).grow(30).has_point(p):continue
+		var amount=float(effect.get("amount",0))
+		var text_value=str(maxi(1,roundi(amount)))
+		var color=Color("ff7185") if effect.get("player",false) else Color("ef9199")
+		draw_string(font,p+Vector2(1,1),text_value,HORIZONTAL_ALIGNMENT_LEFT,-1,14,Color(0.05,0.02,0.03,float(effect.life)/float(effect.max)))
+		draw_string(font,p,text_value,HORIZONTAL_ALIGNMENT_LEFT,-1,14,Color(color,minf(1.0,float(effect.life)*2.0)))
 	if joystick_visible:
 		draw_circle(joystick_origin,66,Color(0.6,0.9,0.85,0.05))
 		draw_arc(joystick_origin,66,0,TAU,48,Color(0.6,0.9,0.85,0.28),2,true)
@@ -272,7 +285,7 @@ func _draw_player():
 func enemy_organs(e: Dictionary) -> Dictionary:
 	var organs = {}
 	if e.kind=="spitter": organs.infection = 1
-	if e.kind=="boss":
+	if e.kind in ["boss","miniboss"]:
 		organs.tentacle = 2
 		organs.spikes = 2
 	if int(e.variant)==1: organs.armor = 1

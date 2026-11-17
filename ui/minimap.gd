@@ -26,6 +26,8 @@ func _draw():
 		if c.y*World.W+c.x in sim.explored and not nest.used:
 			draw_circle(offset+nest.pos*scale_value,3,Color("ce9bec"))
 	if sim.boss_spawned and sim.outcome=="": draw_circle(offset+sim.boss_marker*scale_value,5,Color("f1869a"))
+	for enemy in sim.enemies:
+		if enemy.kind=="miniboss":draw_circle(offset+enemy.pos*scale_value,4,Color("efc17f"))
 	var player = offset+sim.player*scale_value
 	draw_circle(player,5 if large else 4,Color("ffffff"))
 	draw_arc(player,8,0,TAU,20,Color("96f6dc"),1.5,true)

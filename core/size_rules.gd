@@ -11,6 +11,8 @@ static func profile(player_radius: float,enemy_radius: float,hp_fraction: float,
 	elif ratio<=1.6 and mouth_rank>0:threshold=0.08+mouth_rank*0.008
 	if ratio<=1.25:threshold+=mouth_rank*0.025
 	if frontal and mouth_rank>0 and ratio<=1.6:threshold+=0.15+mouth_rank*0.035
+	if ratio>=0.9:threshold=minf(threshold,0.58 if frontal and mouth_rank>0 else 0.43)
+	if ratio>1.25:threshold=minf(threshold,0.32)
 	threshold=clampf(threshold,0,1)
 	var pull=0.0
 	if pull_rank>0:

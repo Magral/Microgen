@@ -60,6 +60,8 @@ func run():
 		check(not s.mouth_contact(target) and not s._is_engulfing(target),"side membrane has stricter peer HP threshold")
 		target.pos=s.player+Vector2(20,0)
 		target.hp=100
+		# Isolate bite mechanics from the independent per-frame tissue budget.
+		target.tissue_budget=100.0
 		var before=target.hp
 		s._attack()
 		check(target.hp<before and s.bite_flash>0,"mouth actually damages frontal tissue")

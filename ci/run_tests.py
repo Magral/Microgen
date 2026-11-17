@@ -22,7 +22,7 @@ def display_command():
 def main():
     env = os.environ
     env["LIBGL_ALWAYS_SOFTWARE"] = "1"
-    for name in ["core", "simulation", "genome", "ui", "input_regions", "jelly", "fluid", "harvest", "absorption", "organic_fx", "pigment", "growth_contact", "tissue_damage", "size_rules", "mouth_shape", "fragment_shape"]:
+    for name in ["core", "simulation", "genome", "ui", "input_regions", "jelly", "fluid", "harvest", "absorption", "organic_fx", "pigment", "growth_contact", "tissue_damage", "size_rules", "mouth_shape", "fragment_shape", "combat_pacing", "new_content", "development", "audio"]:
         path = "tests/test_" + name + ".gd"
         if Path(path).is_file():
             run(name, ["godot", "--headless", "--path", ".", "--script", path])
@@ -31,7 +31,7 @@ def main():
                       "--audio-driver", "Dummy", "--script", "tests/test_touch.gd"])
 
     if Path("core/genome.gd").is_file():
-        for mode in ["game", "gallery"]:
+        for mode in ["game", "gallery", "development", "jaw"]:
             target = str(Path("build/Microgen-" + mode + ".png").resolve())
             run("render-" + mode, display_command() + ["godot", "--path", ".",
                 "--audio-driver", "Dummy", "--", "--preview=" + mode, "--capture=" + target])

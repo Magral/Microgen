@@ -7,8 +7,6 @@ var hp_bar: ProgressBar
 var xp_bar: ProgressBar
 var stats: Label
 var area_label: Label
-var slots: Label
-var synergy_label: Label
 var minimap: Control
 var modal: Control
 var content: VBoxContainer
@@ -16,9 +14,11 @@ var message: Label
 var shop_button: Button
 var pause_button: Button
 var map_button: Button
+var build_button: Button
 var on_pause: Callable
 var on_map: Callable
 var on_shop: Callable
+var on_build: Callable
 
 func _ready():
 	root = Control.new()
@@ -60,14 +60,11 @@ func _ready():
 	shop_button.position = Vector2(-140,-85)
 	shop_button.size = Vector2(280,54)
 	root.add_child(shop_button)
-	slots = label("",16)
-	slots.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
-	slots.position = Vector2(28,-110)
-	root.add_child(slots)
-	synergy_label = label("",15,Color("d1b5ef"))
-	synergy_label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
-	synergy_label.position = Vector2(28,-43)
-	root.add_child(synergy_label)
+	build_button = button("Развитие",func(): on_build.call())
+	build_button.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	build_button.position = Vector2(-220,224)
+	build_button.size = Vector2(192,54)
+	root.add_child(build_button)
 	message = label("",22,Color("e8d9b5"))
 	message.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
 	message.position = Vector2(-330,120)
@@ -82,12 +79,6 @@ func update_game(sim):
 	xp_bar.value = sim.xp/sim.xp_needed()*100
 	area_label.text = ("ПИТАТЕЛЬНАЯ СРЕДА" if sim.world.biome(sim.player)==0 else "ТОКСИЧНАЯ ЗОНА")+"  ·  "+sim.world.condition_name(sim.world.biome(sim.player))
 	stats.text = "Размер ×%.1f   ·   Ур. %d   ·   %d/%d HP   ·   Биомасса %d   ·   %02d:%02d" % [sim.body_radius()/22.0,sim.level,int(sim.hp),int(sim.max_hp),sim.build.biomass,int(sim.elapsed)/60,int(sim.elapsed)%60]
-	var names = []
-	for id in sim.build.organs: names.append(Catalog.item(id).name+" "+str(sim.build.rank(id)))
-	slots.text = "Органы %d/6   ·   Адаптации %d/4\n" % [sim.build.organs.size(),sim.build.adaptations.size()]+"  /  ".join(names)
-	var synergies = []
-	for id in sim.build.active_synergies(): synergies.append(Catalog.SYNERGIES[id].name)
-	synergy_label.text = "СИНЕРГИИ  "+(" + ".join(synergies) if not synergies.is_empty() else "сочетай органы")
 	shop_button.visible = sim.nearby_colony()>=0 and modal==null
 
 func game_visible(value: bool):
@@ -110,6 +101,7 @@ func open(title: String,subtitle: String="",width: float=1030) -> VBoxContainer:
 	var size = root.get_viewport_rect().size
 	var panel = PanelContainer.new()
 	panel.custom_minimum_size = Vector2(minf(width,size.x-50),minf(620,size.y-44))
+	panel.size = panel.custom_minimum_size
 	panel.add_theme_stylebox_override("panel",box(Color("0c202b"),Color("2c5159"),22))
 	center.add_child(panel)
 	var scroll = ScrollContainer.new()

@@ -134,6 +134,18 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 	if int(organs.get("tentacle",0))>0:
 		var count = mini(4,1+int(organs.tentacle))
 		for i in range(count): _tendril(canvas,p,contour,radius,phase+i*TAU/count,time+phase+i,0.9,edge,3.0 if detail else 2.0)
+	if int(organs.get("cilia",0))>0 and detail:
+		for i in range(8):_tendril(canvas,p,contour,radius,facing-1.2+i*0.34,time+i,0.20,edge,0.7)
+	if int(organs.get("enzymes",0))>0:
+		for i in range(2):_vesicle(canvas,p+_anchor(contour,phase+i*2.6)*radius*0.74,radius*0.16,body.lerp(Color("e7c28b"),0.25),detail)
+	if int(organs.get("electric",0))>0 and detail:
+		for i in range(3):
+			var root=p+_anchor(contour,phase+i*2.0)*radius*0.68
+			canvas.draw_line(p+(root-p)*0.38,root,Color(body.lerp(Color("afdfe9"),0.4),0.20+0.06*sin(time*2+i)),0.9,true)
+	if int(organs.get("barrier",0))>0:
+		var reinforced=_transform(contour,p,radius*0.97)
+		reinforced.append(reinforced[0])
+		canvas.draw_polyline(reinforced,Color(edge,0.32),maxf(1.4,radius*0.035),true)
 	if int(organs.get("acid",0))>0:
 		for i in range(mini(5,2+int(organs.acid))):
 			_vesicle(canvas,p+_anchor(contour,phase+0.7+i*2.15)*radius*0.75,radius*0.17,body.lerp(Color("b4d952"),0.42),detail)
@@ -208,12 +220,18 @@ func _deform(point: Vector2,motion,phase: float) -> Vector2:
 func paint_fragment(canvas: CanvasItem,p: Vector2,fragment: Dictionary,active: bool,opacity: float=1.0):
 	var data = anatomy(fragment.genome)
 	var fragment_color: Color=Pigment.color(fragment.pigment) if fragment.has("pigment") else data.colors[0]
+	var quality=clampi(int(fragment.get("quality",0)),0,3)
+	var accent_color=[Color("9db3a8"),Color("a9dfc9"),Color("a4eaf1"),Color("ffe0a3")][quality]
 	var progress = float(fragment.progress)
 	var radius = float(fragment.r)*(1.0-progress*0.72)
 	var local: PackedVector2Array=data.fragments[posmod(int(fragment.part),3)]
 	var points=_transform(local,p,radius)
 	canvas.draw_colored_polygon(points,Color(fragment_color,(0.72-progress*0.2)*opacity))
-	canvas.draw_polyline(points,Color(data.colors[1],0.8*opacity),1.3,true)
+	canvas.draw_polyline(points,Color(data.colors[1].lerp(accent_color,quality*0.24),(0.55+quality*0.14)*opacity),1.0+quality*0.35,true)
+	if quality>=2:
+		for i in range(quality):
+			var glint=p+Vector2.from_angle(i*TAU/quality+float(fragment.id)*0.7)*radius*0.8
+			canvas.draw_circle(glint,1.1+quality*0.25,Color(accent_color,0.75*opacity))
 	for i in range(3):
 		var q = p+(points[posmod(1+i*5,points.size())]-p)*0.65
 		canvas.draw_circle(q,radius*0.09,Color(data.colors[3],0.75*opacity))
@@ -298,41 +316,37 @@ func _vesicle(canvas: CanvasItem,p: Vector2,radius: float,color: Color,detail: b
 		canvas.draw_polyline(fold,Color(color.lightened(0.25),0.35),0.9,true)
 
 func _mouth(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,radius: float,heading: float,time: float,body: Color,edge: Color,shadow: Color,bite: float,feeding: float,rank: int,detail: bool):
-	var pulse=(0.5+0.5*sin(time*3.0))*0.06
-	var shape=MouthShape.pose(contour,heading,maxf(bite,pulse),feeding)
+	var shape=MouthShape.pose(contour,heading,bite,feeding)
+	var activation=float(shape.activation)
 	var direction: Vector2=shape.direction
 	var tangent: Vector2=shape.tangent
-	var center=p+shape.center*radius
-	var gap=float(shape.gap)
-	# Pigmented flesh folds merge into the surrounding cytoplasm. The two
-	# commissures are uneven; recessed radula appear only intermittently.
-	for side in [-1,1]:
-		var lip=PackedVector2Array()
-		for i in range(13):
-			var u=i/12.0
-			var arch=sin(u*PI)
-			var fold=sin(u*TAU*1.5+side*0.8)*arch*0.012
-			lip.append(center+tangent*(u-0.5)*radius*(0.43+side*0.025)+direction*radius*(side*(gap*arch+0.014+arch*0.018)+fold+arch*0.009))
-		canvas.draw_polyline(lip,Color(body.lerp(shadow,0.24),0.58),maxf(2.0,radius*(0.105+mini(rank,2)*0.015)),true)
-		if detail:canvas.draw_polyline(lip,Color(body.darkened(0.18),0.68),maxf(1.0,radius*0.043),true)
-		if detail:
-			var crease=lip.duplicate()
-			for i in range(crease.size()): crease[i]-=direction*side*radius*0.014
-			canvas.draw_polyline(crease,Color(shadow,0.28),maxf(0.6,radius*0.012),true)
-	var cavity=shape.slit.duplicate()
-	for i in range(cavity.size()):
-		var local: Vector2=cavity[i]-shape.center
-		var along=local.dot(tangent)/0.22
-		cavity[i]=shape.center+tangent*local.dot(tangent)*0.88+direction*(local.dot(direction)+sin(along*3.0)*0.008*(1.0-absf(along)))
-	canvas.draw_colored_polygon(_transform(cavity,p,radius),Color(shadow.darkened(0.6),0.85))
-	var count=5 if detail else 0
-	for i in range(count):
-		var side=-1.0 if i%2==0 else 1.0
-		var u=0.14+i*0.155+sin(i*2.4)*0.026
-		var arch=sin(u*PI)
-		var root=center+tangent*(u-0.5)*radius*0.36+direction*side*radius*gap*arch*0.68
-		var tip=root-direction*side*radius*(0.011+mini(rank,2)*0.006)*arch+tangent*sin(time*4.0+i)*radius*0.004*bite
-		canvas.draw_polyline(PackedVector2Array([root,root.lerp(tip,0.5)-tangent*radius*0.007,tip]),Color(body.lerp(edge,0.26),0.39),maxf(0.55,radius*0.009),true)
+	# Broad, pigmented jaw tissue blends into the membrane around the cavity.
+	# The inward lower lip opens much farther than the anchored upper lip.
+	for lip in [shape.upper,shape.lower]:
+		var points=_transform(lip,p,radius)
+		canvas.draw_polyline(points,Color(body.lerp(shadow,0.18),0.86),maxf(2.2,radius*(0.09+activation*0.035)),true)
+	canvas.draw_colored_polygon(_transform(shape.slit,p,radius),Color(shadow.darkened(0.65),0.90))
+	if activation>0.12:
+		var inner=PackedVector2Array()
+		for point in shape.slit:
+			inner.append(shape.throat+(point-shape.throat)*0.58)
+		canvas.draw_colored_polygon(_transform(inner,p,radius),Color(shadow.darkened(0.88),activation*0.69))
+	for lip in [shape.upper,shape.lower]:
+		canvas.draw_polyline(_transform(lip,p,radius),Color(body.lerp(edge,0.23),0.79),maxf(0.8,radius*0.026),true)
+	if not detail: return
+	# Elastic throat pleats are recessed organic folds, visible during engulfing.
+	if activation>0.15:
+		for i in range(5):
+			var u=0.22+i*0.14
+			var root: Vector2=shape.lower[int(u*16)]
+			var end: Vector2=root.lerp(shape.throat,0.62)
+			var curve=PackedVector2Array([root,root.lerp(end,0.5)+tangent*radius*0.0003*sin(time+i),end])
+			canvas.draw_polyline(_transform(curve,p,radius),Color(body.lerp(edge,0.15),activation*0.28),maxf(0.6,radius*0.011),true)
+	if rank>0:
+		for i in range(5):
+			var root: Vector2=shape.upper[4+i*2]
+			var tip=root-direction*(0.013+mini(rank,2)*0.007)
+			canvas.draw_line(p+root*radius,p+tip*radius,Color(edge,0.38),maxf(0.6,radius*0.012),true)
 
 func _spikes(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,radius: float,phase: float,color: Color,rank: int):
 	var count = mini(12,5+rank)

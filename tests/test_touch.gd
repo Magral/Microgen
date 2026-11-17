@@ -97,6 +97,18 @@ func run():
 		Input.parse_input_event(held)
 		await process_frame
 		check(scene.stage=="pause" and scene.stick_id==-1,"HUD pause takes priority over joystick")
+		scene.resume_game()
+		held.pressed=true
+		Input.parse_input_event(held)
+		await process_frame
+		await tap(scene.hud.build_button,1)
+		held.pressed=false
+		Input.parse_input_event(held)
+		await process_frame
+		check(scene.stage=="development" and scene.sim.paused and scene.stick_id==-1,"second finger opens development while joystick held")
+		await tap(find_button(scene.hud.content,"Вернуться в микромир"))
+		check(scene.stage=="game","native touch closes development")
+
 
 	scene.store.clear_test_files()
 	print("TOUCH: %d failures" % failures)

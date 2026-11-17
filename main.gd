@@ -7,11 +7,15 @@ const Catalog = preload("res://core/catalog.gd")
 const Map = preload("res://ui/minimap.gd")
 const Genome = preload("res://core/genome.gd")
 const Specimen = preload("res://ui/specimen_view.gd")
+const Development = preload("res://ui/development_view.gd")
+const OrganArt = preload("res://ui/organ_art.gd")
+const CombatAudio = preload("res://game/audio_bus.gd")
 const Painter = preload("res://game/organism_painter.gd")
 var store = Save.new()
 var sim
 var view
 var hud
+var development_origin = "game"
 var stage = "menu"
 var movement = Vector2.ZERO
 var stick_id = -1
@@ -35,6 +39,7 @@ var capture_elapsed = 0.0
 var sound_enabled = true
 var gallery_seed = 1729
 var gallery_painter
+var combat_audio
 var sound_player: AudioStreamPlayer
 
 func _ready():
@@ -48,9 +53,12 @@ func _ready():
 	hud.on_pause = show_pause
 	hud.on_map = show_map
 	hud.on_shop = show_shop
+	hud.on_build = show_development
 	sound_player = AudioStreamPlayer.new()
 	sound_player.volume_db = -18
 	add_child(sound_player)
+	combat_audio = CombatAudio.new()
+	add_child(combat_audio)
 	show_menu()
 	for argument in OS.get_cmdline_user_args():
 		if argument.begins_with("--capture="): capture_path = argument.trim_prefix("--capture=")
@@ -75,6 +83,19 @@ func _ready():
 			sim.build.apply("acid")
 			sim.spawn_enemy(sim.player+Vector2(90,25),"hunter")
 			sim._die(sim.enemies.size()-1,false)
+		elif capture_mode=="jaw":
+			sim.build.organs={"devour":3}
+			sim.spawn_enemy(sim.player+Vector2.from_angle(sim.facing)*26,"prey")
+			var prey=sim.enemies.back()
+			prey.captured=true
+			prey.engulf=0.5
+			prey.entry_angle=sim.facing
+			prey.entry_distance=36.0
+			sim.bite_flash=1.0
+			sim.paused=true
+		elif capture_mode == "development":
+			for id in ["acid","spikes","pulse","armor","regen"]: sim.build.apply(id)
+			show_development()
 		elif capture_mode == "level":
 			sim.build.apply("acid")
 			sim.gain_xp(12)
@@ -111,6 +132,8 @@ func _process(dt):
 		if checkpoint_timer>=12:
 			checkpoint_timer = 0
 			save_run()
+	if combat_audio!=null and sim.get("feedback")!=null:
+		combat_audio.consume(sim,sound_enabled and stage=="game")
 	ui_timer += dt
 	if ui_timer>=0.12:
 		ui_timer = 0
@@ -124,7 +147,7 @@ func _process(dt):
 
 func _input(event):
 	# Godot emulates a GUI mouse only for the first finger. Capture a second
-	# finger on the three HUD buttons while the first keeps the joystick.
+	# finger on the HUD buttons while the first keeps the joystick.
 	if event is InputEventScreenTouch:
 		if not event.pressed and event.index==button_touch_id:
 			var button = touched_button
@@ -134,7 +157,7 @@ func _input(event):
 			if is_instance_valid(button) and button.is_visible_in_tree() and button.get_global_rect().has_point(event.position): button.pressed.emit()
 			return
 		if event.pressed and stage=="game" and stick_id>=0 and event.index!=stick_id:
-			for button in [hud.pause_button,hud.map_button,hud.shop_button]:
+			for button in [hud.build_button,hud.pause_button,hud.map_button,hud.shop_button]:
 				if button.is_visible_in_tree() and not button.disabled and button.get_global_rect().has_point(event.position):
 					button_touch_id = event.index
 					touched_button = button
@@ -143,12 +166,17 @@ func _input(event):
 	# Release is observed even if a finger ends over a button or a modal opens.
 	if event is InputEventScreenTouch and not event.pressed and event.index == stick_id: clear_stick()
 	if event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT and not event.pressed and stick_id == -2: clear_stick()
+	if stage=="development" and event is InputEventKey and event.pressed and not event.echo and event.keycode in [KEY_ESCAPE,KEY_B]:
+		close_development()
+		get_viewport().set_input_as_handled()
+		return
 	if stage!="game": return
 	if event is InputEventScreenDrag and event.index == stick_id: _move_stick(event.position)
 	if event is InputEventMouseMotion and stick_id == -2: _move_stick(event.position)
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode==KEY_ESCAPE: show_pause()
 		if event.keycode==KEY_M: show_map()
+		if event.keycode==KEY_B: show_development()
 		if event.keycode==KEY_E and sim.nearby_colony()>=0: show_shop()
 
 func _unhandled_input(event):
@@ -189,7 +217,7 @@ func show_menu():
 	sim.paused = true
 	view.sim = sim
 	hud.game_visible(false)
-	var box = hud.open("МИКРОГЕН", "Маленькая жизнь. Непредсказуемая эволюция.\nТестовая версия 0.6.0 · офлайн",740)
+	var box = hud.open("МИКРОГЕН", "Маленькая жизнь. Непредсказуемая эволюция.\nТестовая версия 0.7.0 · офлайн",740)
 	box.add_child(hud.label("Собери организм, который сможет выжить.",25,Color("9ce3cf"),true))
 	box.add_child(hud.label("Исследуй случайный микромир, поглощай ДНК и соединяй мутации. Атаки автоматические — управляй только движением.",20,Color("a3bfc0"),true))
 	if not store.profile.checkpoint.is_empty(): box.add_child(hud.button("Продолжить забег",continue_run,true))
@@ -207,7 +235,7 @@ func show_menu():
 	gallery_button.size_flags_horizontal=Control.SIZE_EXPAND_FILL
 	footer_actions.add_child(gallery_button)
 	footer_actions.add_child(hud.button("Выход",exit_game))
-	box.add_child(hud.label("2 области · 8 органов · 4 синергии · процедурные организмы",16,Color("78989f"),true))
+	box.add_child(hud.label("2 области · %d органов · %d синергий · процедурные организмы" % [Catalog.ORGANS.size(),Catalog.SYNERGIES.size()],16,Color("78989f"),true))
 
 func exit_game():
 	save_run()
@@ -349,7 +377,7 @@ func finish_run():
 	var won = sim.outcome=="victory"
 	var box = hud.open("Эволюция состоялась" if won else "Жизнь продолжается в геноме", "Открытия и полученные ядра наследия сохранены.",820)
 	box.add_child(hud.label("%02d:%02d  ·  Уровень %d  ·  Поглощено и побеждено: %d" % [int(sim.elapsed)/60,int(sim.elapsed)%60,sim.level,sim.kills],24,Color("9ee0cc"),true))
-	box.add_child(hud.label("Ядра наследия: %d\nИзученные синергии: %d/4" % [store.profile.cores,store.profile.synergies.size()],22))
+	box.add_child(hud.label("Ядра наследия: %d\nИзученные синергии: %d/%d" % [store.profile.cores,store.profile.synergies.size(),Catalog.SYNERGIES.size()],22))
 	box.add_child(hud.button("Новый организм",show_start,true))
 	box.add_child(hud.button("Развить геном",show_genome))
 	box.add_child(hud.button("В меню",show_menu))
@@ -384,17 +412,22 @@ func _mutation_card(id: String,callback: Callable) -> PanelContainer:
 	column.add_theme_constant_override("separation",12)
 	card.add_child(column)
 	var item = Catalog.item(id)
+	var illustration = OrganArt.new()
+	illustration.organ_id = id
+	illustration.custom_minimum_size = Vector2(120,90)
+	column.add_child(illustration)
 	column.add_child(hud.label(item.name,23,Color(item.color),true))
 	var rank = sim.build.rank(id)
 	column.add_child(hud.label(("Новый орган" if id in Catalog.ORGANS else "Адаптация") if rank==0 else "Уровень %d → %d" % [rank,rank+1],17,Color("97b6ba")))
+	var full = sim.build.rank(id)==0 and ((id in Catalog.ORGANS and sim.build.organs.size()>=6) or (id in Catalog.ADAPTATIONS and sim.build.adaptations.size()>=4))
+	column.add_child(hud.button("Заменить орган" if full else "Выбрать",callback,true))
 	var description = hud.label(item.desc,19,Color("c5d8d7"),true)
 	description.custom_minimum_size.y = 66
 	column.add_child(description)
-	var hints = hud.label(Catalog.synergy_hint(id,sim.build.organs),16,Color("d0b3e8"),true)
+	column.add_child(hud.label(Development.effect_text(id,maxi(1,rank+1)),17,Color("9fe0ca"),true))
+	var hints = hud.label(Catalog.synergy_hint(id,sim.build.organs.merged(sim.build.adaptations)),16,Color("d0b3e8"),true)
 	hints.custom_minimum_size.y = 75
 	column.add_child(hints)
-	var full = sim.build.rank(id)==0 and ((id in Catalog.ORGANS and sim.build.organs.size()>=6) or (id in Catalog.ADAPTATIONS and sim.build.adaptations.size()>=4))
-	column.add_child(hud.button("Заменить орган" if full else "Выбрать",callback,true))
 	return card
 
 func reroll_level(focused: bool):
@@ -492,11 +525,18 @@ func show_shop():
 		var col = VBoxContainer.new()
 		card.add_child(col)
 		col.add_child(hud.label("Восстановление" if item.id=="heal" else Catalog.item(item.id).name,23,Color("a5e4ca"),true))
-		col.add_child(hud.label("Восстановить 40 здоровья" if item.id=="heal" else Catalog.item(item.id).desc,19,Color("b3cfcb"),true))
-		if item.id!="heal": col.add_child(hud.label(Catalog.synergy_hint(item.id,sim.build.organs),16,Color("ccb0e5"),true))
 		var b = hud.button("Получено" if item.sold else "Купить · %d" % item.price,func(): buy_shop(i),true)
 		b.disabled = item.sold or sim.build.biomass<item.price or (item.id=="heal" and sim.hp>=sim.max_hp) or (item.id!="heal" and sim.build.rank(item.id)>=Catalog.max_rank(item.id))
 		col.add_child(b)
+		if item.id!="heal":
+			var illustration=OrganArt.new()
+			illustration.organ_id=item.id
+			illustration.custom_minimum_size=Vector2(120,90)
+			col.add_child(illustration)
+			col.add_child(hud.label(Development.effect_text(item.id,maxi(1,sim.build.rank(item.id)+1)),17,Color("9fe0ca"),true))
+		col.add_child(hud.label("Восстановить 40 здоровья" if item.id=="heal" else Catalog.item(item.id).desc,19,Color("b3cfcb"),true))
+		if item.id!="heal": col.add_child(hud.label(Catalog.synergy_hint(item.id,sim.build.organs.merged(sim.build.adaptations)),16,Color("ccb0e5"),true))
+
 	box.add_child(hud.button("Вернуться в микромир",resume_game))
 
 func buy_shop(index: int):
@@ -524,10 +564,27 @@ func show_pause():
 	save_run()
 	var box = hud.open("Пауза", "Организм ждёт. Бой и время остановлены.",700)
 	box.add_child(hud.button("Продолжить",resume_game,true))
+	box.add_child(hud.button("Развитие · сборка",show_development))
 	box.add_child(hud.button("Карта микромира",show_map))
 	box.add_child(hud.button("Звук: "+("вкл." if sound_enabled else "выкл."),func(): sound_enabled=not sound_enabled; show_pause()))
 	box.add_child(hud.button("Сохранить и выйти в меню",func(): save_run(); show_menu()))
 	box.add_child(hud.label("Seed: %d · %s" % [sim.world.seed_value,sim.run_id],15,Color("75949c"),true))
+
+func show_development():
+	# Only enter from contexts that can be restored without changing a choice.
+	if stage not in ["game","pause"]: return
+	development_origin = stage
+	set_stage("development")
+	hud.game_visible(false)
+	var box = hud.open("Развитие организма", "Бой и время остановлены. Органы, пассивные эффекты и сочетания текущей сборки.")
+	box.add_child(hud.button("Вернуться в паузу" if development_origin=="pause" else "Вернуться в микромир",close_development,true))
+	Development.populate(hud,box,sim)
+	box.add_child(hud.button("Вернуться",close_development))
+
+func close_development():
+	if stage!="development": return
+	if development_origin=="pause": show_pause()
+	else: resume_game()
 
 func resume_game():
 	hud.close()
@@ -565,7 +622,7 @@ func show_genome():
 
 func show_atlas():
 	set_stage("atlas")
-	var box = hud.open("Атлас эволюции", "Изучи органы в забегах и открой все четыре сочетания.")
+	var box = hud.open("Атлас эволюции", "Изучи органы в забегах и открой все %d сочетаний." % Catalog.SYNERGIES.size())
 	for id in Catalog.SYNERGIES:
 		var item = Catalog.SYNERGIES[id]
 		var known = id in store.profile.synergies
@@ -575,13 +632,14 @@ func show_atlas():
 	box.add_child(hud.label("Органы и адаптации",25))
 	for id in Catalog.ORGANS.keys()+Catalog.ADAPTATIONS.keys():
 		var state = "Изучен" if id in store.profile.discovered else ("Доступен" if id in store.profile.unlocked else "Закрыт: геном")
-		box.add_child(hud.label(Catalog.item(id).name+" — "+state,19,Color("a9ceca"),true))
+		box.add_child(hud.label(state,18,Color("a9ceca"),true))
+		box.add_child(Development.item_card(hud,id,1))
 	box.add_child(hud.button("В меню",show_menu))
 
 func show_help():
 	set_stage("help")
 	var box = hud.open("Как выжить в капле", "Движение — единственное действие во время боя.",850)
-	box.add_child(hud.label("• Коснись любого свободного места экрана и веди палец: появится джойстик.\n• На ПК: WASD или стрелки; M — карта; E — колония; Esc — пауза.\n• Зелёные фрагменты ДНК повышают уровень. Янтарная биомасса нужна для покупок и перебросов. Фиолетовые ядра сохраняются между забегами.\n• Касание захватывает пищу: можно плыть дальше, пока она переваривается. Рецепторы открывают притягивание. Бирюзовые кусочки лечат. Рост меняет соотношение сил: бывшие хищники становятся пищей. Других врагов сначала ослабь; хищная пасть помогает поглощать их раньше.\n• Собирай пары органов: щупальца + кислота, шипы + импульс, деление + след, заражение + пасть.\n• На миникарте отмечаются изученные места. Светлые колонии безопасны; внутри доступен магазин.\n• Оформление, проходы, местные условия, находки и противники меняются с каждым seed.\n• На 10-й минуте появляется Архицит. Найди его по карте и победи. Таймер не завершает забег автоматически.\n• Игра сохраняет забег при паузе и уходе в фон; в меню есть «Продолжить».",20,Color("b8d0cd"),true))
+	box.add_child(hud.label("• Коснись любого свободного места экрана и веди палец: появится джойстик.\n• На ПК: WASD или стрелки; M — карта; E — колония; B — развитие; Esc — пауза.\n• Зелёные фрагменты ДНК повышают уровень. Янтарная биомасса нужна для покупок и перебросов. Фиолетовые ядра сохраняются между забегами.\n• Касание захватывает пищу: можно плыть дальше, пока она переваривается. Рецепторы открывают притягивание. Бирюзовые кусочки лечат. Рост меняет соотношение сил: бывшие хищники становятся пищей. Других врагов сначала ослабь; хищная пасть помогает поглощать их раньше.\n• Собирай пары органов: щупальца + кислота, шипы + импульс, деление + след, заражение + пасть.\n• На миникарте отмечаются изученные места. Светлые колонии безопасны; внутри доступен магазин.\n• Оформление, проходы, местные условия, находки и противники меняются с каждым seed.\n• На 10-й минуте появляется Архицит. Найди его по карте и победи. Таймер не завершает забег автоматически.\n• Игра сохраняет забег при паузе и уходе в фон; в меню есть «Продолжить».",20,Color("b8d0cd"),true))
 	box.add_child(hud.button("Понятно",show_menu,true))
 
 func message(text: String,seconds: float=3):
@@ -617,6 +675,7 @@ func _notification(what):
 		if stage in ["game","map","shop","level","replace"]: show_pause()
 	elif what==NOTIFICATION_WM_GO_BACK_REQUEST:
 		if stage=="game": show_pause()
+		elif stage=="development": close_development()
 		elif stage in ["pause","map","shop"]: resume_game()
 		elif stage in ["genome","atlas","help","start","gallery"]: show_menu()
 	elif what==NOTIFICATION_WM_CLOSE_REQUEST:

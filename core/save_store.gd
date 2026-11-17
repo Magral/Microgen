@@ -23,6 +23,8 @@ func _read(candidate: String) -> Dictionary:
 	if not data.get("upgrades", {}) is Dictionary or not data.get("checkpoint", {}) is Dictionary: return {}
 	var clean = defaults()
 	clean.merge(data, true)
+	for id in Catalog.base_unlocked():
+		if not id in clean.unlocked:clean.unlocked.append(id)
 	clean.cores = maxi(0, int(clean.cores))
 	for id in ["health","collect","regen"]:
 		clean.upgrades[id] = clampi(int(clean.upgrades.get(id,0)),0,5)
