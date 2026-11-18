@@ -1,4 +1,5 @@
 extends RefCounted
+const MobileFX=preload("res://game/mobile_fx.gd")
 const Genome=preload("res://core/genome.gd")
 
 # One signature per synergy, with bounded silhouettes rather than particle spam.
@@ -79,7 +80,7 @@ static func field(canvas: CanvasItem,p: Vector2,radius: float,kind: String,life:
 		canvas.draw_polyline(points,Color(color,alpha*0.10),5.5,true)
 		canvas.draw_polyline(points,Color(color,alpha*(0.65-layer*0.20)),1.6+layer*0.6,true)
 
-static func paint(canvas: CanvasItem,effect: Dictionary,camera: Vector2,center: Vector2,time: float,clones: Array=[]) -> bool:
+static func paint(canvas: CanvasItem,effect: Dictionary,camera: Vector2,center: Vector2,time: float,clones: Array=[], mobile: bool=false) -> bool:
 	var kind=str(effect.type)
 	if kind not in SYNERGY_STYLES and kind not in ["electric","enzymes","cilia","bite","infection","assimilate","mutation","mantle","womb_feed","womb_burst","barrier_block","membrane_break"]: return false
 	var p=effect.pos-camera+center
@@ -103,10 +104,18 @@ static func paint(canvas: CanvasItem,effect: Dictionary,camera: Vector2,center: 
 		p=center
 		_wave(canvas,p,radius*(0.35+t*0.65),time*0.2,TAU,Color("eea1d8",alpha*0.7),2.2,time*3)
 	elif kind in SYNERGY_STYLES:
-		_synergy(canvas,kind,p,effect.get("end",effect.pos)-camera+center,radius,t,alpha,time,clones,camera,center)
+		var end=effect.get("end",effect.pos)-camera+center
+		if mobile:
+			MobileFX.synergy(canvas,kind,p,end,radius,t,Color(SYNERGY_STYLES[kind].color,alpha*0.88),time,clones,camera,center)
+		else:
+			_synergy(canvas,kind,p,end,radius,t,alpha,time,clones,camera,center)
 	elif kind in ["electric","enzymes","cilia"]:
 		var end=effect.get("end",effect.pos)-camera+center
 		var color=Color("a6e5ef") if kind=="electric" else (Color("ebc787") if kind=="enzymes" else Color("b1e8c9"))
+		if mobile:
+			MobileFX.link(canvas,p,end,Color(color,alpha*0.80),time,2.0)
+			if kind=="cilia":MobileFX.wave(canvas,p.lerp(end,0.45),radius*0.31,Color(color,alpha*0.65),MobileFX.PLUME)
+			return true
 		_thread(canvas,p,end,Color(color,alpha*0.75),time,1.2 if kind=="electric" else 2.1,7)
 		if kind=="cilia":
 			var direction=(end-p).normalized()
@@ -120,6 +129,10 @@ static func paint(canvas: CanvasItem,effect: Dictionary,camera: Vector2,center: 
 	elif kind=="infection":
 		var end=effect.get("end",effect.pos)-camera+center
 		var color=Color("eba6da")
+		if mobile:
+			MobileFX.link(canvas,p,end,Color(color,alpha),time,2.0)
+			MobileFX.wave(canvas,end,radius*(0.65+t*0.30),Color(color,alpha),MobileFX.LOBES)
+			return true
 		var normal=(end-p).normalized().orthogonal()
 		for i in range(3):
 			var spread=(i-1)*5.0
@@ -134,6 +147,9 @@ static func paint(canvas: CanvasItem,effect: Dictionary,camera: Vector2,center: 
 		# Tissue response stays attached to the organism while it swims.
 		p=center
 		var color: Color=effect.get("color",Color("d3b7f0"))
+		if mobile:
+			MobileFX.wave(canvas,p,radius*(0.30+t*0.60),Color(color,alpha*0.72),MobileFX.LOBES)
+			return true
 		if kind=="mutation":
 			_wave(canvas,p,radius*(0.45+t*0.5),time*0.3,TAU,Color(color,alpha*0.8),3.0,time*2)
 		for i in range(12):

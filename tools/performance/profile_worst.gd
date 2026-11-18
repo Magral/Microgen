@@ -1,4 +1,5 @@
 extends SceneTree
+const Catalog=preload("res://core/catalog.gd")
 const Sim=preload("res://game/simulation.gd")
 const View=preload("res://game/world_view.gd")
 var sim
@@ -17,6 +18,7 @@ func _initialize():
  if OS.has_environment("MICROGEN_MOBILE_PROFILE"):
   var display=load("res://game/mobile_display.gd").new()
   root.add_child(display)
+  display.level = 3 if OS.has_environment("MICROGEN_LATE_PROFILE") else 0
   display.mount(root,view)
   print("WORLD_BUFFER ",display.target.size,"; canvas ",view.canvas_extent)
  else:
@@ -34,8 +36,26 @@ func load_stage():
  sim.hp=sim.max_hp
  sim.boss_spawned=true
  view.sim=sim
- make_worst()
+ if OS.has_environment("MICROGEN_LATE_PROFILE"):make_late()
+ else:make_worst()
  frame=0
+# Level 37 example with stacked permanent organs, two dense clusters of
+# effects, and an expanded camera. Uses the same frozen state in both runs.
+func make_late():
+ sim.level=37
+ sim.elapsed=1581.0
+ for id in ["acid","pulse","barrier","division","trail","tentacle","infection","devour","enzymes"]:
+  sim.build.organs[id]=6
+  sim.build.qualities[id]=2
+ for id in ["armor","metabolism","catalysis","speed","magnet"]:sim.build.adaptations[id]=3
+ sim.build.stats.evolutions={"acid":true,"tentacle":true,"infection":true}
+ sim.inherited_traits=["sensory","folds","receptive"]
+ sim.effects.clear()
+ for id in Catalog.SYNERGIES:
+  for i in range(4):
+   sim._effect({"type":id,"pos":sim.player+Vector2.from_angle(i*2.399)*30,"end":sim.player+Vector2(145,45),"r":140.0,"life":0.36+i*0.09,"max":0.9})
+ for i in range(12):
+  sim._effect({"type":"assimilate","pos":sim.player,"r":sim.body_radius(),"life":0.35+i*0.04,"max":0.9})
 func make_worst():
  while sim.enemies.size()<28:sim.spawn_enemy(sim.player+Vector2(120,0),"hunter")
  for i in range(sim.enemies.size()):

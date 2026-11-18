@@ -50,6 +50,8 @@ func resize():
 	world_view.detail_limit = DETAIL_LIMITS[level]
 	world_view.mobile_detail = true
 	world_view.fluid.mobile_detail = true
+	world_view.painter.mobile_tissue = true
+	world_view.terrain.mobile_detail = true
 	world_view.queue_redraw()
 	# A resized texture must get a fresh frame even with the game on pause.
 	if world_view.paused_frame_ready:
@@ -80,7 +82,7 @@ func sample_frame(seconds: float, active: bool):
 	var game_ms = float(simulation_us) / maxf(1.0, simulation_samples) / 1000.0
 	var draw_ms = float(world_view.draw_us - last_draw_us) / frame_times.size() / 1000.0
 	last_draw_us = world_view.draw_us
-	frame_summary = "%.0f FPS · 95%% кадров до %.1f мс · Мир %d px · Логика %.1f мс · Динамика CPU %.1f мс" % [fps, p95 * 1000.0, target.size.y, game_ms, draw_ms]
+	frame_summary = "%.0f FPS · 95%% кадров до %.1f мс · Мир %d px · Логика %.1f мс · Динамика CPU %.1f мс · Тест 2" % [fps, p95 * 1000.0, target.size.y, game_ms, draw_ms]
 	simulation_us = 0
 	simulation_samples = 0
 	slow_windows = slow_windows + 1 if fps < 57.0 and p90 > 0.0185 else 0

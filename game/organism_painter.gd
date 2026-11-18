@@ -15,6 +15,7 @@ var _tissue_indices=PackedInt32Array()
 var _tendril_indices=PackedInt32Array([0, 1, 18, 0, 18, 19, 1, 2, 17, 1, 17, 18, 2, 3, 16, 2, 16, 17, 3, 4, 15, 3, 15, 16, 4, 5, 14, 4, 14, 15, 5, 6, 13, 5, 13, 14, 6, 7, 12, 6, 12, 13, 7, 8, 11, 7, 11, 12, 8, 10, 11])
 var cache: Dictionary = {}
 var glow: GradientTexture2D
+var mobile_tissue := false
 var _anchor_contour=PackedVector2Array()
 var _anchor_directions=PackedVector2Array()
 var _anchors_active=false
@@ -380,6 +381,10 @@ func _anchor(contour: PackedVector2Array,angle: float) -> Vector2:
 # Irregular translucent layers merge with living tissue instead of looking like
 # separate glass marbles or inventory icons floating inside the cell.
 func _soft_tissue(canvas: CanvasItem,p: Vector2,radius: float,color: Color,phase: float):
+	if mobile_tissue:
+		var extent=Vector2(1.18,0.82)*radius
+		canvas.draw_texture_rect(glow,Rect2(p-extent,extent*2.0),false,color)
+		return
 	# One pre-triangulated soft patch: no polygon triangulation or trigonometry
 	# for every organelle. Dark lower edge gives inclusions optical thickness.
 	var points=PackedVector2Array([p])
@@ -400,7 +405,7 @@ func _nucleus(canvas: CanvasItem,p: Vector2,radius: float,color: Color,edge: Col
 	_soft_tissue(canvas,p-Vector2(radius*0.07,radius*0.09),radius*1.28,Color(color.darkened(0.65),0.76),phase)
 	_soft_tissue(canvas,p,radius,Color(color,0.70),phase)
 	_soft_tissue(canvas,p-Vector2(radius*0.28,radius*0.31),radius*0.52,Color(edge,0.25),phase+1.4)
-	if detail:
+	if detail and not mobile_tissue:
 		for strand_index in range(3):
 			var strand=PackedVector2Array()
 			for i in range(17):
@@ -412,7 +417,7 @@ func _nucleus(canvas: CanvasItem,p: Vector2,radius: float,color: Color,edge: Col
 func _vesicle(canvas: CanvasItem,p: Vector2,radius: float,color: Color,detail: bool):
 	_soft_tissue(canvas,p+Vector2(0,radius*0.12),radius*1.2,Color(color.lightened(0.26),0.29),p.x*0.1)
 	_soft_tissue(canvas,p,radius,Color(color.darkened(0.40),0.48),p.x*0.1)
-	if not detail: return
+	if not detail or mobile_tissue: return
 	_soft_tissue(canvas,p-Vector2(radius*0.12,radius*0.16),radius*0.70,Color(color,0.48),p.x*0.1+0.6)
 	var fold=PackedVector2Array()
 	for i in range(10):

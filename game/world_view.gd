@@ -5,6 +5,7 @@ const BossEncounter = preload("res://game/boss_encounter.gd")
 const Painter = preload("res://game/organism_painter.gd")
 const TissueDamage=preload("res://game/tissue_damage.gd")
 const Absorption = preload("res://game/absorption.gd")
+const MobileFX = preload("res://game/mobile_fx.gd")
 const OrganicFX = preload("res://game/organic_fx.gd")
 const Jelly = preload("res://game/jelly_motion.gd")
 const Fluid = preload("res://game/fluid_view.gd")
@@ -206,22 +207,22 @@ func _draw():
 			_blob(q,24,Color("468c85"),i*1.2,0.45,true)
 		_blob(p,28,Color("82dbb5"),0,0.4,true)
 		draw_string(font,p+Vector2(-55,80),"КОЛОНИЯ",HORIZONTAL_ALIGNMENT_LEFT,-1,15,Color("83cdbd"))
-	var field_details = 0
 	for f in sim.fields:
 		if not frame.grow(float(f.r)*1.15+8.0/zoom).has_point(f.pos): continue
 		var hostile = bool(f.get("hostile",false))
 		var col = Color("c67688") if hostile else (Color("b684da") if f.kind == "spore" else Color("97ba53"))
 		var p = screen(f.pos)
-		var rich = not mobile_detail or field_details < 4
-		if rich:
-			_blob(p,f.r,Color(col,0.12*f.life/f.max),f.pos.x*0.2,0.5,false)
-			field_details += 1
-		elif hostile:
-			draw_arc(p, f.r, 0, TAU, 32, Color(col, minf(0.88, float(f.life) * 1.6)), 1.8, true)
-		if rich:
-			OrganicFX.field(self,p,f.r,str(f.kind),float(f.life),float(f.max),visual_time)
-		elif not hostile:
-			draw_arc(p, f.r * 0.85, 0, TAU, 20, Color(col, minf(0.43, float(f.life) * 0.86)), 1.3)
+		if mobile_detail:
+			var opacity = minf(1.0, float(f.life) / 0.5)
+			var radius = float(f.r)
+			if hostile:
+				MobileFX.wave(self,p,radius,Color(col,opacity*0.85))
+			else:
+				var breathing = 0.86 + 0.035*sin(visual_time*1.6+float(f.max)-float(f.life))
+				MobileFX.wave(self,p,radius*breathing,Color(col,opacity*0.52),MobileFX.LOBES)
+			continue
+		_blob(p,f.r,Color(col,0.12*f.life/f.max),f.pos.x*0.2,0.5,false)
+		OrganicFX.field(self,p,f.r,str(f.kind),float(f.life),float(f.max),visual_time)
 	var dna_rungs := PackedVector2Array()
 	var dna_edges := PackedVector2Array()
 	for pickup in sim.pickups:
@@ -318,32 +319,28 @@ func _draw():
 		var col = Color("e27e9d") if shot.hostile else Color("e7d1a7")
 		draw_line(p-shot.vel.normalized()*13,p,col,3,true)
 		draw_circle(p,3,col)
-	var rich_colonies = 0
+	# Several pickups can finish in one instant. One tissue pulse is enough
+	# because each piece has already crossed the membrane in _draw_player.
+	var latest_assimilation = {}
 	for effect in sim.effects:
 		if effect.type in ["damage","heal","lash"]:continue
 		var reach = maxf(float(effect.r) * 1.65, 40.0)
-		# Connecting effects can enter through their other endpoint.
 		var visible = frame.grow(reach)
 		if not visible.has_point(effect.pos):
 			if not effect.has("end") or not visible.intersects(Rect2(effect.pos, Vector2.ZERO).expand(effect.end), true):continue
-		if mobile_detail and effect.type == "toxic_colony":
-			rich_colonies += 1
-			if rich_colonies > 4:
-				draw_arc(screen(effect.pos), float(effect.r) * 0.78, 0, TAU, 20, Color("a9db69", float(effect.life) / float(effect.max) * 0.20), 1.2, true)
-				continue
-		if OrganicFX.paint(self,effect,sim.player,size*Vector2(0.5,0.51),visual_time,clones): continue
+		if mobile_detail and effect.type == "assimilate":
+			latest_assimilation = effect
+			continue
+		if OrganicFX.paint(self,effect,sim.player,center,visual_time,clones,mobile_detail): continue
 		var p = screen(effect.pos)
 		var alpha = effect.life/effect.max
-		if effect.type=="lash":
-			var end = screen(effect.end)
-			var points = PackedVector2Array()
-			for i in range(13):
-				var t = i/12.0
-				points.append(p.lerp(end,t)+Vector2(0,sin(t*PI)*20*alpha))
-			draw_polyline(points,Color(0.6,0.95,0.85,alpha),4,true)
+		var col = Color("f5989e") if effect.type=="hurt" else Color("9be8db")
+		if mobile_detail:
+			MobileFX.wave(self,p,effect.r*(1-alpha*0.6),Color(col,alpha*0.55))
 		else:
-			var col = Color("f5989e") if effect.type=="hurt" else Color("9be8db")
 			draw_arc(p,effect.r*(1-alpha*0.6),0,TAU,40,Color(col,alpha*0.55),2,true)
+	if not latest_assimilation.is_empty():
+		OrganicFX.paint(self,latest_assimilation,sim.player,center,visual_time,clones,true)
 	_draw_damage_sources()
 	draw_set_transform(Vector2.ZERO)
 	_draw_absorbable(size)

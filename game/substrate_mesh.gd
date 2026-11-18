@@ -48,7 +48,7 @@ func bake(commands: Array):
 			1:line(command.points,float(command.width),command.color)
 			2:circle(command.p,float(command.radius),command.color)
 			3:
-				var data=volume.mesh(command.shape,command.p,float(command.radius),command.body,command.edge,command.shadow,true)
+				var data=volume.mesh(command.shape,command.p,float(command.radius),command.body,command.edge,command.shadow,bool(command.get("rich",true)))
 				var start=points.size()
 				points.append_array(data.points);colors.append_array(data.colors)
 				for index in data.indices:indices.append(start+index)

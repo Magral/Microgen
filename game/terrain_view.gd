@@ -8,6 +8,7 @@ var chunks: Array=[]
 var source
 var source_seed=-1
 var rebuilds=0
+var mobile_detail := false
 
 # Integer coordinate hashing keeps neighboring patches and new runs repeatable.
 static func grain(x: int,y: int,seed_value: int,salt: int=0) -> float:
@@ -22,6 +23,7 @@ class Patch:
 	var tiles: Array=[]
 	var commands: Array=[]
 	var draw_builds=0
+	var mobile_detail := false
 	func _draw():
 		if commands.is_empty():
 			_build()
@@ -36,8 +38,9 @@ class Patch:
 		commands.append({"kind":2,"p":p,"radius":radius,"color":color})
 	func _blob(p: Vector2,r: float,color: Color,phase: float,stretch: Vector2=Vector2.ONE):
 		var points=PackedVector2Array()
-		for i in range(24):
-			var a=i*TAU/24.0
+		var samples = 12 if mobile_detail else 24
+		for i in range(samples):
+			var a=i*TAU/samples
 			var radius=r*(1+sin(a*5+phase)*0.065+sin(a*3-phase)*0.095)
 			points.append(p+Vector2.from_angle(a)*radius*stretch)
 		_polygon(points,color)
@@ -57,7 +60,7 @@ class Patch:
 		# The offset black skirt gives the wall thickness into the fluid, while
 		# connected broad lobes avoid a grid of independent circular boulders.
 		_blob(p+Vector2(9,14),80,Color(0.012,0.038,0.048,0.58),phase,Vector2(1.02,0.94))
-		_blob(p+Vector2(3,5),77,Color("102d32") if not warm else Color("172f2b"),phase)
+		if not mobile_detail:_blob(p+Vector2(3,5),77,Color("102d32") if not warm else Color("172f2b"),phase)
 		var shape=PackedVector2Array()
 		var world_shape=PackedVector2Array()
 		var center=p+Vector2(-3,-7)
@@ -65,7 +68,7 @@ class Patch:
 			var a=i*TAU/24.0
 			var point=Vector2.from_angle(a)*(1+sin(a*5+phase)*0.065+sin(a*3-phase)*0.095)
 			shape.append(point);world_shape.append(center+point*72)
-		commands.append({"kind":3,"points":world_shape,"shape":shape,"p":center,"radius":72.0,"body":middle,"edge":light,"shadow":tissue.darkened(0.45)})
+		commands.append({"kind":3,"points":world_shape,"shape":shape,"p":center,"radius":72.0,"body":middle,"edge":light,"shadow":tissue.darkened(0.45),"rich":not mobile_detail})
 		# A narrow broken rim follows only the lit upper-left surface.
 		var rim=PackedVector2Array()
 		for i in range(13):
@@ -74,6 +77,7 @@ class Patch:
 			rim.append(p+Vector2(-3,-7)+Vector2.from_angle(a)*radius)
 		_line(rim,Color(light,0.27),4.3)
 		_line(rim,Color(light,0.34),1.1)
+		if mobile_detail:return
 		# Shallow capillary furrows arc through the same cellular tissue.
 		for branch in range(2):
 			var vein=PackedVector2Array()
@@ -98,6 +102,7 @@ class Patch:
 		if t.growth<0.43:
 			var pigment=Color(0.30,0.36,0.13,0.12) if warm else Color(0.10,0.31,0.32,0.12)
 			_blob(p+Vector2(-13,10),57,pigment,phase,Vector2(1.2,0.72))
+			if mobile_detail:return
 			_blob(p+Vector2(6,9),35,Color(pigment,pigment.a*0.8),phase+1,Vector2(1.1,0.64))
 			# Sinuous, tapering collagen filaments lie along the nutrient bed.
 			for strand in range(3):
@@ -135,6 +140,7 @@ func update_world(world,camera: Vector2,viewport: Vector2,zoom: float):
 		for cy in range(0,World.H,CHUNK):
 			for cx in range(0,World.W,CHUNK):
 				var patch=Patch.new()
+				patch.mobile_detail=mobile_detail
 				for y in range(cy,mini(cy+CHUNK,World.H)):
 					for x in range(cx,mini(cx+CHUNK,World.W)):
 						var p=Vector2(x+0.5,y+0.5)*World.TILE

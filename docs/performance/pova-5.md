@@ -50,3 +50,14 @@ LP_NUM_THREADS=2 python3 tools/performance/run_profile.py --output /tmp/microgen
 ```
 
 Широкое окно и программный OpenGL позволяют сравнить одинаковую сцену. Эти данные не измеряют производительность Mali на физическом телефоне.
+
+## Второй тест производительности
+
+На POVA 5 первая тестовая сборка показала 17 FPS на четвёртой ступени, на 23:30 и 26:21 боя. 95% кадров укладывались в 61–69 мс. При буфере 270 px построение динамической графики на CPU занимало 19,4–20,3 мс, а шаг симуляции 3,2–5,9 мс. Оставшуюся задержку эти счётчики не различают.
+
+Вторая сборка заменяет мобильные волны и мелкие слои ткани текстурными масками, упрощает геометрию стен. Применение синергий, урон, поглощение и сохранения используют тот же код. Контуры опасных полей остаются видимыми. На стенде с фиксированным буфером 615×270 и 52 эффектами подготовка графики сократилась с 38,1 до 11,1 мс. Медиана кадра в программном OpenGL сократилась со 106 до 46 мс. Это искусственная сцена позднего забега, требующая отдельного замера на POVA 5.
+
+```sh
+MICROGEN_LATE_PROFILE=1 LP_NUM_THREADS=2 python3 tools/performance/run_profile.py --commit 10ce3ce --output /tmp/microgen-late-base --snapshots /tmp/microgen-base --native --render-only --pova-size --mobile-profile --stress-only
+MICROGEN_LATE_PROFILE=1 LP_NUM_THREADS=2 python3 tools/performance/run_profile.py --output /tmp/microgen-late-current --snapshots /tmp/microgen-base --native --render-only --pova-size --mobile-profile --stress-only
+```
