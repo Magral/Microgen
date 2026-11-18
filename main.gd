@@ -243,7 +243,7 @@ func _process(dt):
 	if hud == null or sim == null: return
 	if mobile_display != null:
 		var now = Time.get_ticks_usec()
-		mobile_display.sample_frame((now-last_frame_tick)/1000000.0, stage=="game" and capture_mode=="" and not sim.stage_transition)
+		mobile_display.sample_frame((now-last_frame_tick)/1000000.0, stage=="game" and capture_mode=="" and not sim.paused)
 		last_frame_tick = now
 		hud.show_performance(mobile_display.frame_summary if show_frame_metrics and stage=="game" else "")
 	if capture_path!="":
@@ -263,7 +263,9 @@ func _process(dt):
 		var keyboard = Vector2(float(Input.is_physical_key_pressed(KEY_D) or Input.is_physical_key_pressed(KEY_RIGHT))-float(Input.is_physical_key_pressed(KEY_A) or Input.is_physical_key_pressed(KEY_LEFT)),float(Input.is_physical_key_pressed(KEY_S) or Input.is_physical_key_pressed(KEY_DOWN))-float(Input.is_physical_key_pressed(KEY_W) or Input.is_physical_key_pressed(KEY_UP)))
 		var dir = keyboard if keyboard.length_squared()>0 else movement
 		var waiting_rewards = sim.reward_queue.size()
+		var sim_started = Time.get_ticks_usec() if mobile_display != null else 0
 		sim.step(dt,dir)
+		if mobile_display != null:mobile_display.record_simulation(Time.get_ticks_usec()-sim_started)
 		if sim.reward_queue.size() > waiting_rewards:deferred_choices = false
 		if not _handle_events():return
 		if sim.stage_transition:

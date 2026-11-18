@@ -136,7 +136,7 @@ func layout_size() -> Vector2:
 	return root.get_viewport_rect().size - Vector2(safe_margins.x + safe_margins.z, safe_margins.y + safe_margins.w)
 
 func show_performance(text: String):
-	performance_label.text = text
+	if performance_label.text != text:performance_label.text = text
 	performance_label.visible = not text.is_empty() and modal == null
 
 func update_game(sim):

@@ -128,3 +128,23 @@ func paint(canvas: CanvasItem,contour: PackedVector2Array,p: Vector2,radius: flo
 	var data=mesh(contour,p,radius,body,edge,shadow,rich,phase)
 	if data.indices.is_empty(): return
 	RenderingServer.canvas_item_add_triangle_array(canvas.get_canvas_item(),data.indices,data.points,data.colors)
+
+# Mobile bodies use one textured surface. The lighting gradient is calculated
+# once, while live tissue still supplies the silhouette in world orientation.
+var mobile_light: ImageTexture
+
+func paint_mobile(canvas: CanvasItem, contour: PackedVector2Array, p: Vector2, radius: float, body: Color):
+	if mobile_light == null:
+		var light_map = Image.create_empty(64, 64, false, Image.FORMAT_RGBA8)
+		for y in range(64):
+			for x in range(64):
+				var offset = Vector2(x, y) / 31.5 - Vector2.ONE
+				var depth = sqrt(maxf(0.0, 1.0 - offset.length_squared()))
+				var lighting = clampf(0.51 + depth * 0.34 + offset.dot(LIGHT) * 0.22, 0.28, 1.0)
+				light_map.set_pixel(x, y, Color(lighting, lighting, lighting, 0.86 + depth * 0.10))
+		mobile_light = ImageTexture.create_from_image(light_map)
+	var geometry = Transform2D(0, Vector2.ONE * radius, 0, p) * contour
+	var uvs = Transform2D(0, Vector2.ONE * 0.32, 0, Vector2(0.5, 0.5)) * contour
+	var indices = Geometry2D.triangulate_polygon(contour)
+	if indices.is_empty():return
+	RenderingServer.canvas_item_add_triangle_array(canvas.get_canvas_item(), indices, geometry, PackedColorArray([body.lightened(0.19)]), uvs, PackedInt32Array(), PackedFloat32Array(), mobile_light.get_rid())

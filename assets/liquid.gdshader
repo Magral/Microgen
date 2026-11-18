@@ -1,5 +1,6 @@
 shader_type canvas_item;
-render_mode unshaded;
+render_mode unshaded, blend_disabled;
+uniform bool mobile_detail=false;
 uniform float fluid_time=0.0;
 uniform vec2 world_origin=vec2(0.0);
 uniform vec2 viewport_size=vec2(1280.0,720.0);
@@ -10,7 +11,10 @@ void fragment() {
 	float t=fluid_time;
 	vec2 uv=world*0.00072;
 	vec3 far_layer=texture(flow_map,uv+vec2(t*0.006,-t*0.003)).rgb;
-	vec3 near_layer=texture(flow_map,uv*1.73+vec2(-t*0.004,t*0.005)+vec2(far_layer.r*0.08)).rgb;
+	vec3 near_layer=far_layer.brg;
+	if (!mobile_detail) {
+		near_layer=texture(flow_map,uv*1.73+vec2(-t*0.004,t*0.005)+vec2(far_layer.r*0.08)).rgb;
+	}
 	float border=2860.0+sin(world.y/650.0+boundary_phase)*350.0+sin(world.y/210.0)*100.0;
 	float toxic=smoothstep(border-200.0,border+200.0,world.x);
 	vec3 deep=mix(vec3(0.022,0.105,0.160),vec3(0.044,0.119,0.095),toxic);

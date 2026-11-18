@@ -77,7 +77,7 @@ func anatomy(recipe: Dictionary) -> Dictionary:
 	cache[key] = data
 	return data
 
-func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs: Dictionary,time: float,role: String="player",detail: bool=true,motion=null,feeding: Array=[],tint: Color=Color(-1,-1,-1),reaction: float=0.0,health_ratio: float=1.0,bite_strength: float=0.0,appearance: Dictionary={}):
+func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs: Dictionary,time: float,role: String="player",detail: bool=true,motion=null,feeding: Array=[],tint: Color=Color(-1,-1,-1),reaction: float=0.0,health_ratio: float=1.0,bite_strength: float=0.0,appearance: Dictionary={}, mobile: bool=false):
 	if not Genome.validate(recipe): return
 	var data = anatomy(recipe)
 	var body: Color = data.colors[0]
@@ -107,6 +107,11 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 		var pose=entry.pose.duplicate()
 		pose.bulge/=maxf(1.0,float(feeding.size()))
 		contour=Absorption.membrane(contour,pose,radius)
+	if mobile and role=="clone":
+		volume.paint_mobile(canvas,contour,p,radius*breathe,body)
+		var stem=p+Vector2.from_angle(facing+PI)*radius*0.78
+		canvas.draw_texture_rect(glow,Rect2(stem-Vector2.ONE*radius*0.34,Vector2.ONE*radius*0.68),false,Color(edge,0.62))
+		return
 	_prepare_anchors(contour)
 	if int(organs.get("speed",0))>0:
 		for i in range(3):
@@ -114,18 +119,21 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 	if int(organs.get("regen",0))>0:
 		for i in range(3): _branch(canvas,p,contour,radius,i*TAU/3+phase,time,_organ_color("regen",edge.lerp(Color("a4dfbc"),0.5),appearance))
 	if int(organs.get("magnet",0))>0 or int(recipe.family)==5:
-		var count = 16 if detail else 8
+		var count = 16 if detail and not mobile else 8
 		for i in range(count): _tendril(canvas,p,contour,radius,i*TAU/count+phase,time+phase+i,0.27+sin(time*2+i)*0.05,Color(_organ_color("magnet",edge,appearance),0.75),0.8)
 	var outer = _transform(contour,p,radius*breathe)
-	if detail:canvas.draw_colored_polygon(_transform(contour,p+Vector2(2,4),radius*1.025*breathe),Color(0.0,0.02,0.035,0.35))
-	volume.paint(canvas,contour,p,radius*breathe,body,edge,shadow,detail,base_phase)
+	if mobile:
+		volume.paint_mobile(canvas,contour,p,radius*breathe,body)
+	else:
+		if detail:canvas.draw_colored_polygon(_transform(contour,p+Vector2(2,4),radius*1.025*breathe),Color(0.0,0.02,0.035,0.35))
+		volume.paint(canvas,contour,p,radius*breathe,body,edge,shadow,detail,base_phase)
 	for entry in feeding: _inclusion(canvas,p,radius,entry,body,edge,time)
 	if reaction>0.01:
 		for i in range(5):
 			var a=phase+i*TAU/5
 			var q=p+_anchor(contour,a)*radius*(0.45+reaction*0.2)
 			canvas.draw_circle(q,radius*(0.07+reaction*0.09),Color(accent,0.18*reaction))
-	if detail:
+	if detail and not mobile:
 		for fold_index in range(5):
 			var fold=PackedVector2Array()
 			for j in range(13):
@@ -154,7 +162,7 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 	if distress>(0.001 if detail else 0.55): _wounds(canvas,p,contour,radius*breathe,wounds,turn,time,body,edge,shadow,detail)
 	var loop = outer.duplicate()
 	loop.append(loop[0])
-	canvas.draw_polyline(loop,Color(edge,0.43+stage*0.045),(1.8+stage*0.45) if detail else 1.2,true)
+	canvas.draw_polyline(loop,Color(edge,0.43+stage*0.045),(1.8+stage*0.45) if detail else 1.2,not mobile)
 	# Directional wet membrane catches upper-left light; underside stays thick.
 	var wet_rim=PackedVector2Array()
 	for i in range(contour.size()+1):
@@ -165,7 +173,7 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 			if wet_rim.size()>1: canvas.draw_polyline(wet_rim,Color(edge.lightened(0.22),0.59),maxf(0.7,radius*0.018),true)
 			wet_rim=PackedVector2Array()
 	if wet_rim.size()>1: canvas.draw_polyline(wet_rim,Color(edge.lightened(0.22),0.59),maxf(0.7,radius*0.018),true)
-	if role=="player" and stage>0 and detail:
+	if role=="player" and stage>0 and detail and not mobile:
 		# Broad pigmented membrane folds stay part of the same continuous body.
 		for fold_index in range(3):
 			var fold=PackedVector2Array()
@@ -175,10 +183,10 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 			canvas.draw_polyline(fold,Color(edge.lerp(accent,0.35),0.18+stage*0.07),radius*(0.028+stage*0.012),true)
 	var inner = _transform(contour,p,radius*0.91*breathe)
 	inner.append(inner[0])
-	if detail:canvas.draw_polyline(inner,Color(edge,0.25),0.8,true)
-	if detail and int(recipe.membrane)==1:
+	if detail and not mobile:canvas.draw_polyline(inner,Color(edge,0.25),0.8,true)
+	if detail and not mobile and int(recipe.membrane)==1:
 		for i in range(0,contour.size(),3): canvas.draw_line(p+contour[i]*radius*0.92,p+contour[i]*radius,Color(edge,0.45),1,true)
-	elif detail and int(recipe.membrane)==2:
+	elif detail and not mobile and int(recipe.membrane)==2:
 		for i in range(0,contour.size(),6): _soft_tissue(canvas,p+contour[i]*radius*0.95,radius*0.045,Color(edge,0.23),float(i))
 	if int(organs.get("armor",0))>0: _plates(canvas,p,contour,radius*(1.0+sin(time*1.8)*0.018),phase,_organ_color("armor",accent,appearance),int(organs.armor))
 	if int(organs.get("spikes",0))>0: _spikes(canvas,p,contour,radius*(1.0+0.045*sin(time*3.4)),phase,_organ_color("spikes",accent,appearance),int(organs.spikes))
@@ -210,7 +218,7 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 		for i in range(3):
 			var center = p+_anchor(contour,phase+i*2.1)*radius*0.87
 			_vesicle(canvas,center,radius*(0.14+sin(time*3.8+i)*0.025),_organ_color("infection",body.lerp(Color("e48abd"),0.65),appearance),detail)
-			if detail:
+			if detail and not mobile:
 				for j in range(3): _soft_tissue(canvas,center+Vector2.from_angle(j*TAU/3)*radius*0.06,radius*0.025,Color("f1bddb",0.28),float(j))
 	if int(organs.get("trail",0))>0: _vesicle(canvas,p+_anchor(contour,facing+PI)*radius*0.88,radius*(0.19+sin(time*2.6)*0.025),_organ_color("trail",body.lerp(Color("8fbd5b"),0.6),appearance),detail)
 	var front_feeding=0.0
@@ -285,7 +293,7 @@ func _wounds(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,radius: f
 func _deform(point: Vector2,motion,phase: float) -> Vector2:
 	return point if motion == null else motion.deform_point(point,phase)
 
-func paint_fragment(canvas: CanvasItem,p: Vector2,fragment: Dictionary,active: bool,opacity: float=1.0):
+func paint_fragment(canvas: CanvasItem,p: Vector2,fragment: Dictionary,active: bool,opacity: float=1.0,mobile: bool=false):
 	var data = anatomy(fragment.genome)
 	var fragment_color: Color=Pigment.color(fragment.pigment) if fragment.has("pigment") else data.colors[0]
 	var quality=clampi(int(fragment.get("quality",0)),0,3)
@@ -294,15 +302,15 @@ func paint_fragment(canvas: CanvasItem,p: Vector2,fragment: Dictionary,active: b
 	var radius = float(fragment.r)*(1.0-progress*0.72)
 	var local: PackedVector2Array=data.fragments[posmod(int(fragment.part),3)]
 	var points=_transform(local,p,radius)
-	if quality>0:
+	if quality>0 and not mobile:
 		canvas.draw_circle(p,radius*1.55,Color(accent_color,(0.10+quality*0.035)*opacity))
 	canvas.draw_colored_polygon(points,Color(fragment_color.lerp(accent_color,quality*0.14),(0.72-progress*0.2)*opacity))
-	canvas.draw_polyline(points,Color(data.colors[1].lerp(accent_color,quality*0.24),(0.55+quality*0.14)*opacity),1.0+quality*0.35,true)
-	if quality>=2:
+	canvas.draw_polyline(points,Color(data.colors[1].lerp(accent_color,quality*0.24),(0.55+quality*0.14)*opacity),1.0+quality*0.35,not mobile)
+	if quality>=2 and not mobile:
 		for i in range(quality):
 			var glint=p+Vector2.from_angle(i*TAU/quality+float(fragment.id)*0.7)*radius*0.8
 			canvas.draw_circle(glint,1.1+quality*0.25,Color(accent_color,0.75*opacity))
-	for i in range(3):
+	for i in range(1 if mobile else 3):
 		var q = p+(points[posmod(1+i*5,points.size())]-p)*0.65
 		canvas.draw_circle(q,radius*0.09,Color(data.colors[3],0.75*opacity))
 

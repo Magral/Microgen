@@ -36,6 +36,7 @@ var mobile_detail := false
 var detail_limit := 6
 var paused_frame_key := 0
 var paused_frame_ready := false
+var draw_us := 0
 
 func layout_size() -> Vector2:
 	return get_viewport_rect().size if canvas_extent == Vector2.ZERO else canvas_extent
@@ -178,8 +179,9 @@ func screen(p: Vector2) -> Vector2:
 	return p-sim.player+layout_size()*Vector2(0.5,0.51)
 
 func _draw():
-	var size = layout_size()
 	if sim == null: return
+	var draw_started = Time.get_ticks_usec() if mobile_detail else 0
+	var size = layout_size()
 	var b = sim.world.biome(sim.player)
 	var center=size*Vector2(0.5,0.51)
 	draw_set_transform(center*(1.0-zoom),0,Vector2.ONE*zoom)
@@ -210,13 +212,16 @@ func _draw():
 		var hostile = bool(f.get("hostile",false))
 		var col = Color("c67688") if hostile else (Color("b684da") if f.kind == "spore" else Color("97ba53"))
 		var p = screen(f.pos)
-		var rich = not mobile_detail or field_details < 12
+		var rich = not mobile_detail or field_details < 4
 		if rich:
 			_blob(p,f.r,Color(col,0.12*f.life/f.max),f.pos.x*0.2,0.5,false)
 			field_details += 1
 		elif hostile:
 			draw_arc(p, f.r, 0, TAU, 32, Color(col, minf(0.88, float(f.life) * 1.6)), 1.8, true)
-		OrganicFX.field(self,p,f.r,str(f.kind),float(f.life),float(f.max),visual_time,2 if rich else 1)
+		if rich:
+			OrganicFX.field(self,p,f.r,str(f.kind),float(f.life),float(f.max),visual_time)
+		elif not hostile:
+			draw_arc(p, f.r * 0.85, 0, TAU, 20, Color(col, minf(0.43, float(f.life) * 0.86)), 1.3)
 	var dna_rungs := PackedVector2Array()
 	var dna_edges := PackedVector2Array()
 	for pickup in sim.pickups:
@@ -254,8 +259,8 @@ func _draw():
 			draw_colored_polygon(PackedVector2Array([p+Vector2(0,-10),p+Vector2(8,0),p+Vector2(0,10),p+Vector2(-8,0)]),col)
 		else: draw_circle(p,4,col)
 	if not dna_edges.is_empty():
-		draw_multiline(dna_edges, Color("87eed2"), 2.0, true)
-		draw_multiline(dna_rungs, Color("87eed2"), 1.0, true)
+		draw_multiline(dna_edges, Color("87eed2"), 2.0)
+		draw_multiline(dna_rungs, Color("87eed2"), 1.0)
 	var clones=sim.clone_positions() if sim.build.rank("division")>0 else []
 	absorbable.clear()
 	for cyst in sim.cysts:
@@ -263,7 +268,7 @@ func _draw():
 		RewardArt.paint(self,screen(cyst.pos),int(cyst.tier),visual_time,int(cyst.id),float(cyst.get("progress",0.0)))
 	for fragment in sim.remains:
 		if fragment.get("captured",false): continue
-		if frame.grow(float(fragment.r) * 1.55).has_point(fragment.pos): painter.paint_fragment(self,screen(fragment.pos),fragment,fragment.id==sim.digesting_id)
+		if frame.grow(float(fragment.r) * 1.55).has_point(fragment.pos): painter.paint_fragment(self,screen(fragment.pos),fragment,fragment.id==sim.digesting_id,1.0,mobile_detail)
 	for resident in sim.residents:
 		if not resident.active and not resident.dead and area.grow(resident.r).has_point(resident.pos):_silhouette(resident)
 	for e in sim.enemies:
@@ -279,11 +284,11 @@ func _draw():
 		if can_mark_absorbable(e):absorbable.append(e)
 		var body_pos = screen(e.pos)
 		var detail = e.kind == "boss" or detailed_enemies.has(e.id)
-		var compact = mobile_detail and not detail and e.kind != "miniboss" and e.r * zoom <= 110.0
+		var compact = mobile_detail and not detail and e.kind != "miniboss"
 		if compact:
 			_draw_compact_enemy(e, body_pos)
 		else:
-			painter.paint(self,body_pos,e.r*1.17*(1.0-float(e.get("engulf",0))*0.65),e.genome,enemy_organs(e),visual_time,"prey" if e.r<sim.body_radius()*0.82 else e.kind,detail,motion_for(e.id),[],Color(-1,-1,-1),0.0,e.hp/e.max_hp)
+			painter.paint(self,body_pos,e.r*1.17*(1.0-float(e.get("engulf",0))*0.65),e.genome,enemy_organs(e),visual_time,"prey" if e.r<sim.body_radius()*0.82 else e.kind,detail,motion_for(e.id),[],Color(-1,-1,-1),0.0,e.hp/e.max_hp,0.0,{},mobile_detail)
 		if boss_core_visible:
 			var core = screen(e.pos)
 			var pulse = 0.5 + 0.5 * sin(visual_time * 12.0)
@@ -299,7 +304,7 @@ func _draw():
 	if sim.build.rank("division")>0:
 		var clone_index = 0
 		for p in clones:
-			painter.paint(self,screen(p),17,sim.player_genome,{"trail":sim.build.rank("trail")},visual_time+1,"clone",false,motion_for("clone:%d" % clone_index),[],sim.body_color(),0.0,sim.hp/sim.max_hp)
+			painter.paint(self,screen(p),17,sim.player_genome,{"trail":sim.build.rank("trail")},visual_time+1,"clone",false,motion_for("clone:%d" % clone_index),[],sim.body_color(),0.0,sim.hp/sim.max_hp,0.0,{},mobile_detail)
 			clone_index += 1
 	if not sim.boss_breakup.is_empty():
 		_draw_boss_breakup(sim.boss_breakup)
@@ -398,20 +403,22 @@ func _draw():
 	if b==1: draw_rect(Rect2(Vector2.ZERO,size),Color(0.15,0.2,0.02,0.025))
 	if menu: draw_rect(Rect2(Vector2.ZERO,size),Color(0.015,0.03,0.05,0.45))
 
+	if mobile_detail:draw_us += Time.get_ticks_usec() - draw_started
+
 func _draw_compact_enemy(enemy: Dictionary, p: Vector2):
 	var data = painter.anatomy(enemy.genome)
-	var contour: PackedVector2Array = data.contour_lod
+	var contour = TissueDamage.contour(data.contour_lod,enemy.genome,enemy.hp/enemy.max_hp)
 	var jelly = motion_for(enemy.id)
 	var phase = float(enemy.genome.phase)
 	if jelly != null:contour = jelly.deform_points(contour, phase)
-	var radius = float(enemy.r) * (1.16 + sin(visual_time * 2.0 + phase) * 0.025)
+	var radius = float(enemy.r) * (1.16 + sin(visual_time * 2.0 + phase) * 0.025) * (1.0-float(enemy.get("engulf",0))*0.65)
 	var points = Transform2D(0, Vector2.ONE * radius, 0, p) * contour
 	var rim: Color = data.colors[1]
 	if enemy.infect > 0.0:rim = rim.lerp(Color("fa69c5"), 0.76)
 	elif float(enemy.get("enzyme_time", 0.0)) > 0.0:rim = rim.lerp(Color("ffc16d"), 0.72)
-	draw_colored_polygon(points, Color(data.colors[0].lerp(rim, 0.20), 0.72))
+	painter.volume.paint_mobile(self, contour, p, radius, data.colors[0].lerp(rim, 0.20))
 	points.append(points[0])
-	draw_polyline(points, Color(rim, 0.72), 1.4, true)
+	draw_polyline(points, Color(rim, 0.72), 1.4)
 	var nucleus = radius * 0.24
 	draw_texture_rect(fluid.haze, Rect2(p - Vector2.ONE * nucleus, Vector2.ONE * nucleus * 2.0), false, Color(data.colors[2], 0.88))
 
@@ -476,7 +483,7 @@ func _draw_player():
 		for value in enemy.get("crown_limbs",[]):
 			var limb=int(value)
 			appearance.lashes[limb]={"tip":EvolutionRules.crown_tip(enemy.pos-sim.player,enemy.r,-1.0 if limb%2==0 else 1.0,visual_time+limb),"extension":extension}
-	painter.paint(self,p,radius,sim.player_genome,anatomy,visual_time,"player",true,motion_for("player"),feeding,sim.body_color(),reaction,sim.hp/sim.max_hp,sim.bite_flash,appearance)
+	painter.paint(self,p,radius,sim.player_genome,anatomy,visual_time,"player",true,motion_for("player"),feeding,sim.body_color(),reaction,sim.hp/sim.max_hp,sim.bite_flash,appearance,mobile_detail)
 	if sim.invuln>0: draw_arc(p,radius*1.4,0,TAU,40,Color("f2c3d1",0.2+0.2*sin(visual_time*24)),2,true)
 
 func _draw_boss_telegraph(enemy: Dictionary):

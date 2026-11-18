@@ -33,7 +33,7 @@ static func _capacity_text(value: int) -> String:
 
 static func _caption(part: Dictionary) -> String:
 	var cost=maxi(1,int(part.get("cells",1)))
-	return "%s · Р%d · %d кл."%[_name(part),int(part.get("rank",1)),cost]
+	return "%s · Ранг %d · %d кл."%[_name(part),int(part.get("rank",1)),cost]
 
 static func _pager(hud,parent,callbacks: Dictionary,key: String,page: int,count: int,per_page: int):
 	var pages=maxi(1,ceili(float(count)/per_page))
@@ -45,8 +45,9 @@ static func _pager(hud,parent,callbacks: Dictionary,key: String,page: int,count:
 
 static func _part_button(hud,parent,part: Dictionary,callbacks: Dictionary,key: String="part",selected: bool=false):
 	var id=str(part.get("id",""))
+	var prefix = "✓ " if selected else ("✧ " if part.get("preferred",false) else "")
+	var label = prefix + _caption(part)
 	var cost=maxi(1,int(part.get("cells",1)))
-	var label=("✓ " if selected else ("✧ " if part.get("preferred",false) else ""))+_name(part)+" · Р%d · %d кл."%[int(part.get("rank",1)),cost]
 	var b=_action(hud,parent,label,callbacks,key,[id])
 	for state in ["normal","hover","pressed","disabled"]:
 		var style=b.get_theme_stylebox(state).duplicate()

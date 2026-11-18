@@ -45,6 +45,8 @@ func _ready():
 static func current_at(p: Vector2,time: float) -> Vector2:
 	return Vector2(sin(p.y*0.0019+time*0.23)+cos(p.x*0.0011-p.y*0.0008-time*0.12),cos(p.x*0.0018-time*0.18)-sin(p.y*0.001+time*0.11))*12.0
 func reset(value: int,center: Vector2,size: Vector2):
+	if is_instance_valid(material_instance):
+		material_instance.set_shader_parameter("mobile_detail",mobile_detail)
 	seed_value=value;camera=center;viewport_size=size
 	clock=0.0;tick=0;flow_evaluations=0
 	wakes=[];particles=[];depths=[]

@@ -2,7 +2,7 @@ name: Android APK
 
 on:
   push:
-    branches: [main, release/1.4.1, preview/pova5]
+    branches: [main, release/1.4.1, preview/pova5, preview/fps60]
     tags: ['v*']
   pull_request:
     branches: [main]

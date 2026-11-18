@@ -29,16 +29,20 @@ func run():
 	var extent = root.get_visible_rect().size
 	print("Wide layout: window ", root.size, " · canvas ", extent, " · world ", display.target.size)
 	check(absf(extent.x - 1640.0) <= 1.0 and extent.y == 720.0, "wide phone gets the whole expanded logical canvas")
-	check(display.target.size == Vector2i(extent) and world.layout_size() == extent, "world buffer preserves viewport aspect and coordinates")
+	check(display.target.size.y == 540 and absf(display.target.size.x - extent.x * 0.75) <= 1.0 and world.layout_size() == extent, "world buffer preserves viewport aspect and coordinates")
 	check(display.image.size.is_equal_approx(extent) and display.image.mouse_filter == Control.MOUSE_FILTER_IGNORE, "world image fills the real window without catching touch")
 	hud.set_safe_area(Rect2(Vector2.ZERO,extent), Rect2(45, 0, 2370, 1080), Transform2D(0, Vector2(1.5,1.5), 0, Vector2.ZERO))
 	check(absf(hud.safe_margins.x - 30.0) <= 1.0 and absf(hud.safe_margins.z - 30.0) <= 1.0 and absf(hud.layout_size().x - 1580.0) <= 2.0, "camera cutout insets HUD while world keeps the same width")
 	for i in range(250):display.sample_frame(1.0/60.0, true)
 	check(display.level == 0, "stable 60 FPS keeps initial quality")
 	for i in range(160):display.sample_frame(0.028, true)
-	check(display.level == 1 and display.target.size.y == 612 and world.layout_size() == extent, "sustained missed frames reduce only world pixels")
+	check(display.level == 1 and display.target.size.y == 432 and world.layout_size() == extent, "sustained missed frames reduce only world pixels")
 	for i in range(160):display.sample_frame(0.028, true)
-	check(display.level == 2 and display.target.size.y == 504, "sustained slowdown reaches bounded minimum")
+	check(display.level == 2 and display.target.size.y == 336, "sustained slowdown lowers another tier")
+	display.sample_frame(0.0, false)
+	for i in range(25):display.sample_frame(1.0/12.0, true)
+	check(display.level == 3 and display.target.size.y == 270, "severe slowdown quickly reaches bounded minimum")
+	check(display.frame_summary.contains("12 FPS") and display.frame_summary.contains("кадров"), "diagnostics label frame time in plain language")
 	world.sim = Sim.new()
 	world.sim.new_run(44)
 	world.sim.paused = true
@@ -46,7 +50,7 @@ func run():
 	display.target.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	root.size = Vector2i(984, 432)
 	display.resize()
-	check(display.target.size.y == 432 and display.target.render_target_update_mode == SubViewport.UPDATE_ONCE, "same-aspect resize repaints paused world")
+	check(display.target.size.y == 270 and display.target.render_target_update_mode == SubViewport.UPDATE_ONCE, "same-aspect resize repaints paused world")
 	world.sim.paused = false
 	world._process(0.0)
 	check(display.target.render_target_update_mode == SubViewport.UPDATE_ALWAYS, "resumed world keeps rendering after paused resize")
