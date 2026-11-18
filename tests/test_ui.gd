@@ -30,6 +30,7 @@ func run():
 	check(scene.sim.current_offers.size()==3, "level offers")
 	var id = scene.sim.current_offers[0]
 	scene.choose_mutation(id)
+	if scene.stage=="synergy_reveal":scene.finish_synergy_reveal()
 	check(scene.sim.pending_levels==0 and scene.sim.build.rank(id)>0, "choice consumes level")
 	check(scene.stage=="game", "game resumes")
 	scene.show_pause()
