@@ -25,6 +25,12 @@ static func _used(parts: Array) -> int:
 	for part in parts:total+=int(part.get("cells",1))
 	return total
 
+static func _capacity_text(value: int) -> String:
+	if value>=1000000000:return "%.1f млрд"%[float(value)/1000000000.0]
+	if value>=1000000:return "%.1f млн"%[float(value)/1000000.0]
+	if value>=1000:return "%.1f тыс."%[float(value)/1000.0]
+	return str(value)
+
 static func _caption(part: Dictionary) -> String:
 	var cost=maxi(1,int(part.get("cells",1)))
 	return "%s · Р%d · %d кл."%[_name(part),int(part.get("rank",1)),cost]
@@ -66,7 +72,7 @@ static func _preview(parent,model: Dictionary,sim,height: float=250):
 	return art
 
 static func populate(hud,box,model: Dictionary,sim,callbacks: Dictionary,page: int=0):
-	box.add_theme_constant_override("separation",6)
+	box.add_theme_constant_override("separation",4)
 	var equipped: Array=model.get("equipped",[])
 	var stock: Array=model.get("stock",[])
 	var capacity=int(model.get("body_capacity",8))
@@ -79,17 +85,19 @@ static func populate(hud,box,model: Dictionary,sim,callbacks: Dictionary,page: i
 	var viewport_height=hud.get_viewport().get_visible_rect().size.y
 	_preview(scene,model,sim,minf(220.0,maxf(110.0,viewport_height*0.24)))
 	var right=VBoxContainer.new();right.custom_minimum_size.x=250;right.size_flags_horizontal=Control.SIZE_EXPAND_FILL;scene.add_child(right)
-	var capacity_line=hud.label("ОРГАНЫ · %d / %d КЛЕТОК"%[_used(equipped),capacity],23,MUTED,true)
+	var capacity_line=hud.label("ОРГАНЫ · %s / %s"%[_capacity_text(_used(equipped)),_capacity_text(capacity)],20,MUTED,true)
 	right.add_child(capacity_line)
 	var body_used=_used(equipped)
-	var capacity_bar=ProgressBar.new();capacity_bar.min_value=0;capacity_bar.max_value=maxi(1,capacity);capacity_bar.value=body_used;capacity_bar.show_percentage=false;capacity_bar.custom_minimum_size.y=14
+	var capacity_bar=ProgressBar.new();capacity_bar.name="body_capacity_bar";capacity_bar.min_value=0;capacity_bar.max_value=maxi(1,capacity);capacity_bar.value=body_used;capacity_bar.show_percentage=false;capacity_bar.custom_minimum_size.y=14
 	right.add_child(capacity_bar)
-	for original in equipped:
+	var body_page=clampi(page,0,maxi(0,ceili(float(equipped.size())/3.0)-1))
+	for original in equipped.slice(body_page*3,body_page*3+3):
 		var part:Dictionary=original.duplicate()
 		part.preferred=str(part.get("kind",""))==str(form.organ)
 		_part_button(hud,right,part,callbacks)
 	var add=_action(hud,right,"+ Добавить орган",callbacks,"empty_body",[],body_used<capacity)
 	add.name="empty_body"
+	if equipped.size()>3:_pager(hud,right,callbacks,"page",body_page,equipped.size(),3)
 	var stockrow=hud.row();box.add_child(stockrow)
 	stockrow.add_child(hud.label("Запас %d/%d мест"%[stock.size(),int(model.get("stock_capacity",3))],20,MUTED))
 	var stock_capacity=int(model.get("stock_capacity",3))

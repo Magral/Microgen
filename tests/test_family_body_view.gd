@@ -62,13 +62,13 @@ func run():
 	model.body_capacity=1000000000
 	box=fixed(hud);Body.populate(hud,box,model,null,bcb,166666666)
 	await verify(hud)
-	check(button(box,"empty_body_cell_999999999")!=null,"large capacity renders only the selected page")
-	check(box.find_children("empty_body_cell_*","Button",true,false).size()<=6,"short-screen body pages stay bounded to six cells")
+	check(box.find_child("body_capacity_bar",true,false)!=null,"large capacity stays visible without cell-by-cell controls")
+	check(box.find_children("empty_body_cell_*","Button",true,false).is_empty(),"body capacity does not create duplicate cell cards")
 	model.body_capacity=regular_capacity
 	model.live=true
-	box=fixed(hud);Body.populate(hud,box,model,null,bcb,1)
+	box=fixed(hud);Body.populate(hud,box,model,null,bcb,2)
 	await verify(hud)
-	check(button(box,"part_part-8")!=null and button(box,"part_part-0")==null,"second body page")
+	check(button(box,"part_part-8")!=null and button(box,"part_part-0")==null,"third body page")
 	check(button(box,"start_action")==null and button(box,"archive_action")==null,"live organism has no start or archive")
 	box=fixed(hud);Body.forms(hud,box,{"choose":func(id):calls.append(["choose",id])})
 	await verify(hud)
