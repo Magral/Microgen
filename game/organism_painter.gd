@@ -19,6 +19,8 @@ var mobile_tissue := false
 var _anchor_contour=PackedVector2Array()
 var _anchor_directions=PackedVector2Array()
 var _anchors_active=false
+var _anchor_angles := PackedFloat32Array()
+var _anchor_zero := 0.0
 
 # Distinct authored growth steps keep upgrades legible after appendage counts cap.
 static func visual_stage(rank: int) -> int:
@@ -101,13 +103,15 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 	var phase = base_phase+turn
 	var facing = float(recipe.rotation)+turn
 	var breathe = 1+sin(time*1.7+phase)*0.025+reaction*0.055
-	var contour = TissueDamage.contour(data.contour if detail else data.contour_lod,recipe,health_ratio)
-	contour=EvolutionAnatomy.shape(contour,appearance.get("evolved",{}),time,base_phase,appearance.get("growth",{}))
-	if motion != null: contour = motion.deform_points(contour,base_phase)
-	for entry in feeding:
-		var pose=entry.pose.duplicate()
-		pose.bulge/=maxf(1.0,float(feeding.size()))
-		contour=Absorption.membrane(contour,pose,radius)
+	var contour: PackedVector2Array = appearance.get("prepared_contour", PackedVector2Array())
+	if contour.is_empty():
+		contour = TissueDamage.contour(data.contour if detail else data.contour_lod,recipe,health_ratio)
+		contour=EvolutionAnatomy.shape(contour,appearance.get("evolved",{}),time,base_phase,appearance.get("growth",{}))
+		if motion != null: contour = motion.deform_points(contour,base_phase)
+		for entry in feeding:
+			var pose=entry.pose.duplicate()
+			pose.bulge/=maxf(1.0,float(feeding.size()))
+			contour=Absorption.membrane(contour,pose,radius)
 	if mobile and role=="clone":
 		volume.paint_mobile(canvas,contour,p,radius*breathe,body)
 		var stem=p+Vector2.from_angle(facing+PI)*radius*0.78
@@ -164,16 +168,17 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 	var loop = outer.duplicate()
 	loop.append(loop[0])
 	canvas.draw_polyline(loop,Color(edge,0.43+stage*0.045),(1.8+stage*0.45) if detail else 1.2,not mobile)
-	# Directional wet membrane catches upper-left light; underside stays thick.
-	var wet_rim=PackedVector2Array()
-	for i in range(contour.size()+1):
-		var index=i%contour.size()
-		if contour[index].normalized().dot(OrganicVolume.LIGHT)>0.30:
-			wet_rim.append(p+contour[index]*radius*breathe*0.958)
-		else:
-			if wet_rim.size()>1: canvas.draw_polyline(wet_rim,Color(edge.lightened(0.22),0.59),maxf(0.7,radius*0.018),true)
-			wet_rim=PackedVector2Array()
-	if wet_rim.size()>1: canvas.draw_polyline(wet_rim,Color(edge.lightened(0.22),0.59),maxf(0.7,radius*0.018),true)
+	if not mobile:
+		# Directional wet membrane catches upper-left light; underside stays thick.
+		var wet_rim=PackedVector2Array()
+		for i in range(contour.size()+1):
+			var index=i%contour.size()
+			if contour[index].normalized().dot(OrganicVolume.LIGHT)>0.30:
+				wet_rim.append(p+contour[index]*radius*breathe*0.958)
+			else:
+				if wet_rim.size()>1: canvas.draw_polyline(wet_rim,Color(edge.lightened(0.22),0.59),maxf(0.7,radius*0.018),true)
+				wet_rim=PackedVector2Array()
+		if wet_rim.size()>1: canvas.draw_polyline(wet_rim,Color(edge.lightened(0.22),0.59),maxf(0.7,radius*0.018),true)
 	if role=="player" and stage>0 and detail and not mobile:
 		# Broad pigmented membrane folds stay part of the same continuous body.
 		for fold_index in range(3):
@@ -182,9 +187,10 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 				var a=phase+fold_index*TAU/3+(j/10.0-0.5)*(0.55+stage*0.12)
 				fold.append(p+_anchor(contour,a)*radius*(0.94+sin(j/10.0*PI)*0.018))
 			canvas.draw_polyline(fold,Color(edge.lerp(accent,0.35),0.18+stage*0.07),radius*(0.028+stage*0.012),true)
-	var inner = _transform(contour,p,radius*0.91*breathe)
-	inner.append(inner[0])
-	if detail and not mobile:canvas.draw_polyline(inner,Color(edge,0.25),0.8,true)
+	if detail and not mobile:
+		var inner = _transform(contour,p,radius*0.91*breathe)
+		inner.append(inner[0])
+		canvas.draw_polyline(inner,Color(edge,0.25),0.8,true)
 	if detail and not mobile and int(recipe.membrane)==1:
 		for i in range(0,contour.size(),3): canvas.draw_line(p+contour[i]*radius*0.92,p+contour[i]*radius,Color(edge,0.45),1,true)
 	elif detail and not mobile and int(recipe.membrane)==2:
@@ -356,6 +362,18 @@ func _prepare_anchors(contour: PackedVector2Array):
 	_anchor_contour=contour
 	_anchor_directions.resize(contour.size())
 	for i in range(contour.size()): _anchor_directions[i]=contour[i].normalized()
+	_anchor_angles.clear()
+	if mobile_tissue and contour.size()>1:
+		_anchor_zero=contour[0].angle()
+		_anchor_angles.append(0.0)
+		# A fold can reverse the contour locally. In that case keep the exact
+		# directional scan used for the desktop painter.
+		for i in range(1,contour.size()):
+			var turn=fposmod(contour[i].angle()-_anchor_zero,TAU)
+			if turn<=_anchor_angles[-1] or contour[i].is_zero_approx():
+				_anchor_angles.clear()
+				break
+			_anchor_angles.append(turn)
 	_anchors_active=true
 
 func _anchor(contour: PackedVector2Array,angle: float) -> Vector2:
@@ -363,6 +381,12 @@ func _anchor(contour: PackedVector2Array,angle: float) -> Vector2:
 	var chosen = contour[0]
 	var direction = Vector2.from_angle(angle)
 	if _anchors_active and contour==_anchor_contour:
+		if not _anchor_angles.is_empty():
+			var insertion=_anchor_angles.bsearch(fposmod(angle-_anchor_zero,TAU))
+			var right=insertion%contour.size()
+			var left=posmod(insertion-1,contour.size())
+			var delta=_anchor_directions[left].dot(direction)-_anchor_directions[right].dot(direction)
+			if absf(delta)>0.000001:return contour[left if delta>0.0 else right]
 		# Armor alone asks for up to45 anchors. Normalize each living contour
 		# once, preserving exactly the original nearest-direction choice.
 		for i in range(contour.size()):
@@ -480,23 +504,28 @@ func _plates(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,radius: f
 			var a=angle+(u-0.5)*0.65
 			pad.append(p+_anchor(contour,a)*radius*(0.97+sin(u*PI)*0.045))
 		canvas.draw_polyline(pad,Color(color.darkened(0.25),0.55),maxf(2.0,radius*(0.105+visual_stage(rank)*0.026)),true)
-		canvas.draw_polyline(pad,Color(color.lightened(0.15),0.54),maxf(1.0,radius*(0.042+visual_stage(rank)*0.010)),true)
+		if not mobile_tissue:canvas.draw_polyline(pad,Color(color.lightened(0.15),0.54),maxf(1.0,radius*(0.042+visual_stage(rank)*0.010)),true)
 
 func _tendril(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,radius: float,angle: float,time: float,length_scale: float,color: Color,width: float,tip=null,extension: float=0.0):
 	var a = _anchor(contour,angle)
 	var normal = a.normalized().orthogonal()
 	var points = PackedVector2Array()
-	for i in range(10):
-		var t = i/9.0
+	var light_stroke = mobile_tissue and length_scale < 0.50 and tip == null
+	var samples = 6 if light_stroke else 10
+	for i in range(samples):
+		var t = float(i)/(samples-1)
 		var resting=p+a*radius*(0.76+t*length_scale)+normal*radius*sin(t*4+time*1.5)*t*0.24
 		if tip!=null:
 			var strike=(p+a*radius*0.76).lerp(p+Vector2(tip),t)+normal*sin(t*PI)*radius*0.25
 			resting=resting.lerp(strike,extension)
 		points.append(resting)
+	if light_stroke:
+		canvas.draw_polyline(points,Color(color,0.70),maxf(1.2,width+radius*0.020))
+		return
 	# A whip can fold onto its anchor axis during a strike. A ribbon mesh
 	# keeps the authored edges without requiring a simple polygon at that pose.
 	RenderingServer.canvas_item_add_triangle_array(canvas.get_canvas_item(),_tendril_indices,_tendril_shape(points,normal,radius,width),PackedColorArray([Color(color.darkened(0.17),0.72)]))
-	canvas.draw_polyline(points,Color(color.lightened(0.08),0.76),maxf(0.7,width*0.65),true)
+	canvas.draw_polyline(points,Color(color.lightened(0.08),0.76),maxf(0.7,width*0.65),not mobile_tissue)
 
 static func _tendril_shape(points: PackedVector2Array,normal: Vector2,radius: float,width: float) -> PackedVector2Array:
 	var flesh=PackedVector2Array()
@@ -561,9 +590,9 @@ func _living_marks(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,rad
 		var points=PackedVector2Array()
 		var anchor_index=contour.find(_anchor(contour,a))
 		for j in range(7):points.append(p+contour[posmod(anchor_index+j-3,contour.size())]*radius*(0.89+sin(j*0.5+time*2)*0.012))
-		canvas.draw_polyline(points,Color(col,0.22),radius*0.085,true)
+		if not mobile_tissue:canvas.draw_polyline(points,Color(col,0.22),radius*0.085,true)
 		canvas.draw_polyline(points,Color(col.lightened(0.2),0.65+0.20*sin(time*2+index)),maxf(1.0,radius*0.025),true)
-		if evolved:
+		if evolved and not mobile_tissue:
 			for j in range(points.size()):points[j]=p+(points[j]-p)*0.92
 			canvas.draw_polyline(points,Color(col,0.85),maxf(0.8,radius*0.018),true)
 		if not specialization_data.is_empty():
@@ -628,8 +657,8 @@ func _evolved_organs(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,r
 		var col=_organ_color("tentacle",edge,appearance)
 		# Thick perfused collar joins every tentacle root to the membrane.
 		var collar=_transform(contour,p,radius*0.92);collar.append(collar[0])
-		canvas.draw_polyline(collar,Color(body.lerp(col,0.30),0.58),maxf(0.1,radius*0.13*growing),true)
-		canvas.draw_polyline(collar,Color(col,0.65),maxf(1,radius*0.023),true)
+		if not mobile_tissue:canvas.draw_polyline(collar,Color(body.lerp(col,0.30),0.58),maxf(0.1,radius*0.13*growing),true)
+		canvas.draw_polyline(collar,Color(col,0.65),maxf(0.1,radius*0.023*growing) if mobile_tissue else maxf(1,radius*0.023),not mobile_tissue)
 		for i in range(Catalog.tentacle_count(int(organs.get("tentacle",0)))):
 			var a=phase+i*TAU/Catalog.tentacle_count(int(organs.tentacle))
 			var root=p+_anchor(contour,a)*radius*0.90
@@ -650,7 +679,7 @@ func _evolved_organs(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,r
 			for j in range(9):
 				var a=phase+i*TAU/6+(j/8.0-0.5)*0.48
 				fold.append(p+_anchor(contour,a)*radius*(0.83+sin(j/8.0*PI)*(0.08-contraction*0.055)))
-			canvas.draw_polyline(fold,Color(col.darkened(0.4),0.75),maxf(0.1,radius*0.10*growing),true)
+			if not mobile_tissue:canvas.draw_polyline(fold,Color(col.darkened(0.4),0.75),maxf(0.1,radius*0.10*growing),true)
 			canvas.draw_polyline(fold,Color(col.lightened(0.15),0.65),radius*0.028,true)
 	if evolved.get("infection",false):
 		var charge=clampi(int(appearance.get("spore_charge",0)),0,2)

@@ -243,6 +243,7 @@ func _process(dt):
 	if hud == null or sim == null: return
 	if mobile_display != null:
 		var now = Time.get_ticks_usec()
+		mobile_display.set_engine_metrics(show_frame_metrics and stage=="game")
 		mobile_display.sample_frame((now-last_frame_tick)/1000000.0, stage=="game" and capture_mode=="" and not sim.paused)
 		last_frame_tick = now
 		hud.show_performance(mobile_display.frame_summary if show_frame_metrics and stage=="game" else "")

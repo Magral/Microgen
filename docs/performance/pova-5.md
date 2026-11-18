@@ -61,3 +61,11 @@ LP_NUM_THREADS=2 python3 tools/performance/run_profile.py --output /tmp/microgen
 MICROGEN_LATE_PROFILE=1 LP_NUM_THREADS=2 python3 tools/performance/run_profile.py --commit 10ce3ce --output /tmp/microgen-late-base --snapshots /tmp/microgen-base --native --render-only --pova-size --mobile-profile --stress-only
 MICROGEN_LATE_PROFILE=1 LP_NUM_THREADS=2 python3 tools/performance/run_profile.py --output /tmp/microgen-late-current --snapshots /tmp/microgen-base --native --render-only --pova-size --mobile-profile --stress-only
 ```
+
+## Третий тест производительности
+
+Вторая сборка на том же POVA 5 и четвёртой ступени, на 26:44 боя, показала 19 FPS и 68,7 мс для 95% кадров. Буфер мира остался 270 px. Логика заняла 5,1 мс, динамическая отрисовка на CPU 17,2 мс. Разница между этими счётчиками и полным временем кадра не объясняет, какая часть ушла на GPU.
+
+Третья сборка повторно использует контур амёбы, сокращает число штрихов мелких органов и заранее отсекает заведомо невозможные столкновения по границам того же контура. В стендовой сцене позднего боя счётчик подготовки тела показал 4,6 мс после 5,9–7,7 мс раньше. Результат полного времени кадра на телефоне пока неизвестен.
+
+«Показ FPS» добавляет время подготовки тела, эффектов, обновления вида и собственные счётчики RenderingServer. В колонке GPU выводится прочерк, когда движок не отдаёт положительного значения. Счётчики движка включаются только при открытой диагностике в бою.

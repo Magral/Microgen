@@ -49,6 +49,7 @@ func run():
 	check(painter.has_method("_prepare_anchors"),"attachment directions normalize once per painted contour")
 	if painter.has_method("_prepare_anchors"):
 		var mismatches=0
+		painter.mobile_tissue=true
 		for genome_seed in range(24):
 			var recipe=Genome.create(genome_seed,genome_seed+4,"hunter",0)
 			var jelly=Jelly.new(recipe.rotation)
@@ -68,6 +69,7 @@ func run():
 								score=candidate
 								reference=point
 						if painter._anchor(contour,angle)!=reference: mismatches+=1
+		painter.mobile_tissue=false
 		check(mismatches==0,"cached attachments exactly match original rays under jelly and damage")
 	check(painter.has_method("visual_stage"),"organ ranks have visual milestone stages")
 	if painter.has_method("visual_stage"):

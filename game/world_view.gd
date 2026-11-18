@@ -38,6 +38,10 @@ var detail_limit := 6
 var paused_frame_key := 0
 var paused_frame_ready := false
 var draw_us := 0
+var body_draw_us := 0
+var effects_draw_us := 0
+var view_update_us := 0
+var prepared_contour := PackedVector2Array()
 
 func layout_size() -> Vector2:
 	return get_viewport_rect().size if canvas_extent == Vector2.ZERO else canvas_extent
@@ -78,6 +82,7 @@ var joystick_visible = false
 var font = ThemeDB.fallback_font
 
 func _process(dt):
+	var view_started = Time.get_ticks_usec() if mobile_detail else 0
 	if sim != null:
 		var size = layout_size()
 		if mobile_detail:
@@ -138,11 +143,12 @@ func _process(dt):
 			_anatomy_key=anatomy_key
 		var visible=[]
 		var bounds=size/(2*zoom)+Vector2.ONE*80
-		for enemy in sim.enemies:
-			var offset=enemy.pos-sim.player
-			if absf(offset.x)<bounds.x and absf(offset.y)<bounds.y and enemy.r*zoom>=22:
-				visible.append(enemy)
-		visible.sort_custom(func(a,b):return sim.player.distance_squared_to(a.pos)<sim.player.distance_squared_to(b.pos))
+		if detail_limit > 0:
+			for enemy in sim.enemies:
+				var offset=enemy.pos-sim.player
+				if absf(offset.x)<bounds.x and absf(offset.y)<bounds.y and enemy.r*zoom>=22:
+					visible.append(enemy)
+			visible.sort_custom(func(a,b):return sim.player.distance_squared_to(a.pos)<sim.player.distance_squared_to(b.pos))
 		detailed_enemies.clear()
 		for i in range(mini(detail_limit,visible.size())):detailed_enemies[visible[i].id]=true
 		var alive = {"player":true}
@@ -153,6 +159,7 @@ func _process(dt):
 			var pose=entry.pose.duplicate()
 			pose.bulge/=maxf(1.0,float(feeding.size()))
 			physical=Absorption.membrane(physical,pose,sim.body_radius())
+		prepared_contour=physical
 		var phase=float(sim.player_genome.phase)+motion_for("player").angle_delta()
 		var breathe=1+sin(visual_time*1.7+phase)*0.025+reaction*0.055
 		sim.contact_contour=Transform2D(0,Vector2.ONE*breathe,0,Vector2.ZERO)*physical
@@ -175,6 +182,7 @@ func _process(dt):
 		_prune_organ_cache(alive)
 	water_surface.queue_redraw()
 	queue_redraw()
+	if mobile_detail:view_update_us += Time.get_ticks_usec()-view_started
 
 func screen(p: Vector2) -> Vector2:
 	return p-sim.player+layout_size()*Vector2(0.5,0.51)
@@ -309,7 +317,9 @@ func _draw():
 			clone_index += 1
 	if not sim.boss_breakup.is_empty():
 		_draw_boss_breakup(sim.boss_breakup)
+	var body_started = Time.get_ticks_usec() if mobile_detail else 0
 	_draw_player()
+	if mobile_detail:body_draw_us += Time.get_ticks_usec()-body_started
 	if sim.last_damage.get("kind","")=="toxin" and sim.elapsed-float(sim.last_damage.get("time",-10))<1.5:OrganicFX.infected(self,screen(sim.player),sim.body_radius(),sim.player_genome,visual_time,2.0,motion_for("player"))
 	for cyst in sim.cysts:
 		if cyst.get("captured",false):RewardArt.paint(self,screen(cyst.pos),int(cyst.tier),visual_time,int(cyst.id),float(cyst.get("progress",0.0)))
@@ -321,6 +331,7 @@ func _draw():
 		draw_circle(p,3,col)
 	# Several pickups can finish in one instant. One tissue pulse is enough
 	# because each piece has already crossed the membrane in _draw_player.
+	var effects_started = Time.get_ticks_usec() if mobile_detail else 0
 	var latest_assimilation = {}
 	for effect in sim.effects:
 		if effect.type in ["damage","heal","lash"]:continue
@@ -341,6 +352,7 @@ func _draw():
 			draw_arc(p,effect.r*(1-alpha*0.6),0,TAU,40,Color(col,alpha*0.55),2,true)
 	if not latest_assimilation.is_empty():
 		OrganicFX.paint(self,latest_assimilation,sim.player,center,visual_time,clones,true)
+	if mobile_detail:effects_draw_us += Time.get_ticks_usec()-effects_started
 	_draw_damage_sources()
 	draw_set_transform(Vector2.ZERO)
 	_draw_absorbable(size)
@@ -460,8 +472,6 @@ func _prepare_feeding(contour: PackedVector2Array = PackedVector2Array()):
 
 func _draw_player():
 	var p = screen(sim.player)
-	var rank_sum = 0
-	for rank in sim.build.organs.values(): rank_sum += rank
 	var radius = player_radius()
 	if sim.build.rank("acid")>0:
 		var acid_radius=(75+sim.build.rank("acid")*9)*sim.build.specialization_value("acid","radius_mult")*sim.ability_scale()
@@ -469,6 +479,7 @@ func _draw_player():
 		draw_arc(p,acid_radius,0,TAU,48,Color(0.6,0.85,0.4,0.14),1.0,true)
 	var anatomy = player_anatomy if not player_anatomy.is_empty() else sim.build.organs.merged(sim.build.adaptations,true)
 	var appearance={"body_chambers":maxi(0,sim.build.organ_capacity-preload("res://core/organism_equipment.gd").base_capacity(str(sim.run_loadout.get("form","predator")))),"stock_chambers":maxi(0,sim.stock_capacity-3),"qualities":sim.build.qualities,"specializations":sim.build.specializations,"temporary_mutations":sim.build.temporary_mutations,"evolved":sim.build.stats.evolutions,"active_synergies":sim.build.active_synergies(),"hereditary_traits":sim.inherited_traits,"growth":evolution_growth,"spore_charge":sim.spore_charge,"mantle_flash":0.0,"lashes":{}}
+	if mobile_detail and tracked_sim==sim:appearance["prepared_contour"]=prepared_contour
 	for effect in sim.effects:
 		if effect.type=="mantle":appearance.mantle_flash=sin(PI*(1-float(effect.life)/float(effect.max)))
 		if effect.type=="lash":

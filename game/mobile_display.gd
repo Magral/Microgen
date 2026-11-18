@@ -15,7 +15,10 @@ var frame_times := PackedFloat32Array()
 var frame_summary := ""
 var simulation_us := 0
 var simulation_samples := 0
-var last_draw_us := 0
+var last_view_us := Vector4.ZERO
+var engine_metrics := false
+var engine_time := Vector2.ZERO
+var gpu_samples := 0
 
 func mount(window: Window, view: Node2D):
 	root_window = window
@@ -62,27 +65,49 @@ func record_simulation(usec: int):
 	simulation_us += usec
 	simulation_samples += 1
 
+func set_engine_metrics(enabled: bool):
+	if engine_metrics == enabled:return
+	engine_metrics = enabled
+	RenderingServer.viewport_set_measure_render_time(target.get_viewport_rid(), enabled)
+	RenderingServer.viewport_set_measure_render_time(root_window.get_viewport_rid(), enabled)
+
 func sample_frame(seconds: float, active: bool):
+	var view_us = Vector4(world_view.draw_us, world_view.body_draw_us, world_view.effects_draw_us, world_view.view_update_us)
 	if not active:
 		interval = 0.0
 		slow_windows = 0
 		frame_times.clear()
 		simulation_us = 0
 		simulation_samples = 0
-		last_draw_us = world_view.draw_us
+		last_view_us = view_us
+		engine_time = Vector2.ZERO
+		gpu_samples = 0
 		return
 	if seconds <= 0.0:return
 	interval += seconds
 	frame_times.append(seconds)
+	if engine_metrics:
+		var world_rid = target.get_viewport_rid()
+		var root_rid = root_window.get_viewport_rid()
+		engine_time.x += RenderingServer.get_frame_setup_time_cpu() + RenderingServer.viewport_get_measured_render_time_cpu(world_rid) + RenderingServer.viewport_get_measured_render_time_cpu(root_rid)
+		var gpu = RenderingServer.viewport_get_measured_render_time_gpu(world_rid) + RenderingServer.viewport_get_measured_render_time_gpu(root_rid)
+		if gpu > 0.0:
+			engine_time.y += gpu
+			gpu_samples += 1
 	if interval < FRAME_WINDOW:return
 	frame_times.sort()
 	var p90 = frame_times[int((frame_times.size() - 1) * 0.90)]
 	var p95 = frame_times[int((frame_times.size() - 1) * 0.95)]
 	var fps = frame_times.size() / interval
 	var game_ms = float(simulation_us) / maxf(1.0, simulation_samples) / 1000.0
-	var draw_ms = float(world_view.draw_us - last_draw_us) / frame_times.size() / 1000.0
-	last_draw_us = world_view.draw_us
-	frame_summary = "%.0f FPS · 95%% кадров до %.1f мс · Мир %d px · Логика %.1f мс · Динамика CPU %.1f мс · Тест 2" % [fps, p95 * 1000.0, target.size.y, game_ms, draw_ms]
+	var view_ms = (view_us - last_view_us) / (frame_times.size() * 1000.0)
+	last_view_us = view_us
+	frame_summary = "%.0f FPS · 95%% кадров ≤ %.1f мс · Мир %d px · Логика %.1f мс · Отрисовка %.1f мс · Тест 3" % [fps, p95 * 1000.0, target.size.y, game_ms, view_ms.x]
+	if engine_metrics:
+		var gpu_text = "%.1f мс" % (engine_time.y/gpu_samples) if gpu_samples > 0 else "—"
+		frame_summary += "\nТело %.1f · Эффекты %.1f · Подготовка мира %.1f · Рендер CPU %.1f мс · GPU %s" % [view_ms.y, view_ms.z, view_ms.w, engine_time.x/frame_times.size(), gpu_text]
+	engine_time = Vector2.ZERO
+	gpu_samples = 0
 	simulation_us = 0
 	simulation_samples = 0
 	slow_windows = slow_windows + 1 if fps < 57.0 and p90 > 0.0185 else 0

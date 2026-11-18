@@ -43,6 +43,7 @@ const SizeRules=preload("res://core/size_rules.gd")
 var facing=0.0
 var bite_flash=0.0
 var _cached_contact_polygon=PackedVector2Array()
+var _cached_contact_bounds := Rect2()
 var _cached_contact_radius=-1.0
 var _cached_contact_health=-1.0
 var _cached_contact_hash=0
@@ -437,6 +438,8 @@ func _ensure_contact_shape():
 	if _cached_contact_polygon.is_empty() or radius!=_cached_contact_radius or health!=_cached_contact_health or shape_hash!=_cached_contact_hash or from_view != _cached_contact_from_view:
 		_cached_contact_unit=contact_contour if from_view else EvolutionAnatomy.shape(TissueDamage.contour(Genome.contour(player_genome),player_genome,health),build.stats.evolutions,elapsed,float(player_genome.phase))
 		_cached_contact_polygon=Transform2D(0,Vector2.ONE*radius,0,Vector2.ZERO)*_cached_contact_unit
+		_cached_contact_bounds=Rect2(_cached_contact_polygon[0],Vector2.ZERO)
+		for point in _cached_contact_polygon:_cached_contact_bounds=_cached_contact_bounds.expand(point)
 		_cached_contact_radius=radius
 		_cached_contact_health=health
 		_cached_contact_hash=shape_hash
@@ -461,10 +464,15 @@ func _touches(position: Vector2,object_radius: float=0.0) -> bool:
 	if nearest.distance_squared_to(position)>broad*broad: return false
 	_ensure_contact_shape()
 	var polygon=_cached_contact_polygon
+	var margin = object_radius + 3.0
+	var test_bounds = _cached_contact_bounds.grow(margin)
+	var sweep = Rect2(offset,Vector2.ZERO).expand(position-start)
+	if not test_bounds.intersects(sweep, true):return false
 	var steps=maxi(1,ceili(travel.length()/maxf(4.0,radius*0.3)))
-	var edge_distance_squared = (object_radius + 3.0) * (object_radius + 3.0)
+	var edge_distance_squared = margin * margin
 	for step in range(steps+1):
 		var relative=position-start.lerp(player,float(step)/steps)
+		if not test_bounds.intersects(Rect2(relative,Vector2.ZERO), true):continue
 		if Geometry2D.is_point_in_polygon(relative,polygon): return true
 		for i in range(polygon.size()):
 			if relative.distance_squared_to(Geometry2D.get_closest_point_to_segment(relative,polygon[i],polygon[(i+1)%polygon.size()]))<=edge_distance_squared: return true

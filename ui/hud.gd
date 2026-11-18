@@ -105,7 +105,7 @@ func _ready():
 	root.add_child(message)
 	performance_label = label("", 18, Color("a5d6ce"))
 	performance_label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
-	performance_label.position = Vector2(28, -38)
+	performance_label.position = Vector2(28, -66)
 	performance_label.hide()
 	root.add_child(performance_label)
 	if OS.get_name() == "Android":
