@@ -97,18 +97,22 @@ func _initialize():
 	soak.hp = 100000
 	for i in range(1200): soak.step(0.5,Vector2.ZERO)
 	check(soak.enemies.size() <= Sim.ENEMY_CAP and soak.fields.size() <= 80 and soak.shots.size() <= 200, "late wave caps")
-	check(soak.boss_spawned, "boss appears after ten minutes")
+	check(not soak.boss_spawned, "boss waits for stage objectives instead of timer")
+	soak.enemies.clear()
+	soak.minibosses_defeated=soak.stage_miniboss_target()
+	soak.step(0.01,Vector2.ZERO)
+	check(soak.boss_spawned, "boss unlocks after the miniboss objective")
 	soak.enemies.clear()
 	soak.spawn_enemy(soak.player+Vector2(120,0),"boss")
 	soak.enemies[0].hp = 0
 	soak.step(0.01,Vector2.ZERO)
-	check(soak.outcome == "victory", "boss death wins")
+	check(soak.stage_transition and soak.outcome=="", "boss death continues the run at the next stage")
 	var terminal = Sim.new()
-	check(terminal.restore(soak.snapshot()) and terminal.outcome=="victory", "terminal outcome survives checkpoint")
+	check(terminal.restore(soak.snapshot()) and terminal.stage_transition and terminal.stage_index==1, "stage transition survives checkpoint")
 	var reward_count = 0
 	for event in soak.events:
-		if event.type == "core" and event.token.ends_with(":boss"): reward_count += 1
+		if event.type == "core" and event.token.begins_with(soak.run_id+":boss:"): reward_count += 1
 	soak.step(0.01,Vector2.ZERO)
-	check(reward_count == 1, "one boss reward event")
+	check(reward_count == 1 and soak.events.any(func(event):return event.type=="stage_clear"), "one stage boss reward and clear event")
 	print("SIMULATION: %d assertions, %d failures" % [checks, failures])
 	quit(0 if failures == 0 else 1)
