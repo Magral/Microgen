@@ -13,7 +13,11 @@ func run():
 	var s=fresh();s.build.organs={"tentacle":6};s.build.adaptations={"magnet":3};s.build.stats.evolutions={"tentacle":true};s.facing=PI/2
 	var small=foe(s,0.6);var giant=foe(s,2.0);giant.pos+=Vector2(0,40)
 	var before=small.pos;s._attack()
-	check(giant.hp<giant.max_hp,"ordinary lashes still hit a larger enemy alongside held prey")
+	check(giant.hp==giant.max_hp,"ordinary lashes cannot damage a closed giant membrane")
+	giant.enzyme_time = 2.0
+	s.cooldowns.tentacle = 0.0
+	s._attack()
+	check(giant.hp<giant.max_hp,"ordinary lashes can hit a giant after enzymes expose its membrane")
 	check(float(small.get("crown_time",0))>0,"evolved crown marks smaller prey")
 	check(float(giant.get("crown_time",0))==0,"healthy giant cannot be held")
 	check(small.pos==before,"crown strike never teleports prey")

@@ -210,15 +210,18 @@ func specialization_bonus(id: String,key: String) -> int:
 			if targets.has(key):value+=int(targets[key])*int(active.get("rank",1))
 	return value
 
-func apply_temporary_mutation(id: String,grade: int=0) -> bool:
+func can_apply_temporary_mutation(id: String, grade: int = 0) -> bool:
 	if not Catalog.TEMP_MUTATIONS.has(id):return false
+	var rank = temporary_mutation_rank(id)
+	return temporary_mutations.size() < 3 if rank == 0 else rank < 3 or temporary_mutation_quality(id) < grade
+
+func apply_temporary_mutation(id: String,grade: int=0) -> bool:
+	if not can_apply_temporary_mutation(id, grade):return false
 	for active in temporary_mutations:
 		if str(active.get("id",""))!=id:continue
-		if int(active.get("rank",1))>=3 and int(active.get("quality",0))>=grade:return false
 		active.rank=mini(3,int(active.get("rank",1))+1)
 		active.quality=maxi(int(active.get("quality",0)),clampi(grade,0,3))
 		return true
-	if temporary_mutations.size()>=3:return false
 	temporary_mutations.append({"id":id,"rank":1,"quality":clampi(grade,0,3)})
 	return true
 

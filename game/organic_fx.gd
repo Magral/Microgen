@@ -66,13 +66,13 @@ static func infected(canvas: CanvasItem,p: Vector2,radius: float,recipe: Diction
 		canvas.draw_circle(p+a,head,Color(tint,0.66))
 		canvas.draw_arc(p+a,head,0.2,5.8,9,Color(tint.lightened(0.5),0.9),1.0,true)
 
-static func field(canvas: CanvasItem,p: Vector2,radius: float,kind: String,life: float,maximum: float,time: float):
+static func field(canvas: CanvasItem,p: Vector2,radius: float,kind: String,life: float,maximum: float,time: float,layers: int = 2):
 	var color=Color("e499b6") if kind.begins_with("enemy") else (Color("dfa3ec") if kind=="spore" else Color("b2dd75"))
 	var alpha=minf(1.0,life/0.5)*0.55
 	var age=maximum-life
 	# Two translucent breathing membranes read as a real organic field. Cached
 	# lobed geometry removes 57 thread samples and reduces 18 calls to four.
-	for layer in range(2):
+	for layer in range(layers):
 		var scale_value=radius*(0.64+layer*0.23+sin(time*1.2+layer+age)*0.035)
 		var transform=Transform2D(time*0.08+layer*1.7,Vector2(1.0,0.84+layer*0.08)*scale_value,0,p)
 		var points=transform*_field_basis
@@ -81,12 +81,21 @@ static func field(canvas: CanvasItem,p: Vector2,radius: float,kind: String,life:
 
 static func paint(canvas: CanvasItem,effect: Dictionary,camera: Vector2,center: Vector2,time: float,clones: Array=[]) -> bool:
 	var kind=str(effect.type)
-	if kind not in SYNERGY_STYLES and kind not in ["electric","enzymes","cilia","bite","infection","assimilate","mutation","mantle","womb_feed","womb_burst"]: return false
+	if kind not in SYNERGY_STYLES and kind not in ["electric","enzymes","cilia","bite","infection","assimilate","mutation","mantle","womb_feed","womb_burst","barrier_block","membrane_break"]: return false
 	var p=effect.pos-camera+center
 	var t=clampf(1.0-float(effect.life)/float(effect.max),0.0,1.0)
 	var alpha=pow(sin(PI*t),0.65)
 	var radius=float(effect.r)
-	if kind=="mantle":
+	if kind == "barrier_block":
+		var opacity = 1.0 - t
+		canvas.draw_circle(center, radius, Color(0.47, 0.75, 1.0, opacity * 0.15))
+		canvas.draw_arc(center, radius * (1.0 + t * 0.13), 0, TAU, 32, Color(0.64, 0.84, 1.0, opacity), 2.6, true)
+	elif kind == "membrane_break":
+		var heading = (effect.end - effect.pos).angle()
+		for ray in range(5):
+			var vector = Vector2.from_angle(heading + (ray - 2) * 0.46)
+			canvas.draw_line(p + vector * radius * t * 0.65, p + vector * radius * (0.38 + t), Color("ffcf83", 1.0 - t), 2.2, true)
+	elif kind=="mantle":
 		var end=effect.get("end",effect.pos)-camera+center
 		var a=(end-p).angle()
 		_wave(canvas,p,radius*(0.9+t*0.6),a-0.65,1.3,Color("c7f27f",alpha*0.9),3.0,time*2)

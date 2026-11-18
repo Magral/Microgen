@@ -1,4 +1,5 @@
 extends SceneTree
+const Equipment = preload("res://core/organism_equipment.gd")
 var failures = 0
 func check(ok: bool, text: String):
 	if not ok:
@@ -96,6 +97,44 @@ func run():
 	if not mutation_button.is_empty():mutation_button[0].pressed.emit()
 	check(scene.stage=="codex_entry" and has_text(scene.hud.content,"Кислота +12%"),"Codex describes temporary mutation effects on the organism")
 	scene.close_modal()
+	scene.continue_run()
+	scene.deferred_choices = true
+	scene.sim._spawn_cyst(scene.sim.player, 2, "fresh-during-deferral")
+	var fresh_cyst = scene.sim.cysts.back()
+	fresh_cyst.captured = true
+	fresh_cyst.progress = 0.99
+	scene._process(0.02)
+	check(scene.stage == "reward" and scene.sim.reward_queue.size() == 1, "a newly digested cyst reopens reward choice after an older choice was deferred")
+	scene.close_modal()
+	flow.live_mode = true
+	var exchange = flow.state()
+	exchange.equipped = []
+	exchange.body_capacity = 6
+	for kind in ["devour", "acid", "spikes"]:
+		exchange = Equipment.award(exchange, kind).state
+	check(flow.commit_state(exchange), "full body fixture persists")
+	scene.sim.reward_queue = [{"token":"exchange-cyst", "tier":3}]
+	scene.sim.reward_options = [{"kind":"mutation", "id":"division", "quality":3}]
+	scene.show_reward()
+	scene.reward_reveal.skip()
+	scene.claim_reward(0)
+	check(scene.stage == "replace", "oversized cyst trophy opens the actual family exchange")
+	var outgoing = exchange.equipped.filter(func(part):return part.kind != "devour").map(func(part):return part.id)
+	scene.replacement_selected = outgoing
+	scene._show_organ_replacement()
+	var confirm = scene.hud.content.find_children("*", "Button", true, false).filter(func(b):return b.text == "Применить")
+	check(confirm.size() == 1 and not confirm[0].disabled, "two organs free enough space for the incoming trophy")
+	if not confirm.is_empty():confirm[0].pressed.emit()
+	var persisted = scene.store.profile.organism
+	check(persisted.equipped.any(func(part):return part.kind == "division" and part.quality == 3) and scene.sim.build.rank("division") == 1, "installed organ remains in combat and in the checkpoint")
+	check(persisted.stock.filter(func(part):return part.id in outgoing).size() + persisted.reserve.filter(func(part):return part.id in outgoing).size() == 2, "both replaced organs keep their IDs")
+	check(scene.sim.reward_queue.is_empty(), "successful exchange consumes one reward")
+	scene.sim.build.organs["barrier"] = 1
+	scene.hud.update_game(scene.sim)
+	check(scene.hud.hp_bar.custom_minimum_size.x == 240 and scene.hud.shield_label.visible and scene.hud.shield_bar.value == 100, "compact health and ready shield are distinct")
+	scene.sim.hurt_player(8)
+	scene.hud.update_game(scene.sim)
+	check("восстановление" in scene.hud.shield_label.text and scene.hud.shield_bar.value == 0, "blocked hit starts visible shield recovery")
 	scene.store.clear_test_files()
 	scene.queue_free()
 	await process_frame

@@ -21,6 +21,7 @@ func run():
 		for i in range(3):
 			combat.spawn_enemy(combat.player+Vector2(80,i*12),"hunter")
 			var foe=combat.enemies.back();foe.hp=1000;foe.max_hp=1000;foe.tissue_budget=1000
+			foe.r = combat.body_radius()
 		combat._attack()
 		var limbs=combat.effects.filter(func(e):return e.type=="lash")
 		check(limbs.size()==rank,"one functional limb per rank: %d"%rank)

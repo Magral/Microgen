@@ -1,5 +1,6 @@
 extends Node2D
 const OrganismFlow=preload("res://ui/organism_flow.gd")
+const OrganismView=preload("res://ui/organism_view.gd")
 const CodexView=preload("res://ui/codex_view.gd")
 const Equipment=preload("res://core/organism_equipment.gd")
 var lineage_flow
@@ -19,7 +20,9 @@ const CystReveal=preload("res://ui/cyst_reveal.gd")
 var reward_reveal
 const Sim = preload("res://game/simulation.gd")
 const BossEncounter = preload("res://game/boss_encounter.gd")
+const BOSS_REROLL_COST = 5
 const View = preload("res://game/world_view.gd")
+const MobileDisplay = preload("res://game/mobile_display.gd")
 const HUD = preload("res://ui/hud.gd")
 const Save = preload("res://core/save_store.gd")
 const Catalog = preload("res://core/catalog.gd")
@@ -37,6 +40,9 @@ const Painter = preload("res://game/organism_painter.gd")
 var store = Save.new()
 var sim
 var view
+var mobile_display
+var show_frame_metrics := false
+var last_frame_tick := 0
 var hud
 var development_origin = "game"
 var stage = "menu"
@@ -51,6 +57,7 @@ var active_shop = -1
 var replacement_id = ""
 var replacement_origin = ""
 var replacement_stock = -1
+var replacement_selected: Array = []
 var synergy_continue: Callable
 var stage_reveal_tween: Tween
 var stage_preview_world
@@ -79,7 +86,12 @@ func _ready():
 			store.path="user://test-preview-release-one.json";store.clear_test_files()
 	store.load_profile()
 	view = View.new()
-	add_child(view)
+	if OS.get_name() == "Android" or "--mobile-profile" in OS.get_cmdline_user_args():
+		mobile_display = MobileDisplay.new()
+		add_child(mobile_display)
+		mobile_display.mount(get_window(), view)
+	else:
+		add_child(view)
 	hud = HUD.new()
 	add_child(hud)
 	hud.on_pause = show_pause
@@ -229,6 +241,11 @@ func _ready():
 
 func _process(dt):
 	if hud == null or sim == null: return
+	if mobile_display != null:
+		var now = Time.get_ticks_usec()
+		mobile_display.sample_frame((now-last_frame_tick)/1000000.0, stage=="game" and capture_mode=="" and not sim.stage_transition)
+		last_frame_tick = now
+		hud.show_performance(mobile_display.frame_summary if show_frame_metrics and stage=="game" else "")
 	if capture_path!="":
 		capture_elapsed += dt
 		if capture_elapsed>1.0:
@@ -245,7 +262,9 @@ func _process(dt):
 	if stage == "game" and capture_mode == "":
 		var keyboard = Vector2(float(Input.is_physical_key_pressed(KEY_D) or Input.is_physical_key_pressed(KEY_RIGHT))-float(Input.is_physical_key_pressed(KEY_A) or Input.is_physical_key_pressed(KEY_LEFT)),float(Input.is_physical_key_pressed(KEY_S) or Input.is_physical_key_pressed(KEY_DOWN))-float(Input.is_physical_key_pressed(KEY_W) or Input.is_physical_key_pressed(KEY_UP)))
 		var dir = keyboard if keyboard.length_squared()>0 else movement
+		var waiting_rewards = sim.reward_queue.size()
 		sim.step(dt,dir)
+		if sim.reward_queue.size() > waiting_rewards:deferred_choices = false
 		if not _handle_events():return
 		if sim.stage_transition:
 			if not sim.boss_breakup.is_empty():
@@ -467,6 +486,7 @@ func continue_run():
 	OrganismFlow.apply_to_build(equipment,loaded.build)
 	loaded.stock_capacity=int(equipment.stock_capacity)
 	capacity_notice=false
+	deferred_choices = false
 	sim = loaded
 	view.sim = sim
 	hud.close()
@@ -521,6 +541,13 @@ func _handle_events() -> bool:
 				next.credited.append(event.token);changed=true
 				next.best_stage=maxi(int(next.get("best_stage",0)),cleared)
 				sim.best_stage=maxi(sim.best_stage,cleared)
+				var payout = _stage_reroll_cost(cleared)
+				next.organium = mini(9007199254740991, int(next.organium) + payout)
+				message("Ступень пройдена · +%d органиума" % payout, 5)
+		elif event.type == "organium" and not event.token in next.credited:
+			next.credited.append(event.token)
+			next.organium = mini(9007199254740991, int(next.organium) + int(event.amount))
+			changed = true
 		elif event.type=="family_material" and not event.token in next.credited:
 			var found=event.get("materials",{})
 			if not found is Dictionary or found.is_empty():return false
@@ -567,7 +594,10 @@ func show_capacity_notice():
 	row.add_child(hud.button("Продолжить",resume_game,true))
 
 func stage_reroll_cost()->int:
-	return 8+mini(40,sim.stage_index*4)
+	return _stage_reroll_cost(sim.stage_index)
+
+func _stage_reroll_cost(index: int) -> int:
+	return 8 + mini(40, index * 4)
 
 func show_boss_reward(error_text: String = ""):
 	var reward = sim.boss_reward
@@ -591,6 +621,10 @@ func show_boss_reward(error_text: String = ""):
 		box.add_child(hud.button("Забрать орган", func(): _claim_boss_reward(true), true))
 		box.add_child(hud.button("Расщепить ткани босса", func(): _claim_boss_reward(false)))
 		box.add_child(hud.label("+%d органелл · +%d мембраны · +%d плазмы" % [materials.organelle, materials.membrane, materials.plasma], 20, Color("c7ded8"), true))
+		var balance = int(store.profile.organium)
+		var reroll = hud.button("Переброс использован" if reward.get("rerolled", false) else "Перебросить · %d органиума (есть %d)" % [BOSS_REROLL_COST, balance], _reroll_boss_reward)
+		reroll.disabled = reward.get("rerolled", false) or balance < BOSS_REROLL_COST
+		box.add_child(reroll)
 	_add_stage_error(box)
 	if not error_text.is_empty():_show_stage_error(error_text)
 
@@ -603,6 +637,26 @@ func _show_stage_error(error_text: String):
 	if not is_instance_valid(stage_action_error):return
 	stage_action_error.text = error_text if not error_text.is_empty() else "Не удалось сохранить. Попробуй ещё раз."
 	stage_action_error.show()
+
+func _reroll_boss_reward():
+	if stage != "boss_reward" or not _run_matches_family():return
+	var previous = sim.boss_reward
+	if previous.is_empty() or previous.claimed or previous.get("rerolled", false):return
+	var balance = int(store.profile.organium)
+	if balance < BOSS_REROLL_COST:return
+	var alternatives = BossEncounter.PATTERNS.filter(func(pattern): return pattern.organ != previous.organ)
+	var choice = alternatives[posmod(sim.pending_stage_seed, alternatives.size())]
+	sim.boss_reward = previous.duplicate(true)
+	sim.boss_reward.organ = choice.organ
+	sim.boss_reward.rerolled = true
+	var next = store.profile.duplicate(true)
+	next.organium = balance - BOSS_REROLL_COST
+	next.checkpoint = sim.snapshot()
+	if not store.write_profile(next):
+		sim.boss_reward = previous
+		_show_stage_error(store.last_error)
+		return
+	show_boss_reward()
 
 func _claim_boss_reward(take_organ: bool):
 	if stage != "boss_reward" or sim.boss_reward.is_empty() or sim.boss_reward.claimed or not _run_matches_family():return
@@ -653,7 +707,7 @@ func show_stage_briefing():
 	preview_sim.stage_index=stage_number;preview_sim.run_id=sim.run_id;preview_sim._create_cysts()
 	preview_sim.boss_spawned=true;preview_sim.boss_marker=preview_world.boss_pos
 	for index in range(preview_world.cells.size()):preview_sim.explored[index]=true
-	var screen_size=hud.root.get_viewport_rect().size
+	var screen_size=hud.layout_size()
 	var wide=screen_size.x>=900
 	var box=hud.open_fixed("Переход на ступень %d"%stage_number,"Карта, условия и награды следующей области.",1120)
 	var map=Map.new();map.sim=preview_sim;map.large=wide;map.custom_minimum_size=Vector2(430,290) if wide else Vector2(230,clampf(screen_size.y*0.18,100,140))
@@ -699,12 +753,14 @@ func show_stage_briefing():
 	var actions=hud.row() if wide else VBoxContainer.new();box.add_child(actions)
 	var cost=stage_reroll_cost()
 	var organism_button=hud.button("ОРГАНИЗМ",func():development_origin="stage_briefing";_lineage().show_body(true))
-	var reroll=hud.button("Новая область · %d органиума"%cost,reroll_stage_area)
+	var balance = int(store.profile.organium)
+	var reroll=hud.button("Новая область · %d (есть %d)" % [cost, balance],reroll_stage_area)
+	details.add_child(hud.label("Органиум: %d · за боссов, минибоссов и завершение забега" % balance, 19, Color("c7ded8"), true))
 	var enter=hud.button("ВОЙТИ В ОБЛАСТЬ",enter_next_stage,true)
 	if not wide:
 		for action in [organism_button,reroll,enter]:action.custom_minimum_size.y=46
 	actions.add_child(organism_button)
-	reroll.disabled=int(store.profile.get("organium",0))<cost
+	reroll.disabled=balance<cost
 	actions.add_child(reroll)
 	actions.add_child(enter)
 	_add_stage_error(box)
@@ -848,7 +904,7 @@ func show_level(page: int=0):
 		sim.roll_offer_quality()
 	deferred_choices = false
 	var box = hud.open("Мутация · уровень %d" % sim.level,"Выбери одно улучшение. Новые органы можно заменить прямо здесь. Биомасса: %d" % sim.build.biomass)
-	var viewport_width=hud.root.get_viewport_rect().size.x
+	var viewport_width=hud.layout_size().x
 	var columns=1 if viewport_width<640 else (2 if viewport_width<1020 else 3)
 	var choices=GridContainer.new()
 	choices.columns=columns
@@ -1054,16 +1110,19 @@ func _continue_after_level_pick():
 func _needs_replacement(id: String) -> bool:
 	if id in Catalog.ORGANS:return sim.build.rank(id)==0 and not sim.build.can_fit(id)
 	if sim.build.rank(id)>0: return false
-	return sim.build.organs.size()>=6 if id in Catalog.ORGANS else sim.build.adaptations.size()>=4
+	return sim.build.adaptations.size()>=4
 
 func show_replacement(id: String,origin: String,stock: int=-1):
 	replacement_id = id
 	replacement_origin = origin
 	replacement_stock = stock
+	replacement_selected.clear()
 	set_stage("replace")
+	if id in Catalog.ORGANS:
+		_show_organ_replacement()
+		return
 	var box = hud.open("Перестройка организма", "Новый орган: "+Catalog.item(id).name+". Выбери, что заменить. Переносится половина дополнительных уровней, с округлением вниз.")
-	var target = sim.build.organs if id in Catalog.ORGANS else sim.build.adaptations
-	for old in target:
+	for old in sim.build.adaptations:
 		var lost = []
 		for synergy in sim.build.active_synergies():
 			if old in Catalog.SYNERGIES[synergy].needs: lost.append(Catalog.SYNERGIES[synergy].name)
@@ -1074,6 +1133,101 @@ func show_replacement(id: String,origin: String,stock: int=-1):
 		var projected=Build.new();projected.from_dict(sim.build.to_dict());projected.apply(id,old,grade)
 		box.add_child(hud.label(Development.short_effect(id,projected,sim.ability_scale(),sim.cooldown_factor()),18,Color("b9d9cf"),true))
 	box.add_child(hud.button("Отмена",func(): show_level() if origin=="level" else (show_reward() if origin=="reward" else show_shop())))
+
+func _replacement_grade() -> int:
+	match replacement_origin:
+		"level": return int(sim.offer_quality.get(replacement_id, 0))
+		"reward": return int(sim.reward_options[reward_index].quality)
+		"shop": return int(sim.world.colonies[active_shop].stock[replacement_stock].get("quality", 0))
+	return 0
+
+func _show_organ_replacement(page: int = 0):
+	var current = _lineage().capture(sim.build.to_dict())
+	var draft = Equipment.draft_exchange(current, replacement_id, _replacement_grade())
+	var box = hud.open_fixed("Установить «%s»" % Catalog.item(replacement_id).name, "Снимаемые органы сохранятся в запасе или архиве.")
+	_add_stage_error(box)
+	if not draft.ok:
+		_show_stage_error(draft.error)
+		return
+	var preview = Equipment.move(draft.state, draft.id, "body", replacement_selected)
+	OrganismView.exchange(hud, box, draft.state, draft.id, replacement_selected, preview.error, {
+		"toggle": func(id):
+			if id in replacement_selected:replacement_selected.erase(id)
+			else:replacement_selected.append(id)
+			_show_organ_replacement(page),
+		"apply": func(): _commit_organ_replacement(preview),
+		"page": _show_organ_replacement,
+		"back": _cancel_replacement,
+	}, page)
+	var stored = Equipment.award(current, replacement_id, _replacement_grade())
+	if stored.ok and stored.location in ["stock", "reserve"]:
+		var destination = "Оставить в запасе" if stored.location == "stock" else "Оставить в архиве"
+		box.add_child(hud.button(destination, func(): _commit_organ_replacement(stored)))
+
+func _cancel_replacement():
+	match replacement_origin:
+		"reward":show_reward()
+		"shop":show_shop()
+		_:show_level()
+
+func _commit_organ_replacement(result: Dictionary):
+	if stage != "replace" or not result.ok or not _run_matches_family():return
+	var before_synergies = sim.build.active_synergies().duplicate()
+	var pending_level = sim.pending_levels
+	var offers = sim.current_offers
+	var grades = sim.offer_quality
+	var rerolls = sim.rerolls
+	var rewards_before = sim.reward_queue.duplicate()
+	var options_before = sim.reward_options.duplicate()
+	var biomass = sim.build.biomass
+	var claimed_token = ""
+	var shop_item = {}
+	var after: Callable
+	match replacement_origin:
+		"level":
+			if pending_level <= 0 or replacement_id not in offers:return
+			sim.pending_levels -= 1
+			sim.current_offers = []
+			sim.offer_quality = {}
+			sim.rerolls = 0
+			after = _continue_after_level_pick
+		"reward":
+			if sim.reward_queue.is_empty():return
+			claimed_token = str(sim.reward_queue[0].token)
+			if claimed_token in sim.claimed_rewards:return
+			sim.claimed_rewards.append(claimed_token)
+			sim.reward_queue.pop_front()
+			sim.reward_options.clear()
+			after = _continue_after_reward
+		"shop":
+			shop_item = sim.world.colonies[active_shop].stock[replacement_stock]
+			if shop_item.sold or not sim.build.spend(shop_item.price):return
+			shop_item.sold = true
+			after = show_shop
+		_:return
+	var flow = _lineage()
+	flow.live_mode = true
+	if not flow.commit_state(result.state):
+		sim.pending_levels = pending_level
+		sim.current_offers = offers
+		sim.offer_quality = grades
+		sim.rerolls = rerolls
+		sim.reward_queue = rewards_before
+		sim.reward_options = options_before
+		if not claimed_token.is_empty():sim.claimed_rewards.erase(claimed_token)
+		if not shop_item.is_empty():shop_item.sold = false
+		sim.build.biomass = biomass
+		set_stage("replace")
+		_show_organ_replacement()
+		_show_stage_error(store.last_error)
+		return
+	deferred_choices = false
+	if result.location in ["stock", "reserve"]:
+		message("Орган сохранён в запасе" if result.location == "stock" else "Орган сохранён в архиве семейства", 5)
+	_tone(640)
+	var activated = sim.build.active_synergies().filter(func(id):return id not in before_synergies)
+	if activated.is_empty():after.call()
+	else:show_synergy_reveal(activated, after)
 
 func confirm_replacement(old: String):
 	if stage!="replace": return
@@ -1173,6 +1327,8 @@ func show_pause():
 	box.add_child(hud.button("Развитие · сборка",show_development))
 	box.add_child(hud.button("Карта микромира",show_map))
 	box.add_child(hud.button("Звук: "+("вкл." if sound_enabled else "выкл."),func(): sound_enabled=not sound_enabled; show_pause()))
+	if mobile_display != null:
+		box.add_child(hud.button("Показ FPS: " + ("вкл." if show_frame_metrics else "выкл."),func(): show_frame_metrics = not show_frame_metrics; show_pause()))
 	box.add_child(hud.button("Сохранить и выйти в меню",func(): save_run(); show_menu()))
 	box.add_child(hud.label("Seed: %d · %s" % [sim.world.seed_value,sim.run_id],15,Color("75949c"),true))
 
@@ -1243,7 +1399,7 @@ func show_codex_entry(kind: String):
 func show_help():
 	set_stage("help")
 	var box = hud.open("Как выжить в капле", "Движение — единственное действие во время боя.",850)
-	box.add_child(hud.label("• Коснись любого свободного места экрана и веди палец: появится джойстик.\n• На ПК: WASD или стрелки; M — карта; E — колония; B — развитие; Esc — пауза.\n• Зелёные фрагменты ДНК повышают уровень. Янтарная биомасса нужна для покупок и перебросов. Фиолетовые ядра сохраняются между забегами.\n• Касание захватывает пищу: можно плыть дальше, пока она переваривается. Рецепторы открывают притягивание. Бирюзовые кусочки лечат. Рост меняет соотношение сил: бывшие хищники становятся пищей. Других врагов сначала ослабь; хищная пасть помогает поглощать их раньше.\n• Собирай пары органов: щупальца + кислота, шипы + импульс, деление + след, заражение + пасть.\n• На миникарте отмечаются гнёзда и угрозы. Посети гнёзда, победи местных минибоссов — это откроет маршрут к боссу ступени.\n• После победы выбирай сборку и особенности следующей процедурной области. Чем выше семейный рекорд, тем быстрее проходятся знакомые ступени.\n• Игра сохраняет забег при паузе и уходе в фон; в меню есть «Продолжить».",20,Color("b8d0cd"),true))
+	box.add_child(hud.label("• Коснись любого свободного места экрана и веди палец: появится джойстик.\n• На ПК: WASD или стрелки; M — карта; E — колония; B — развитие; Esc — пауза.\n• Зелёные фрагменты ДНК повышают уровень. Биомасса нужна для покупок и переброса мутаций. Органиум дают за боссов, минибоссов и завершение забега. Он нужен для смены области и трофея босса.\n• Касание захватывает пищу: можно плыть дальше, пока она переваривается. Рецепторы открывают притягивание. Бирюзовые кусочки лечат. Рост меняет соотношение сил: бывшие хищники становятся пищей. Соперники упираются в мембрану. Панцирь гиганта ослабляют ферменты, пробивают особые шипы и развитая пасть. У босса после залпа открывается ядро.\n• Собирай пары органов: щупальца + кислота, шипы + импульс, деление + след, заражение + пасть.\n• На миникарте отмечаются гнёзда и угрозы. Посети гнёзда, победи местных минибоссов — это откроет маршрут к боссу ступени.\n• После победы выбирай сборку и особенности следующей процедурной области. Чем выше семейный рекорд, тем быстрее проходятся знакомые ступени.\n• Игра сохраняет забег при паузе и уходе в фон; в меню есть «Продолжить».",20,Color("b8d0cd"),true))
 	box.add_child(hud.button("Понятно",show_menu,true))
 
 func message(text: String,seconds: float=3):
@@ -1330,20 +1486,28 @@ func close_modal():
 		"save_error": resume_game()
 		_: resume_game()
 
-func show_reward():
+func show_reward(animate: bool = true):
 	if sim.reward_queue.is_empty():
 		resume_game()
 		return
 	deferred_choices = false
 	sim.prepare_reward()
+	if sim.reward_queue.is_empty():
+		resume_game()
+		return
 	set_stage("reward")
 	var box = hud.open("Награда за опасную добычу", "Выбери одну награду. Качество и варианты сохраняются. Ожидают: %d." % sim.reward_queue.size())
+	_add_stage_error(box)
 	reward_reveal=CystReveal.new()
 	reward_reveal.tier=int(sim.reward_queue[0].tier)
 	reward_reveal.options=sim.reward_options.duplicate(true)
 	box.add_child(reward_reveal)
 	var reveal=reward_reveal
-	var row = hud.row()
+	var row = GridContainer.new()
+	var viewport_width = hud.layout_size().x
+	row.columns = 3 if viewport_width >= 1120 else 1
+	row.add_theme_constant_override("h_separation", 12)
+	row.add_theme_constant_override("v_separation", 12)
 	box.add_child(row)
 	row.hide()
 	reveal.finished.connect(func():
@@ -1381,26 +1545,60 @@ func show_reward():
 			else:
 				column.add_child(hud.label("Биомасса +%d" % int(option.amount),24,Color("eac88c"),true))
 				column.add_child(hud.button("Поглотить",func(): claim_reward(i),true))
-	save_run()
+	if animate:save_run()
+	else:reveal.skip()
 
 func claim_reward(index: int,replace_id: String=""):
 	if stage=="reward" and is_instance_valid(reward_reveal) and not reward_reveal.complete:return
-	if stage not in ["reward","replace"] or index<0 or index>=sim.reward_options.size(): return
+	if stage not in ["reward","replace"] or index<0 or index>=sim.reward_options.size() or not _run_matches_family(): return
 	var previous_synergies=sim.build.active_synergies().duplicate()
 	var option = sim.reward_options[index]
 	if option.kind=="mutation" and replace_id=="" and _needs_replacement(option.id):
 		reward_index = index
 		show_replacement(option.id,"reward")
 		return
-	if option.kind=="mutation" and option.id in Catalog.ORGANS and replace_id=="":
+	var flow = _lineage()
+	var equipment = flow.capture(sim.build.to_dict())
+	if equipment.is_empty():
+		_show_stage_error("Не удалось прочитать органы семейства")
+		return
+	var previous_build = sim.build.to_dict()
+	var previous_queue = sim.reward_queue.duplicate()
+	var previous_options = sim.reward_options.duplicate()
+	var previous_claimed = sim.claimed_rewards.duplicate()
+	var previous_inventory = sim.pending_inventory.duplicate()
+	var previous_effects = sim.effects.duplicate()
+	var previous_feedback = sim.feedback.duplicate()
+	var saved: bool
+	if option.kind=="mutation" and option.id in Catalog.ORGANS:
 		if sim.reward_queue.is_empty() or str(sim.reward_queue[0].token) in sim.claimed_rewards:return
-		if not _lineage().award(str(option.id),int(option.quality)):return
+		var result = Equipment.award(equipment, str(option.id), int(option.quality))
+		if not result.ok:
+			_show_stage_error(result.error)
+			return
 		sim.claimed_rewards.append(str(sim.reward_queue[0].token));sim.reward_queue.pop_front();sim.reward_options.clear()
+		if result.location == "reserve":sim.pending_inventory.append(result.id)
 		sim._feedback("reward",sim.player,float(option.quality))
+		flow.live_mode = true
+		saved = flow.commit_state(result.state)
 	else:
-		if not sim.claim_reward(index,replace_id): return
+		if not sim.claim_reward(index,replace_id):
+			_show_stage_error("Эта мутация сейчас недоступна")
+			return
+		saved = save_run()
+	if not saved:
+		sim.build.from_dict(previous_build)
+		flow.bind_run(equipment)
+		sim.reward_queue = previous_queue
+		sim.reward_options = previous_options
+		sim.claimed_rewards = previous_claimed
+		sim.pending_inventory = previous_inventory
+		sim.effects = previous_effects
+		sim.feedback = previous_feedback
+		show_reward(false)
+		_show_stage_error(store.last_error)
+		return
 	_tone(720)
-	save_run()
 	var activated=[]
 	for synergy_id in sim.build.active_synergies():
 		if synergy_id not in previous_synergies:activated.append(synergy_id)

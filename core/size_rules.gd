@@ -23,3 +23,24 @@ static func profile(player_radius: float,enemy_radius: float,hp_fraction: float,
 	var duration=lerpf(0.45,1.05,smoothstep(0.55,1.4,ratio))
 	if frontal and mouth_rank>0:duration*=0.65
 	return {"ratio":ratio,"threshold":threshold,"eligible":health<=threshold and threshold>0.0,"pull":pull,"impact":impact,"speed":clampf(1.0/sqrt(maxf(1.0,ratio)),0.35,1.0),"duration":duration}
+
+static func slide_contact(origin: Vector2, travel: Vector2, center: Vector2, radius: float, slide: bool = true) -> Vector2:
+	var offset = origin - center
+	var approach = offset.dot(travel)
+	if approach >= 0.0:return travel
+	var clearance = offset.length_squared() - radius * radius
+	if clearance <= 0.0:
+		# Old saves and new spawns may begin overlapped. Let the bodies
+		# separate naturally and cancel only the inward component.
+		var outward = offset.normalized()
+		return travel - outward * travel.dot(outward) if slide else Vector2.ZERO
+	var length_squared = travel.length_squared()
+	var discriminant = approach * approach - clearance * length_squared
+	if discriminant <= 0.0:return travel
+	var entry = (-approach - sqrt(discriminant)) / length_squared
+	if entry >= 1.0:return travel
+	var impact = travel * maxf(0.0, entry)
+	if not slide:return impact
+	var normal = (offset + impact).normalized()
+	var remaining = travel - impact
+	return impact + remaining - normal * minf(0.0, remaining.dot(normal))

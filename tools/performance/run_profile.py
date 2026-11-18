@@ -9,6 +9,9 @@ parser.add_argument('--output', type=pathlib.Path, required=True)
 parser.add_argument('--snapshots', type=pathlib.Path, help='Use another replay output for identical native scenes')
 parser.add_argument('--render-only', action='store_true', help='Skip the replay; requires --native and --snapshots')
 parser.add_argument('--native', action='store_true', help='Also benchmark actual native rendering')
+parser.add_argument('--pova-size', action='store_true', help='Render on a 2460×1080 window with identical expanded canvas on both revisions')
+parser.add_argument('--mobile-profile', action='store_true', help='Use the Android world render buffer on a desktop')
+parser.add_argument('--stress-only', action='store_true', help='Render only the fixed stress scene')
 parser.add_argument('--display', help='Existing X11 display; otherwise start local Xorg dummy over TCP')
 parser.add_argument('--godot', default='godot')
 args = parser.parse_args()
@@ -35,6 +38,10 @@ for script in ['instrument_sim.py', 'instrument_view.py']:
     subprocess.run(['python', str(HERE/script), str(project)], check=True)
 env = os.environ.copy()
 env['MICROGEN_PROFILE_OUTPUT'] = str(args.output)
+if args.pova_size:
+    env['MICROGEN_POVA_SIZE'] = '1'
+if args.mobile_profile:
+    env['MICROGEN_MOBILE_PROFILE'] = '1'
 base = [args.godot, '--path', str(project)]
 def run(script, log, native=False):
     command = base + (['--rendering-method','gl_compatibility','--audio-driver','Dummy','--disable-vsync'] if native else ['--headless']) + ['--script', 'res://tests/'+script]
@@ -63,7 +70,8 @@ try:
                 except OSError: time.sleep(.1)
             else: raise RuntimeError('Xorg failed to become ready; inspect xorg.log or supply --display')
             env['DISPLAY'] = '127.0.0.1:'+str(display)
-        run('profile_render.gd', 'native.log', True)
+        if not args.stress_only:
+            run('profile_render.gd', 'native.log', True)
         run('profile_worst.gd', 'worst.log', True)
 finally:
     if xorg:

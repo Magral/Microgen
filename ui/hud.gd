@@ -5,6 +5,8 @@ const Catalog = preload("res://core/catalog.gd")
 var root: Control
 var status: VBoxContainer
 var hp_bar: ProgressBar
+var shield_label: Label
+var shield_bar: ProgressBar
 var xp_bar: ProgressBar
 var stats: Label
 var damage_source: Label
@@ -26,6 +28,8 @@ var on_pause: Callable
 var on_map: Callable
 var on_shop: Callable
 var on_build: Callable
+var performance_label: Label
+var safe_margins := Vector4.ZERO
 
 func _ready():
 	root = Control.new()
@@ -44,8 +48,19 @@ func _ready():
 	status.add_child(stage_objective)
 	hp_bar = _bar(Color("78d9bd"),14)
 	xp_bar = _bar(Color("ba99e4"),6)
+	for meter in [hp_bar, xp_bar]:
+		meter.custom_minimum_size.x = 240
+		meter.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	status.add_child(hp_bar)
 	status.add_child(xp_bar)
+	shield_label = label("", 18, Color("b5d5ff"))
+	shield_label.hide()
+	status.add_child(shield_label)
+	shield_bar = _bar(Color("8ebcf4"), 5)
+	shield_bar.custom_minimum_size.x = 240
+	shield_bar.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	shield_bar.hide()
+	status.add_child(shield_bar)
 	stats = label("",24)
 	status.add_child(stats)
 	damage_source = label("",20,Color("efb6a9"),true)
@@ -88,12 +103,54 @@ func _ready():
 	message.custom_minimum_size = Vector2(660,0)
 	message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(message)
+	performance_label = label("", 18, Color("a5d6ce"))
+	performance_label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	performance_label.position = Vector2(28, -38)
+	performance_label.hide()
+	root.add_child(performance_label)
+	if OS.get_name() == "Android":
+		get_window().size_changed.connect(refresh_safe_area)
+		refresh_safe_area.call_deferred()
+
+func refresh_safe_area():
+	var window = get_window()
+	var safe = DisplayServer.get_display_safe_area()
+	set_safe_area(window.get_visible_rect(), Rect2(safe), window.get_screen_transform())
+
+func set_safe_area(full: Rect2, safe_pixels: Rect2, to_screen: Transform2D):
+	var to_canvas = to_screen.affine_inverse()
+	var logical = Rect2(to_canvas * safe_pixels.position, safe_pixels.size / to_screen.get_scale())
+	var safe = full.intersection(logical)
+	var margins = Vector4.ZERO
+	if safe.size.x >= full.size.x * 0.5 and safe.size.y >= full.size.y * 0.5:
+		margins = Vector4(ceilf(safe.position.x - full.position.x), ceilf(safe.position.y - full.position.y),
+			ceilf(full.end.x - safe.end.x), ceilf(full.end.y - safe.end.y))
+	if margins == safe_margins:return
+	safe_margins = margins
+	root.offset_left = margins.x
+	root.offset_top = margins.y
+	root.offset_right = -margins.z
+	root.offset_bottom = -margins.w
+
+func layout_size() -> Vector2:
+	return root.get_viewport_rect().size - Vector2(safe_margins.x + safe_margins.z, safe_margins.y + safe_margins.w)
+
+func show_performance(text: String):
+	performance_label.text = text
+	performance_label.visible = not text.is_empty() and modal == null
 
 func update_game(sim):
 	minimap.sim = sim
 	minimap.queue_redraw()
 	hp_bar.value = sim.hp/sim.max_hp*100
 	xp_bar.value = sim.xp/sim.xp_needed()*100
+	var has_shield = sim.build.rank("barrier") > 0
+	shield_label.visible = has_shield
+	shield_bar.visible = has_shield
+	if has_shield:
+		var remaining = float(sim.cooldowns.get("barrier", 0.0))
+		shield_label.text = "Щит готов · до %.0f урона" % sim.barrier_capacity() if remaining <= 0.0 else "Щит · восстановление %.1f с" % remaining
+		shield_bar.value = (1.0 - clampf(remaining / sim.BARRIER_RECOVERY, 0.0, 1.0)) * 100.0
 	area_label.text = "СТУПЕНЬ %d · %s"%[int(sim.stage_index),sim.stage_name()]+"\n"+("ПИТАТЕЛЬНАЯ СРЕДА" if sim.world.biome(sim.player)==0 else "ТОКСИЧНАЯ ЗОНА")+" · "+sim.world.condition_name(sim.world.biome(sim.player))
 	var discovered=0
 	for nest in sim.world.nests:
@@ -121,6 +178,7 @@ func update_game(sim):
 func game_visible(value: bool):
 	for child in root.get_children():
 		if child != modal and not child.get_meta("retired",false): child.visible = value
+	performance_label.hide()
 	shop_button.visible = false
 
 func open_home(width: float=700) -> VBoxContainer:
@@ -142,7 +200,7 @@ func open_home(width: float=700) -> VBoxContainer:
 	var center=CenterContainer.new()
 	margin.add_child(center)
 	content=VBoxContainer.new()
-	content.custom_minimum_size.x=minf(width,root.get_viewport_rect().size.x-80)
+	content.custom_minimum_size.x=minf(width,layout_size().x-80)
 	content.size_flags_vertical=Control.SIZE_SHRINK_CENTER
 	content.add_theme_constant_override("separation",10)
 	center.add_child(content)
@@ -163,7 +221,7 @@ func open(title: String,subtitle: String="",width: float=1030,scrolling: bool=tr
 	var center = CenterContainer.new()
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	modal.add_child(center)
-	var size = root.get_viewport_rect().size
+	var size = layout_size()
 	var panel = PanelContainer.new()
 	panel.custom_minimum_size = Vector2(minf(width,size.x-50),size.y-28)
 	panel.size = panel.custom_minimum_size

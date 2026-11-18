@@ -41,6 +41,19 @@ func run():
 	check(temp_checkpoint.claim_reward(0) and temp_checkpoint.build.temporary_mutation_rank("charged_nucleus")==1,"temporary mutation cyst reward claims exactly once")
 	temp_checkpoint.new_run(55)
 	check(temp_checkpoint.build.temporary_mutations.is_empty(),"new life clears all temporary mutations")
+	var full = fresh()
+	for id in Catalog.TEMP_MUTATIONS.keys().slice(0, 3):
+		full.build.apply_temporary_mutation(id, 3)
+		full.build.apply_temporary_mutation(id, 3)
+		full.build.apply_temporary_mutation(id, 3)
+	var unavailable = str(Catalog.TEMP_MUTATIONS.keys()[3])
+	full.reward_queue = [{"token":"old-impossible", "tier":3}, {"token":"new-reward", "tier":3}]
+	full.reward_options = [{"kind":"temporary", "id":unavailable, "quality":3}]
+	check(full.prepare_reward()[0].kind == "biomass" and full.claim_reward(0), "old impossible reward remains claimable as biomass")
+	check(full.prepare_reward().all(func(option):return option.kind != "temporary"), "full temporary slots only receive applicable offers")
+	for i in range(14): full.reward_queue.append({"token":"carry-%d" % i, "tier":1})
+	var carried = Sim.new()
+	check(carried.restore(JSON.parse_string(JSON.stringify(full.snapshot()))) and carried.reward_queue.size() == 15, "long-run checkpoint keeps all unclaimed cysts")
 	loaded.enemies[0].tissue_budget=100
 	check(is_equal_approx(loaded.hit_enemy(loaded.enemies[0],10,"tentacle"),16.25),"evolved quality damage follows visible multipliers")
 	var h=fresh();h.hp=50;h.build.organs={};h.build.adaptations={"armor":1}

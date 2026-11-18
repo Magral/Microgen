@@ -25,6 +25,17 @@ func run():
 	check(app._handle_events(),"pending expansion can retry after storage recovers")
 	check(good.profile.organism.body_capacity==int(before.organism.body_capacity)+1 and app.sim.events.is_empty(),"retry credits expansion exactly once")
 	check(good.profile.credited.count("retry-expansion")==1,"expansion has one durable receipt")
+	app.sim.reward_queue = [{"token":"cyst-write-retry", "tier":1}]
+	app.sim.reward_options = [{"kind":"biomass", "id":"biomass", "quality":1, "amount":40}]
+	app.show_reward(false)
+	var biomass_before = app.sim.build.biomass
+	faulty.profile = good.profile.duplicate(true)
+	app.store = faulty
+	app.claim_reward(0)
+	check(app.stage == "reward" and app.stage_action_error.visible and app.sim.reward_queue.size() == 1 and app.sim.build.biomass == biomass_before, "failed cyst claim keeps the reward visible and restores biomass")
+	app.store = good
+	app.claim_reward(0)
+	check(app.sim.reward_queue.is_empty() and app.sim.build.biomass == biomass_before + 40, "cyst retry pays exactly once")
 	flow.show_body(true);app.show_genome();app.close_modal()
 	check(app.stage=="development" and app.sim.paused,"closing legacy returns to paused body")
 	flow.confirm_delete(good.family_id());app.close_modal()
@@ -35,11 +46,19 @@ func run():
 	check(app._handle_events(), "boss clear awards legacy cores before the reward choice")
 	app.show_stage_briefing()
 	check(app.stage == "boss_reward", "unclaimed reward is shown before the next stage")
+	var original_organ = app.sim.boss_reward.organ
+	var earned_organium = int(good.profile.organium)
+	check(earned_organium >= app.stage_reroll_cost(), "stage clear pays area reroll currency immediately")
 	faulty.profile = good.profile.duplicate(true)
 	app.store = faulty
+	app._reroll_boss_reward()
+	check(app.sim.boss_reward.organ == original_organ and not app.sim.boss_reward.get("rerolled", false) and faulty.profile == good.profile, "failed boss reroll keeps both the trophy and currency")
 	app._claim_boss_reward(false)
 	check(not app.sim.boss_reward.claimed and faulty.profile == good.profile and app.stage_action_error.visible, "failed reward write preserves the choice and shows a visible error")
 	app.store = good
+	app._reroll_boss_reward()
+	app._reroll_boss_reward()
+	check(app.sim.boss_reward.organ != original_organ and good.profile.checkpoint.boss_reward.rerolled and int(good.profile.organium) == earned_organium - app.BOSS_REROLL_COST, "boss reroll persists a different trophy and pays once")
 	var materials_before = int(good.profile.organ_materials.get("organelle", 0))
 	app._claim_boss_reward(false)
 	app._claim_boss_reward(false)

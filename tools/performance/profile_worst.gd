@@ -11,9 +11,17 @@ var frame_us=[]
 var frame_start=0
 func _initialize():
  Engine.max_fps=0
- root.size=Vector2i(1280,720)
+ root.content_scale_aspect=Window.CONTENT_SCALE_ASPECT_EXPAND
+ root.size=Vector2i(2460,1080) if OS.has_environment("MICROGEN_POVA_SIZE") else Vector2i(1280,720)
  view=View.new()
- root.add_child(view)
+ if OS.has_environment("MICROGEN_MOBILE_PROFILE"):
+  var display=load("res://game/mobile_display.gd").new()
+  root.add_child(display)
+  display.mount(root,view)
+  print("WORLD_BUFFER ",display.target.size,"; canvas ",view.canvas_extent)
+ else:
+  root.add_child(view)
+  print("NATIVE_BUFFER ",root.size,"; canvas ",root.get_visible_rect().size)
  view.set_process(false)
  load_stage()
 func load_stage():

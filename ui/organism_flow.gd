@@ -272,6 +272,12 @@ func commit_state(value: Dictionary,economy: Dictionary={}) -> bool:
 		for kind in Catalog.ORGANS:checkpoint.build.stats.evolutions.erase(kind)
 		for part in value.equipped:
 			if part.get("evolved",false) and part.kind in Catalog.EVOLUTIONS:checkpoint.build.stats.evolutions[part.kind]=true
+		var installed = checkpoint.build.organs.keys() + checkpoint.build.adaptations.keys()
+		for kind in installed:
+			if kind not in next.discovered:next.discovered.append(kind)
+		for synergy in Catalog.SYNERGIES:
+			if synergy in next.synergies:continue
+			if Catalog.SYNERGIES[synergy].needs.all(func(kind):return kind in installed):next.synergies.append(synergy)
 		next.checkpoint=checkpoint
 	if not app.store.write_profile(next):_error(app.store.last_error);return false
 	if live_mode:bind_run(value);apply_to_build(value,app.sim.build);app.sim.stock_capacity=int(value.stock_capacity)

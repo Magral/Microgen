@@ -185,6 +185,16 @@ static func award(state: Dictionary,kind: String,grade: int=0) -> Dictionary:
 	else:next.reserve.append(part)
 	return _result(next,"",location,part.id)
 
+static func draft_exchange(state: Dictionary, kind: String, grade: int) -> Dictionary:
+	var error = validate(state)
+	if not error.is_empty():return _result(state, error)
+	if kind not in Catalog.ORGANS or int(state.next_id) >= Slots.MAX_EXACT_INTEGER:
+		return _result(state, "Не удалось подготовить орган")
+	var next = state.duplicate(true)
+	var part = _new_part(next, kind, 1, clampi(grade, 0, 3))
+	next.reserve.append(part)
+	return _result(next, "", "reserve", part.id)
+
 static func refresh(state: Dictionary,build: Dictionary) -> Dictionary:
 	var error=validate(state)
 	if error!="":return _result(state,error)

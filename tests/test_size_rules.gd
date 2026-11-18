@@ -102,5 +102,44 @@ func run():
 	for i in range(blocked.world.cells.size()):blocked.world.cells[i]=1
 	blocked.step(0.1,Vector2.UP)
 	check(is_equal_approx(blocked.facing,0.0),"blocked movement cannot rotate bite cone away from visible body")
+	var contact=clean()
+	contact.build.organs.clear()
+	contact.residents.clear()
+	var start: Vector2=contact.player
+	contact.spawn_enemy(start+Vector2(100,0),"hunter")
+	var opponent=contact.enemies[0]
+	opponent.r=contact.body_radius()
+	var separation=contact._contact_radius(opponent,contact.body_radius())
+	var stopped=contact._move_player_against_bodies(Vector2(150,0))
+	check(stopped.x<opponent.pos.x and stopped.distance_to(opponent.pos)>=separation-0.01,"swept contact prevents crossing a healthy peer even on a slow frame")
+	var slid=contact._move_player_against_bodies(Vector2(150,22))
+	check(slid.y>stopped.y and slid.distance_to(opponent.pos)>=separation-0.01,"glancing contact slides along the peer")
+	opponent.r=contact.body_radius()*0.55
+	check(contact._move_player_against_bodies(Vector2(150,0)).x>opponent.pos.x,"small digestible prey does not become an invisible wall")
+	opponent.r=contact.body_radius()*2.0
+	opponent.hp=50.0
+	opponent.max_hp=200.0
+	opponent.tissue_budget=100.0
+	contact.build.organs={"spikes":3}
+	var resisted=contact.hit_enemy(opponent,10.0,"spikes")
+	check(resisted == 0.0 and not opponent.get("fractured",false),"ordinary spikes cannot damage a closed giant membrane")
+	contact.build.specializations.spikes="spikes_piercer"
+	check(contact.hit_enemy(opponent,10.0,"spikes")>10.0 and opponent.fractured and contact.remains.size()==1,"piercing an injured giant breaks off a single digestible membrane fragment")
+	contact.hit_enemy(opponent,5.0,"spikes")
+	var saved=Sim.new()
+	check(contact.remains.size()==1 and saved.restore(JSON.parse_string(JSON.stringify(contact.snapshot()))) and saved.enemies[0].fractured,"fracture is saved and cannot duplicate its fragment")
+	var wide=clean()
+	wide.spawn_enemy(Vector2(1310, wide.player.y), "boss")
+	var shielded = wide.enemies[0]
+	var boss_hp = shielded.hp
+	wide._shot(Vector2(1195, wide.player.y), Vector2.ZERO, 20.0, false)
+	wide._update_shots(0.0)
+	check(shielded.hp == boss_hp and wide.shots.is_empty(), "a giant body blocks shots even beyond neighboring spatial buckets")
+	shielded.pos = wide.player + Vector2(wide._contact_radius(shielded,wide.body_radius()) + 1.0, 0)
+	shielded.boss_exposed = 1.5
+	wide.build.organs = {"acid": 1}
+	wide._attack_dt = 1.0 / 60.0
+	wide._attack()
+	check(shielded.hp < boss_hp, "acid can hit the exposed boss from legal membrane contact range")
 	print("SIZE RULES: %d assertions, %d failures" % [checks,failures])
 	quit(0 if failures==0 else 1)

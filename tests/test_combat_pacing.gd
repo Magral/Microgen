@@ -20,7 +20,7 @@ func battle_time(kind: String,ratio: float) -> float:
 	while not sim.enemies.is_empty() and seconds<35:
 		sim.elapsed+=0.05
 		sim._update_enemies(0.05)
-		if not sim.enemies.is_empty():sim.hit_enemy(sim.enemies[0],100000.0)
+		if not sim.enemies.is_empty():sim.hit_enemy(sim.enemies[0],100000.0,"devour")
 		seconds+=0.05
 	return seconds
 func _initialize():call_deferred("run")

@@ -209,8 +209,12 @@ static func exchange(hud,box,state,incoming_id,selected: Array,error: String,cal
 		if str(part.get("id","")) in selected:removed.append(part)
 	var body_after=_used(equipped)-_used(removed)+int(incoming.get("cells",0))
 	var stock_after=stock.size()-(1 if stock.any(func(p):return str(p.get("id",""))==str(incoming_id)) else 0)+removed.size()
+	var stock_limit = int(state.get("stock_capacity", 3))
+	var archived = maxi(0, stock_after - stock_limit)
 	box.add_child(hud.label("Обмен · выберите органы тела",26,GREEN))
-	box.add_child(hud.label("Тело %d → %d/%d кл. · Запас %d → %d/%d мест"%[_used(equipped),body_after,int(state.get("body_capacity",0)),stock.size(),stock_after,int(state.get("stock_capacity",3))],20,MUTED,true))
+	var summary = "Тело %d → %d/%d кл. · Запас %d → %d/%d мест" % [_used(equipped), body_after, int(state.get("body_capacity", 0)), stock.size(), mini(stock_after, stock_limit), stock_limit]
+	if archived > 0:summary += " · В архив: %d" % archived
+	box.add_child(hud.label(summary, 20, MUTED, true))
 	var index=clampi(page,0,maxi(0,ceili(float(equipped.size())/6)-1))
 	var grid=GridContainer.new();grid.columns=2;grid.add_theme_constant_override("h_separation",12);grid.add_theme_constant_override("v_separation",8);box.add_child(grid)
 	for part in equipped.slice(index*6,index*6+6):_part_button(hud,grid,part,callbacks,"toggle",str(part.get("id","")) in selected)
