@@ -87,6 +87,8 @@ static func _group(hud,parent,title: String,group: String,entries: Array,callbac
 		text.add_child(hud.label(form.name+" форма",20,MUTED,true))
 		text.add_child(hud.label("Поколение %d · жизни %d"%[int(entry.get("generation",0)),int(entry.get("runs",0))],20,MUTED,true))
 		text.add_child(hud.label("Ядра %d · рекорд %d с"%[int(entry.get("cores",0)),int(entry.get("best",0))],20,MUTED,true))
+		var highest=int(entry.get("best_stage",0))
+		text.add_child(hud.label("Пройдена ступень · %d"%highest if highest>0 else "Лестница ещё не пройдена",20,Color("cdb5e8"),true))
 		column.add_child(hud.label("Жизнь сохранена · один наследник" if group=="alive" else ("Жизнь завершена · новый наследник" if entry.get("ended",false) else "Готова к первой жизни · сохранения нет"),20,MUTED,true))
 		var buttons=hud.row();column.add_child(buttons)
 		action(hud,buttons,"Продолжить" if group=="alive" else "Подготовить",callbacks,"resume" if group=="alive" else "prepare",[id],true,true)

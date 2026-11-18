@@ -8,6 +8,7 @@ const Genome = preload("res://core/genome.gd")
 const TissueDamage = preload("res://game/tissue_damage.gd")
 const MouthShape = preload("res://game/mouth_shape.gd")
 const OrganicVolume = preload("res://game/organic_volume.gd")
+const SYNERGY_COLORS=[Color("f0c878"),Color("d89cff"),Color("73e8dc"),Color("ff9b83"),Color("9cceff")]
 var volume=OrganicVolume.new()
 var _tissue_basis=PackedVector2Array()
 var _tissue_indices=PackedInt32Array()
@@ -566,6 +567,18 @@ func _living_marks(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,rad
 		canvas.draw_arc(root,radius*0.10,0,TAU,20,Color(col,0.35*pulse),maxf(1.2,radius*0.025),true)
 		_soft_tissue(canvas,root,radius*0.10,Color(col,0.34),time+index)
 		_draw_specialization_mark(canvas,p,contour,radius,a,time,col,str(mutation.get("motif","nodes")))
+	# Resonance nodes keep active organ pairings visible on the living membrane.
+	var synergies=appearance.get("active_synergies",[])
+	for index in range(synergies.size()):
+		var a=phase+index*TAU/maxi(1,synergies.size())
+		var direction=_anchor(contour,a)
+		var root=p+direction*radius*0.88
+		var node=root+direction*radius*0.12
+		var pulse=0.78+0.22*sin(time*3.2+index*1.7)
+		var col=SYNERGY_COLORS[posmod(index,SYNERGY_COLORS.size())]
+		canvas.draw_line(root,node,Color(col,0.72*pulse),maxf(1.0,radius*0.025),true)
+		canvas.draw_circle(node,radius*0.052,Color(col,0.24*pulse))
+		canvas.draw_arc(node,radius*0.043,0,TAU,12,Color(col.lightened(0.18),0.92*pulse),maxf(0.8,radius*0.014),true)
 
 func _draw_specialization_mark(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,radius: float,angle: float,time: float,col: Color,motif: String):
 	var root=p+_anchor(contour,angle)*radius*0.82

@@ -29,5 +29,5 @@ static func summaries(profile: Dictionary) -> Array:
 		var data=profile if family.id==profile.families.active else family.state
 		var checkpoint=data.get("checkpoint",{})
 		var ended=not str(checkpoint.get("outcome","")).is_empty()
-		result.append({"id":family.id,"name":family.name,"form":family.form,"alive":not checkpoint.is_empty() and not ended,"ended":ended,"generation":int(data.legacy.generation),"runs":int(data.runs),"cores":int(data.cores),"best":float(data.best)})
+		result.append({"id":family.id,"name":family.name,"form":family.form,"alive":not checkpoint.is_empty() and not ended,"ended":ended,"generation":int(data.legacy.generation),"runs":int(data.runs),"cores":int(data.cores),"best":float(data.best),"best_stage":int(data.get("best_stage",0))})
 	return result

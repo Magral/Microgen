@@ -28,7 +28,12 @@ var offer_quality: Dictionary={}
 var claimed_rewards: Array=[]
 var feedback: Array=[]
 var minibosses_spawned=0
+var minibosses_defeated=0
 var next_miniboss_at=180.0
+var stage_index=1
+var best_stage=0
+var stage_transition=false
+var pending_stage_seed=0
 var _danger_at=-10.0
 const SizeRules=preload("res://core/size_rules.gd")
 var facing=0.0
@@ -45,6 +50,9 @@ const Pigment = preload("res://core/pigment.gd")
 var tissue_pigment: Dictionary = {}
 const ENEMY_CAP = 28
 const REMAINS_CAP = 96
+const STAGE_NAMES=["Соляная полость","Кристаллический желоб","Тихая лагуна","Споровый разлом","Глубинная взвесь","Живой термоклин","Мембранный каньон","Янтарный провал"]
+const BOSS_NAMES=["Архицит","Мембранный левиафан","Поглотитель бездны","Матка спор","Кристаллический колосс"]
+const MINIBOSS_NAMES=["Матриарх","Фагоцит","Споровый страж","Кристаллический хищник"]
 var player_velocity = Vector2.ZERO
 var remains: Array = []
 var digesting_id: int = -1
@@ -86,6 +94,7 @@ var last_tile = Vector2i(-100,-100)
 
 func new_run(seed_value: int, unlocked: Array = Catalog.base_unlocked(), permanent: Dictionary = {}, selected_branch: String = "predator",loadout: Dictionary={}):
 	family_id="";stock_capacity=3
+	stage_index=1;best_stage=0;stage_transition=false;pending_stage_seed=0;minibosses_spawned=0;minibosses_defeated=0
 	pickups.clear()
 	next_id=0
 	run_loadout=Heredity.normalize(loadout)
@@ -118,8 +127,12 @@ func new_run(seed_value: int, unlocked: Array = Catalog.base_unlocked(), permane
 	hp = max_hp
 	player = world.start
 	previous_player=player
-	_create_residents()
 	run_id = "%d-%d" % [seed_value,Time.get_ticks_usec()]
+	_populate_stage()
+	_reveal()
+
+func _populate_stage():
+	pickups.clear()
 	for nutrient in world.nutrients:
 		pickups.append({"pos":nutrient.pos,"type":"dna","amount":8 if nutrient.rich else 3,"id":next_id})
 		next_id += 1
@@ -135,18 +148,41 @@ func new_run(seed_value: int, unlocked: Array = Catalog.base_unlocked(), permane
 			stock.append({"id":id,"price":18+rng.randi_range(0,6),"sold":false})
 		stock.append({"id":"heal","price":12,"sold":false})
 		colony.stock = stock
+	_create_residents()
 	for i in range(12):
 		var p=player+Vector2.from_angle(i*2.399)*float(85+i*27)
 		if world.walkable(p,7): _drop(p,"heal",6)
 	_create_expansions()
 	_create_cysts()
 	_grade_stocks()
-	_reveal()
 	# Enough near-start food for a quick first mutation.
 	for i in range(8):
 		var p = player + Vector2.from_angle(i*TAU/8.0)*rng.randf_range(70,220)
 		pickups.append({"pos":p,"type":"dna","amount":3,"id":next_id})
 		next_id += 1
+
+func enter_next_stage(prepared_world=null):
+	if not stage_transition:return false
+	stage_index+=1
+	pending_stage_seed=maxi(1,pending_stage_seed)
+	if prepared_world!=null and int(prepared_world.seed_value)==pending_stage_seed:
+		world=prepared_world
+	else:
+		world.generate(pending_stage_seed)
+	rng.seed=pending_stage_seed
+	player=world.start
+	previous_player=player
+	player_velocity=Vector2.ZERO
+	last_damage={};_danger_at=-10.0
+	enemies.clear();remains.clear();fields.clear();shots.clear();effects.clear();damage_markers.clear()
+	cooldowns.clear();explored.clear();cysts.clear();events.clear();current_offers.clear();offer_quality.clear()
+	digesting_id=-1;boss_spawned=false;boss_marker=Vector2.ZERO;minibosses_spawned=0;minibosses_defeated=0
+	stage_transition=false
+	spawn_timer=0.0
+	last_tile=Vector2i(-100,-100)
+	_populate_stage()
+	_reveal()
+	return true
 
 func _create_expansions():
 	# Replace ordinary map nutrients: keeps the pickup budget and exact walkable
@@ -247,28 +283,47 @@ func hurt_player(amount: float,source: Dictionary={}):
 	if not merged:_effect({"type":"damage","pos":player,"amount":actual,"player":true,"r":0.0,"life":0.75,"max":0.75})
 
 func _enemy_label(enemy: Dictionary) -> String:
-	if enemy.kind=="boss":return "Архицит"
+	if enemy.kind=="boss":return str(enemy.get("title","Архицит"))
 	if enemy.kind=="miniboss":return str(enemy.get("title","Минибосс"))
 	if enemy.kind=="spitter":return "Плюющая амёба"
 	return "Крупная амёба" if enemy.r>body_radius()*1.08 else "Враждебная амёба"
 
 func _update_minibosses():
-	if minibosses_spawned>=2 or elapsed<next_miniboss_at or enemies.size()>=ENEMY_CAP:return
-	var p=player+Vector2.from_angle(float(minibosses_spawned)*PI+0.3)*330
-	if not world.walkable(p,25):p=world.nests[minibosses_spawned].pos if world.nests.size()>minibosses_spawned else world.boss_pos
+	if minibosses_spawned>=stage_miniboss_target() or enemies.size()>=ENEMY_CAP:return
+	var discovered=0
+	for nest in world.nests:
+		if bool(nest.get("used",false)):discovered+=1
+	if discovered<(minibosses_spawned+1)*2:return
+	var nest_index=mini(world.nests.size()-1,minibosses_spawned*2+1)
+	var p=world.nests[nest_index].pos if not world.nests.is_empty() else player+Vector2.from_angle(float(minibosses_spawned)*PI+0.3)*330
 	spawn_enemy(p,"miniboss")
+	if enemies.is_empty() or enemies.back().kind!="miniboss":return
 	var enemy=enemies.back()
 	enemy.r=clampf(body_radius()*1.22,48,110)
-	enemy.max_hp=380.0+elapsed*0.2
+	enemy.max_hp=(380.0+elapsed*0.2)*(1.0+0.14*float(stage_index-1))
 	enemy.hp=enemy.max_hp
 	enemy.speed=28.0
-	enemy.title="Матриарх" if minibosses_spawned==0 else "Фагоцит"
-	enemy.elite_token=run_id+":elite:"+str(minibosses_spawned)
+	enemy.title=MINIBOSS_NAMES[posmod(stage_index*3+minibosses_spawned,MINIBOSS_NAMES.size())]
+	enemy.elite_token=run_id+":elite:"+str(stage_index)+":"+str(minibosses_spawned)
 	enemy.traits=["shell","toxic"] if minibosses_spawned==0 else ["shell","spores"]
 	minibosses_spawned+=1
-	next_miniboss_at=maxf(180*(minibosses_spawned+1),elapsed+90)
+	next_miniboss_at=elapsed
 	_feedback("miniboss",p)
 	events.append({"type":"message","text":"Минибосс: "+enemy.title})
+
+func stage_name(index: int=0,seed_value: int=-1)->String:
+	var source=world.seed_value if seed_value<0 else seed_value
+	var target=stage_index if index<=0 else index
+	return STAGE_NAMES[posmod(source+target*13,STAGE_NAMES.size())]
+
+func stage_miniboss_target(index: int=0)->int:
+	var target=stage_index if index<=0 else index
+	return 1 if target<=best_stage else 2
+
+func boss_title(index: int=0,seed_value: int=-1)->String:
+	var source=world.seed_value if seed_value<0 else seed_value
+	var target=stage_index if index<=0 else index
+	return BOSS_NAMES[posmod(source+target*7,BOSS_NAMES.size())]
 
 var _radius_level=-1
 var _radius_xp=-1.0
@@ -427,18 +482,19 @@ func step(dt: float,direction: Vector2):
 	if spawn_timer <= 0:
 		spawn_timer = maxf(2.0,2.6-elapsed/1000.0)
 		_spawn_wave()
-	if elapsed >= 600.0 and not boss_spawned:
-		boss_spawned = true
-		boss_marker = world.boss_pos
-		if enemies.size() >= ENEMY_CAP:
-			_die(0,false)
-		spawn_enemy(world.boss_pos,"boss")
-		events.append({"type":"message","text":"Пробудился Архицит! Найди его на карте."})
 	_check_nests()
 	_update_ecology()
 	_update_minibosses()
 	_update_enemies(dt)
-	if outcome != "": return
+	if outcome != "" or stage_transition:return
+	if not boss_spawned and minibosses_defeated>=stage_miniboss_target() and enemies.size()<ENEMY_CAP:
+		boss_spawned=true
+		boss_marker=world.boss_pos
+		spawn_enemy(world.boss_pos,"boss")
+		if not enemies.is_empty() and enemies.back().kind=="boss":
+			var boss_enemy=enemies.back()
+			boss_enemy.title=boss_title()
+			events.append({"type":"message","text":"Открыт путь к главной угрозе: "+str(boss_enemy.title)+". Найди её на карте."})
 	_attack_dt = dt
 	_attack()
 	_update_shots(dt)
@@ -491,7 +547,7 @@ func spawn_enemy(p: Vector2,kind: String):
 	var variant = rng.randi_range(0,3)
 	var traits = Genome.traits(world.seed_value,next_id,elapsed,kind)
 	var health = (8.0 if prey else 40.0+elapsed*0.17)*(1.4 if variant == 1 else 1.0)
-	if boss: health = 1600.0
+	if boss: health = 1600.0*(1.0+0.14*float(stage_index-1))
 	if "shell" in traits: health *= 1.3
 	enemies.append({"pos":p,"kind":kind,"hp":health,"max_hp":health,"r":12.0 if prey else (140.0 if boss else 23.0+rng.randf()*6),"speed":42.0 if prey else (48.0 if boss else 44.0+minf(25,elapsed*0.035)+(12 if variant==2 else 0)),"vel":Vector2.ZERO,"engulf":0.0,"phase":rng.randf()*TAU,"variant":variant,"infect":0.0,"slow":0.0,"shot_cd":2.5,"id":next_id,"biome":world.biome(p),"genome":Genome.create(world.seed_value,next_id,kind,world.biome(p)),"traits":traits,"emission_cd":rng.randf_range(1.0,3.0)})
 	if not prey and not boss and posmod(next_id*31+world.seed_value,7)==0:
@@ -604,6 +660,7 @@ func _update_enemies(dt: float):
 			e.impulse=-offset.normalized()*24.0
 			_effect({"type":"hurt","pos":player,"life":0.3,"max":0.3,"r":45.0})
 		if e.hp<=0: _die(i,false)
+		if stage_transition:return
 
 func _die(index: int,absorbed: bool):
 	var e = enemies[index]
@@ -625,13 +682,16 @@ func _die(index: int,absorbed: bool):
 		_leave_remains(e)
 		if kills%3==0: _drop(e.pos,"heal",6)
 	if e.kind == "boss":
-		outcome = "victory"
-		events.append({"type":"core","token":run_id+":boss","amount":12})
-		events.append({"type":"end","outcome":"victory"})
+		stage_transition=true
+		pending_stage_seed=rng.randi()
+		events.append({"type":"core","token":run_id+":boss:"+str(stage_index),"amount":12+mini(20,stage_index)})
+		events.append({"type":"stage_clear","token":run_id+":stage-clear:"+str(stage_index),"stage":stage_index})
+		events.append({"type":"message","text":"Главная угроза разрушена. Путь ведёт на следующую ступень."})
 	elif e.kind=="miniboss":
+		minibosses_defeated+=1
 		_spawn_cyst(e.pos,3,"elite:"+str(e.id))
 		events.append({"type":"core","token":e.get("elite_token",run_id+":elite:"+str(e.id)),"amount":4})
-		events.append({"type":"message","text":"Минибосс повержен: +4 ядра наследия"})
+		events.append({"type":"message","text":"Минибосс повержен: +4 ядра наследия · %d/%d"%[minibosses_defeated,stage_miniboss_target()]})
 	elif kills%18 == 0:
 		_drop(e.pos,"core",1)
 	_effect({"type":"burst","pos":e.pos,"life":0.4,"max":0.4,"r":e.r+20})
@@ -1004,7 +1064,7 @@ func nearby_colony() -> int:
 	return -1
 
 func snapshot() -> Dictionary:
-	return {"version":1,"family_id":family_id,"stock_capacity":stock_capacity,"run_loadout":run_loadout.duplicate(true),"spore_charge":spore_charge,"combat_stats":combat_stats.duplicate(true),"last_damage":last_damage.duplicate(true),"cysts":_pack(cysts),"reward_queue":reward_queue.duplicate(true),"reward_options":reward_options.duplicate(true),"pending_inventory":pending_inventory.duplicate(),"offer_quality":offer_quality.duplicate(),"claimed_rewards":claimed_rewards.duplicate(),"player_genome":player_genome.duplicate(true),"minibosses_spawned":minibosses_spawned,"next_miniboss_at":next_miniboss_at,"facing":facing,"tissue_pigment":tissue_pigment.duplicate(true),"residents":_pack(residents),"outcome":outcome,"events":_pack(events),"material_pending":material_pending.duplicate(true),"material_batch":material_batch,"seed":world.seed_value,"rng_state":str(rng.state),"run_id":run_id,"player":_vec(player),"player_velocity":_vec(player_velocity),"remains":_pack(remains),"digesting_id":digesting_id,"hp":hp,"max_hp":max_hp,"elapsed":elapsed,"xp":xp,"level":level,"pending_levels":pending_levels,"build":build.to_dict(),"enemies":_pack(enemies),"pickups":_pack(pickups),"colonies":_pack(world.colonies),"nests":_pack(world.nests),"explored":explored.keys(),"boss_spawned":boss_spawned,"kills":kills,"cores_found":cores_found,"next_id":next_id,"upgrades":upgrades,"cooldowns":cooldowns.duplicate(),"offers":current_offers.duplicate(),"rerolls":rerolls,"fields":_pack(fields),"shots":_pack(shots)}
+	return {"version":1,"family_id":family_id,"stock_capacity":stock_capacity,"run_loadout":run_loadout.duplicate(true),"spore_charge":spore_charge,"combat_stats":combat_stats.duplicate(true),"last_damage":last_damage.duplicate(true),"cysts":_pack(cysts),"reward_queue":reward_queue.duplicate(true),"reward_options":reward_options.duplicate(true),"pending_inventory":pending_inventory.duplicate(),"offer_quality":offer_quality.duplicate(),"claimed_rewards":claimed_rewards.duplicate(),"player_genome":player_genome.duplicate(true),"minibosses_spawned":minibosses_spawned,"minibosses_defeated":minibosses_defeated,"stage_index":stage_index,"best_stage":best_stage,"stage_transition":stage_transition,"pending_stage_seed":pending_stage_seed,"next_miniboss_at":next_miniboss_at,"facing":facing,"tissue_pigment":tissue_pigment.duplicate(true),"residents":_pack(residents),"outcome":outcome,"events":_pack(events),"material_pending":material_pending.duplicate(true),"material_batch":material_batch,"seed":world.seed_value,"rng_state":str(rng.state),"run_id":run_id,"player":_vec(player),"player_velocity":_vec(player_velocity),"remains":_pack(remains),"digesting_id":digesting_id,"hp":hp,"max_hp":max_hp,"elapsed":elapsed,"xp":xp,"level":level,"pending_levels":pending_levels,"build":build.to_dict(),"enemies":_pack(enemies),"pickups":_pack(pickups),"colonies":_pack(world.colonies),"nests":_pack(world.nests),"explored":explored.keys(),"boss_spawned":boss_spawned,"kills":kills,"cores_found":cores_found,"next_id":next_id,"upgrades":upgrades,"cooldowns":cooldowns.duplicate(),"offers":current_offers.duplicate(),"rerolls":rerolls,"fields":_pack(fields),"shots":_pack(shots)}
 
 func restore(data: Dictionary) -> bool:
 	family_id=str(data.get("family_id",""))
@@ -1036,7 +1096,12 @@ func restore(data: Dictionary) -> bool:
 	hp = float(data.get("hp",100))
 	max_hp = float(data.get("max_hp",100))
 	elapsed = float(data.get("elapsed",0))
+	stage_index=maxi(1,int(data.get("stage_index",1)))
+	best_stage=maxi(0,int(data.get("best_stage",0)))
+	stage_transition=bool(data.get("stage_transition",false))
+	pending_stage_seed=int(data.get("pending_stage_seed",0))
 	minibosses_spawned=int(data.get("minibosses_spawned",0))
+	minibosses_defeated=int(data.get("minibosses_defeated",0))
 	next_miniboss_at=float(data.get("next_miniboss_at",maxf(180,elapsed+20)))
 	xp = float(data.get("xp",0))
 	level = int(data.get("level",1))
@@ -1135,7 +1200,7 @@ func _grade_stocks():
 
 func _spawn_cyst(p: Vector2,tier: int,identity: String):
 	if cysts.size()>=12:return
-	var token=run_id+":cyst:"+identity
+	var token=run_id+":stage:"+str(stage_index)+":cyst:"+identity
 	if token in claimed_rewards:return
 	for cyst in cysts:
 		if cyst.token==token:return

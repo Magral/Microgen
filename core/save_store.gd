@@ -12,7 +12,7 @@ func _init(file_path: String = "user://profile.json"):
 	profile = defaults()
 
 func defaults() -> Dictionary:
-	return {"version":1, "cores":0, "organium":0, "organ_materials":{}, "unlocked":Catalog.base_unlocked(), "discovered":[], "synergies":[], "upgrades":{"health":0,"collect":0,"regen":0}, "credited":[], "runs":0, "wins":0, "checkpoint":{}, "best":0.0, "legacy":Legacy.defaults(), "families":Families.registry()}
+	return {"version":1, "cores":0, "organium":0, "organ_materials":{}, "unlocked":Catalog.base_unlocked(), "discovered":[], "synergies":[], "upgrades":{"health":0,"collect":0,"regen":0}, "credited":[], "runs":0, "wins":0, "checkpoint":{}, "best":0.0, "best_stage":0, "legacy":Legacy.defaults(), "families":Families.registry()}
 
 func _read(candidate: String) -> Dictionary:
 	if not FileAccess.file_exists(candidate): return {}
@@ -29,7 +29,7 @@ func _normalize_state(data: Dictionary) -> Dictionary:
 	for k in ["unlocked", "discovered", "synergies", "credited"]:
 		if not data.get(k, []) is Array: return {}
 	if not data.get("upgrades", {}) is Dictionary or not data.get("checkpoint", {}) is Dictionary: return {}
-	for key in ["cores","runs","wins","best"]:
+	for key in ["cores","runs","wins","best","best_stage"]:
 		var value = data.get(key, 0)
 		if not (value is int or value is float) or not is_finite(float(value)): return {}
 	var saved_organium=data.get("organium",0)
@@ -49,6 +49,7 @@ func _normalize_state(data: Dictionary) -> Dictionary:
 	for id in Catalog.base_unlocked():
 		if not id in clean.unlocked:clean.unlocked.append(id)
 	clean.cores = maxi(0, int(clean.cores))
+	clean.best_stage=clampi(int(clean.get("best_stage",0)),0,1000000)
 	clean.organium=mini(9007199254740991,maxi(0,int(clean.organium)))
 	clean.organ_materials={}
 	for kind in saved_materials:clean.organ_materials[kind]=mini(9007199254740991,maxi(0,int(saved_materials[kind])))

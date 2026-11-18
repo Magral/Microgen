@@ -52,7 +52,7 @@ func apply(id: String, replace_id: String = "", grade: int = -1) -> bool:
 			if clampi(grade, 0, 3) <= quality(id): return false
 			qualities[id] = clampi(grade, 0, 3)
 			return true
-		target[id] += 1
+		target[id] += (Catalog.duplicate_rank_gain(grade) if id in Catalog.ORGANS else 1)
 		qualities[id] = maxi(quality(id), clampi(grade, 0, 3))
 		return true
 	if not can_fit(id, replace_id): return false

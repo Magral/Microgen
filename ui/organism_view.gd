@@ -27,7 +27,7 @@ static func _used(parts: Array) -> int:
 
 static func _caption(part: Dictionary) -> String:
 	var cost=maxi(1,int(part.get("cells",1)))
-	return "%s · %d кл.\nРанг %d · %s"%[_name(part),cost,int(part.get("rank",1)),Rewards.quality_name(int(part.get("quality",0)))]
+	return "%s · Р%d · %d кл."%[_name(part),int(part.get("rank",1)),cost]
 
 static func _pager(hud,parent,callbacks: Dictionary,key: String,page: int,count: int,per_page: int):
 	var pages=maxi(1,ceili(float(count)/per_page))
@@ -40,7 +40,7 @@ static func _pager(hud,parent,callbacks: Dictionary,key: String,page: int,count:
 static func _part_button(hud,parent,part: Dictionary,callbacks: Dictionary,key: String="part",selected: bool=false):
 	var id=str(part.get("id",""))
 	var cost=maxi(1,int(part.get("cells",1)))
-	var label=("✓ " if selected else ("✧ " if part.get("preferred",false) else ""))+_name(part)+"\n"+"Занимает %d кл."%cost
+	var label=("✓ " if selected else ("✧ " if part.get("preferred",false) else ""))+_name(part)+" · Р%d · %d кл."%[int(part.get("rank",1)),cost]
 	var b=_action(hud,parent,label,callbacks,key,[id])
 	for state in ["normal","hover","pressed","disabled"]:
 		var style=b.get_theme_stylebox(state).duplicate()
@@ -79,29 +79,17 @@ static func populate(hud,box,model: Dictionary,sim,callbacks: Dictionary,page: i
 	var viewport_height=hud.get_viewport().get_visible_rect().size.y
 	_preview(scene,model,sim,minf(220.0,maxf(110.0,viewport_height*0.24)))
 	var right=VBoxContainer.new();right.custom_minimum_size.x=250;right.size_flags_horizontal=Control.SIZE_EXPAND_FILL;scene.add_child(right)
-	var body_cells=[]
-	for part in equipped:
-		for offset in range(maxi(1,int(part.get("cells",1)))):body_cells.append({"part":part,"offset":offset})
-	var total_cells=maxi(capacity,body_cells.size())
-	var cells_per_page=6 if viewport_height<700 else 8
-	var columns_per_side=int(cells_per_page/2)
-	var index=clampi(page,0,maxi(0,ceili(float(total_cells)/cells_per_page)-1))
-	for slot in range(cells_per_page):
-		var parent=left if slot<columns_per_side else right
-		var item_index=index*cells_per_page+slot
-		if item_index>=total_cells:continue
-		var cell: Dictionary=body_cells[item_index] if item_index<body_cells.size() else {}
-		if not cell.is_empty():
-			var part: Dictionary=cell.part.duplicate()
-			part.preferred=str(part.get("kind",""))==str(form.organ)
-			var button=_part_button(hud,parent,part,callbacks)
-			if int(cell.offset)>0:
-				button.name="part_"+str(part.id)+"_cell_"+str(cell.offset)
-				button.text="↳ "+_name(part)+"\nКлетка %d/%d"%[int(cell.offset)+1,int(part.get("cells",1))]
-		else:
-			var empty=_action(hud,parent,"+ Клетка %d\n✧ %s"%[item_index+1,Catalog.item(form.organ).name],callbacks,"empty_body")
-			empty.name="empty_body_cell_"+str(item_index)
-	if total_cells>cells_per_page:_pager(hud,box,callbacks,"page",index,total_cells,cells_per_page)
+	var capacity_line=hud.label("ОРГАНЫ · %d / %d КЛЕТОК"%[_used(equipped),capacity],23,MUTED,true)
+	right.add_child(capacity_line)
+	var body_used=_used(equipped)
+	var capacity_bar=ProgressBar.new();capacity_bar.min_value=0;capacity_bar.max_value=maxi(1,capacity);capacity_bar.value=body_used;capacity_bar.show_percentage=false;capacity_bar.custom_minimum_size.y=14
+	right.add_child(capacity_bar)
+	for original in equipped:
+		var part:Dictionary=original.duplicate()
+		part.preferred=str(part.get("kind",""))==str(form.organ)
+		_part_button(hud,right,part,callbacks)
+	var add=_action(hud,right,"+ Добавить орган",callbacks,"empty_body",[],body_used<capacity)
+	add.name="empty_body"
 	var stockrow=hud.row();box.add_child(stockrow)
 	stockrow.add_child(hud.label("Запас %d/%d мест"%[stock.size(),int(model.get("stock_capacity",3))],20,MUTED))
 	var stock_capacity=int(model.get("stock_capacity",3))

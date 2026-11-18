@@ -12,6 +12,7 @@ var pending_button: Button
 var on_pending: Callable
 var on_close: Callable
 var area_label: Label
+var stage_objective: Label
 var minimap: Control
 var modal: Control
 var scroll_container: ScrollContainer
@@ -39,6 +40,8 @@ func _ready():
 	root.add_child(status)
 	area_label = label("",20,Color("9bbfbb"))
 	status.add_child(area_label)
+	stage_objective=label("",18,Color("dbbd8c"),true)
+	status.add_child(stage_objective)
 	hp_bar = _bar(Color("78d9bd"),14)
 	xp_bar = _bar(Color("ba99e4"),6)
 	status.add_child(hp_bar)
@@ -91,7 +94,13 @@ func update_game(sim):
 	minimap.queue_redraw()
 	hp_bar.value = sim.hp/sim.max_hp*100
 	xp_bar.value = sim.xp/sim.xp_needed()*100
-	area_label.text = ("ПИТАТЕЛЬНАЯ СРЕДА" if sim.world.biome(sim.player)==0 else "ТОКСИЧНАЯ ЗОНА")+"  ·  "+sim.world.condition_name(sim.world.biome(sim.player))
+	area_label.text = "СТУПЕНЬ %d · %s"%[int(sim.stage_index),sim.stage_name()]+"\n"+("ПИТАТЕЛЬНАЯ СРЕДА" if sim.world.biome(sim.player)==0 else "ТОКСИЧНАЯ ЗОНА")+" · "+sim.world.condition_name(sim.world.biome(sim.player))
+	var discovered=0
+	for nest in sim.world.nests:
+		if bool(nest.get("used",false)):discovered+=1
+	var required_minibosses=sim.stage_miniboss_target()
+	var required_nests=mini(4,required_minibosses*2)
+	stage_objective.text="ГЛАВНАЯ УГРОЗА: %s"%sim.boss_title() if sim.boss_spawned else "ЦЕЛЬ: гнёзда %d/%d · минибоссы %d/%d"%[mini(discovered,required_nests),required_nests,int(sim.minibosses_defeated),required_minibosses]
 	stats.text = "Размер ×%.1f  ·  Ур. %d  ·  %d/%d HP\nБиомасса %d  ·  %02d:%02d" % [sim.body_radius()/22.0,sim.level,int(sim.hp),int(sim.max_hp),sim.build.biomass,int(sim.elapsed)/60,int(sim.elapsed)%60]
 	var damage = sim.last_damage
 	damage_source.text = "Последний урон: −%.1f HP · %s" % [float(damage.get("amount",0)),damage.get("name","неизвестный источник")] if not damage.is_empty() else ""

@@ -179,3 +179,8 @@ const QUALITY_MULTIPLIERS = [1.0, 1.12, 1.25, 1.45]
 
 static func quality_multiplier(grade: int) -> float:
 	return QUALITY_MULTIPLIERS[clampi(grade, 0, 3)]
+
+static func duplicate_rank_gain(grade: int) -> int:
+	# A repeated organ grows by the quality of the find: common +1, rare +2,
+	# epic +3, legendary +4. New organs still begin at rank one.
+	return clampi(grade, 0, 3) + 1

@@ -156,6 +156,7 @@ func show_body(live: bool):
 
 func close_body():
 	if not live_mode:show_home()
+	elif app.sim!=null and app.sim.stage_transition:app.show_stage_briefing()
 	elif app.development_origin=="pause":app.show_pause()
 	else:app.resume_game()
 
@@ -230,6 +231,7 @@ func show_exchange(page: int=0):
 		show_exchange(page),"apply":func():move(incoming,"body",selected),"page":show_exchange,"back":func():show_body(live_mode)},page)
 
 func move(id: String,destination: String,replacements: Array=[]):
+	var previous_synergies=app.sim.build.active_synergies().duplicate() if live_mode and app.sim!=null else []
 	var result=Equipment.move(state(),id,destination,replacements)
 	if not result.ok:app.message(result.error,4);return
 	var resolves_pending=destination=="body" and live_mode and id in app.sim.pending_inventory
@@ -237,8 +239,19 @@ func move(id: String,destination: String,replacements: Array=[]):
 	if not commit_state(result.state):
 		if resolves_pending:app.sim.pending_inventory.append(id)
 		return
+	var activated=[]
+	if live_mode:
+		for synergy_id in app.sim.build.active_synergies():
+			if synergy_id not in previous_synergies:activated.append(synergy_id)
+	if not activated.is_empty():
+		app.show_synergy_reveal(activated,Callable(self,"_after_body_synergy").bind(resolves_pending))
+		return
 	if resolves_pending:app.open_pending();return
 	show_body(live_mode)
+
+func _after_body_synergy(resolves_pending: bool):
+	if resolves_pending:app.open_pending()
+	else:show_body(live_mode)
 
 func commit_state(value: Dictionary,economy: Dictionary={}) -> bool:
 	var next=app.store.profile.duplicate(true);next.organism=value

@@ -2,7 +2,7 @@ name: Android APK
 
 on:
   push:
-    branches: [main, release/1.2.0]
+    branches: [main, release/1.3.0]
     tags: ['v*']
   pull_request:
     branches: [main]
@@ -98,8 +98,8 @@ jobs:
             exit 1
           fi
           grep -q 'android.permission.INTERNET' build/APK_PERMISSIONS.txt
-          grep -q "versionCode='120'" build/APK_METADATA.txt
-          grep -q "versionName='1.2.0'" build/APK_METADATA.txt
+          grep -q "versionCode='130'" build/APK_METADATA.txt
+          grep -q "versionName='1.3.0'" build/APK_METADATA.txt
           if "$ANDROID_HOME/build-tools/35.0.1/aapt" dump xmltree build/Microgen.apk AndroidManifest.xml | grep -q 'android:debuggable.*0xffffffff'; then
             echo 'Release must not be debuggable'
             exit 1
@@ -111,7 +111,7 @@ jobs:
           python3 - <<'PYMANIFEST'
           import hashlib,json,pathlib
           apk=pathlib.Path('Microgen.apk')
-          data={'version':'1.2.0','version_code':120,'apk_url':'https://github.com/Magral/Microgen/releases/download/v1.2.0/Microgen.apk','size_bytes':apk.stat().st_size,'sha256':hashlib.sha256(apk.read_bytes()).hexdigest()}
+          data={'version':'1.3.0','version_code':130,'apk_url':'https://github.com/Magral/Microgen/releases/download/v1.3.0/Microgen.apk','size_bytes':apk.stat().st_size,'sha256':hashlib.sha256(apk.read_bytes()).hexdigest()}
           pathlib.Path('microgen-update.json').write_text(json.dumps(data,indent=2))
           PYMANIFEST
 
@@ -150,14 +150,14 @@ jobs:
           retention-days: 30
 
       - name: Publish stable release
-        if: steps.source.outputs.ready == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/release/1.2.0'
+        if: steps.source.outputs.ready == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/release/1.3.0'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          tag="v1.2.0"
+          tag="v1.3.0"
           gh release create "$tag" build/Microgen-home.png build/microgen-update.json build/Microgen-evolutions.png build/Microgen-foundation-start.png build/Microgen-foundation-genome.png build/Microgen-inheritance.png build/Microgen.apk build/Microgen-source.zip build/SHA256SUMS.txt build/Microgen-game.png build/Microgen-habitat.png build/Microgen-rewards.png build/Microgen-feedback.png build/Microgen-journal.png build/Microgen-mutations.png build/Microgen-cyst.png build/Microgen-anatomy.png build/Microgen-gallery.png build/Microgen-development.png build/Microgen-codex.png \
             --target "$(git rev-parse HEAD)" \
-            --title "Микроген 1.2.0 · Органы и добыча" --latest \
+            --title "Микроген 1.3.0 · Лестница миров" --latest \
             --notes-file RELEASE_NOTES.md
           echo '## APK собран' >> "$GITHUB_STEP_SUMMARY"
           echo 'Скачайте APK в разделе Releases или артефактах этого запуска.' >> "$GITHUB_STEP_SUMMARY"

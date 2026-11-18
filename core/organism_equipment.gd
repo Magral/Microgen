@@ -173,7 +173,7 @@ static func award(state: Dictionary,kind: String,grade: int=0) -> Dictionary:
 		if part.kind!=kind:continue
 		owns_kind=true
 		if part.rank>=Catalog.max_rank(kind) and grade<=part.quality:continue
-		part.rank=mini(Catalog.max_rank(kind),int(part.rank)+1)
+		part.rank=mini(Catalog.max_rank(kind),int(part.rank)+Catalog.duplicate_rank_gain(grade))
 		part.quality=maxi(int(part.quality),grade)
 		return _result(next,"","body",part.id)
 	if owns_kind:return _result(state,"Орган уже развит")
