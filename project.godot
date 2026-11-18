@@ -18,6 +18,7 @@ window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 window/handheld/orientation=0
 window/frame_pacing/android/enable_frame_pacing=true
+window/frame_pacing/android/swappy_mode=0
 
 [rendering]
 renderer/rendering_method="gl_compatibility"

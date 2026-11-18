@@ -3,6 +3,7 @@ extends SceneTree
 const MobileDisplay = preload("res://game/mobile_display.gd")
 const View = preload("res://game/world_view.gd")
 const HUD = preload("res://ui/hud.gd")
+const Sim = preload("res://game/simulation.gd")
 var failures := 0
 
 func _initialize():
@@ -38,5 +39,16 @@ func run():
 	check(display.level == 1 and display.target.size.y == 612 and world.layout_size() == extent, "sustained missed frames reduce only world pixels")
 	for i in range(160):display.sample_frame(0.028, true)
 	check(display.level == 2 and display.target.size.y == 504, "sustained slowdown reaches bounded minimum")
+	world.sim = Sim.new()
+	world.sim.new_run(44)
+	world.sim.paused = true
+	world._process(0.0)
+	display.target.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	root.size = Vector2i(984, 432)
+	display.resize()
+	check(display.target.size.y == 432 and display.target.render_target_update_mode == SubViewport.UPDATE_ONCE, "same-aspect resize repaints paused world")
+	world.sim.paused = false
+	world._process(0.0)
+	check(display.target.render_target_update_mode == SubViewport.UPDATE_ALWAYS, "resumed world keeps rendering after paused resize")
 	print("MOBILE DISPLAY: %d failures" % failures)
 	quit(0 if failures == 0 else 1)

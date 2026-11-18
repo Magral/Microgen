@@ -88,7 +88,7 @@ func _process(dt):
 				paused_frame_ready = true
 				paused_frame_key = key
 				if buffer != null:buffer.render_target_update_mode = SubViewport.UPDATE_ONCE
-			elif paused_frame_ready:
+			elif paused_frame_ready or (buffer != null and buffer.render_target_update_mode != SubViewport.UPDATE_ALWAYS):
 				paused_frame_ready = false
 				if buffer != null:buffer.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 		if tracked_sim != sim:
@@ -207,12 +207,15 @@ func _draw():
 	var field_details = 0
 	for f in sim.fields:
 		if not frame.grow(float(f.r)*1.15+8.0/zoom).has_point(f.pos): continue
-		var col = Color("c67688") if f.get("hostile",false) else (Color("b684da") if f.kind == "spore" else Color("97ba53"))
+		var hostile = bool(f.get("hostile",false))
+		var col = Color("c67688") if hostile else (Color("b684da") if f.kind == "spore" else Color("97ba53"))
 		var p = screen(f.pos)
 		var rich = not mobile_detail or field_details < 12
 		if rich:
 			_blob(p,f.r,Color(col,0.12*f.life/f.max),f.pos.x*0.2,0.5,false)
 			field_details += 1
+		elif hostile:
+			draw_arc(p, f.r, 0, TAU, 32, Color(col, minf(0.88, float(f.life) * 1.6)), 1.8, true)
 		OrganicFX.field(self,p,f.r,str(f.kind),float(f.life),float(f.max),visual_time,2 if rich else 1)
 	var dna_rungs := PackedVector2Array()
 	var dna_edges := PackedVector2Array()

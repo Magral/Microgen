@@ -48,6 +48,10 @@ func resize():
 	world_view.mobile_detail = true
 	world_view.fluid.mobile_detail = true
 	world_view.queue_redraw()
+	# A resized texture must get a fresh frame even with the game on pause.
+	if world_view.paused_frame_ready:
+		world_view.paused_frame_ready = false
+		target.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 func sample_frame(seconds: float, active: bool):
 	if not active:
