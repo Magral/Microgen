@@ -1,4 +1,5 @@
 extends SceneTree
+const Families=preload("res://core/family_model.gd")
 const Save=preload("res://core/save_store.gd")
 const Legacy=preload("res://core/genome_legacy.gd")
 const Genome=preload("res://core/genome.gd")
@@ -17,6 +18,10 @@ func put(path: String,data: Dictionary):
 	f.store_string(JSON.stringify(data))
 	f.close()
 func _initialize():
+	var source={"checkpoint":{"nested":[1]},"families":{"items":[{"state":{"large":[2]}}]}}
+	var projection=Families.state(source)
+	projection.checkpoint.nested.append(3)
+	check(not projection.has("families") and source.checkpoint.nested==[1],"active projection omits archives and owns its nested data")
 	var s=Save.new("user://test-families.json")
 	s.clear_test_files()
 	check(s.has_method("create_family"),"family creation API exists")

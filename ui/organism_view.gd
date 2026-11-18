@@ -79,13 +79,13 @@ static func populate(hud,box,model: Dictionary,sim,callbacks: Dictionary,page: i
 	var body_cells=[]
 	for part in equipped:
 		for offset in range(maxi(1,int(part.get("cells",1)))):body_cells.append({"part":part,"offset":offset})
-	while body_cells.size()<capacity:body_cells.append({})
-	var index=clampi(page,0,maxi(0,ceili(float(body_cells.size())/8)-1))
+	var total_cells=maxi(capacity,body_cells.size())
+	var index=clampi(page,0,maxi(0,ceili(float(total_cells)/8)-1))
 	for slot in range(8):
 		var parent=left if slot<4 else right
 		var item_index=index*8+slot
-		if item_index>=body_cells.size():continue
-		var cell: Dictionary=body_cells[item_index]
+		if item_index>=total_cells:continue
+		var cell: Dictionary=body_cells[item_index] if item_index<body_cells.size() else {}
 		if not cell.is_empty():
 			var part: Dictionary=cell.part.duplicate()
 			part.preferred=str(part.get("kind",""))==str(form.organ)
@@ -96,7 +96,7 @@ static func populate(hud,box,model: Dictionary,sim,callbacks: Dictionary,page: i
 		else:
 			var empty=_action(hud,parent,"+ Клетка %d\n✧ %s"%[item_index+1,Catalog.item(form.organ).name],callbacks,"empty_body")
 			empty.name="empty_body_cell_"+str(item_index)
-	if body_cells.size()>8:_pager(hud,box,callbacks,"page",index,body_cells.size(),8)
+	if total_cells>8:_pager(hud,box,callbacks,"page",index,total_cells,8)
 	var stockrow=hud.row();box.add_child(stockrow)
 	stockrow.add_child(hud.label("Запас %d/%d мест"%[stock.size(),int(model.get("stock_capacity",3))],20,MUTED))
 	var stock_capacity=int(model.get("stock_capacity",3))

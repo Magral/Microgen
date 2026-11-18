@@ -58,6 +58,13 @@ func run():
 	box=fixed(hud);Body.populate(hud,box,model,null,bcb)
 	await verify(hud)
 	check(button(box,"empty_stock_cell_1")!=null,"large stock organ uses one position")
+	var regular_capacity=model.body_capacity
+	model.body_capacity=1000000000
+	box=fixed(hud);Body.populate(hud,box,model,null,bcb,124999999)
+	await verify(hud)
+	check(button(box,"empty_body_cell_999999999")!=null,"large capacity renders only the selected page")
+	check(box.find_children("empty_body_cell_*","Button",true,false).size()==8,"empty body cells remain bounded to eight per page")
+	model.body_capacity=regular_capacity
 	model.live=true
 	box=fixed(hud);Body.populate(hud,box,model,null,bcb,1)
 	await verify(hud)

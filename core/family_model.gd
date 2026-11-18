@@ -6,9 +6,11 @@ static func registry() -> Dictionary:
 	return {"version":1,"active":"","next_id":1,"items":[]}
 
 static func state(profile: Dictionary) -> Dictionary:
-	var result=profile.duplicate(true)
-	result.erase("families")
-	return result
+	var result={}
+	for key in profile:
+		if key!="families":result[key]=profile[key]
+	# Copy the active state only; archived lives can be large and are omitted.
+	return result.duplicate(true)
 
 static func index(items: Array,id: String) -> int:
 	for i in range(items.size()):

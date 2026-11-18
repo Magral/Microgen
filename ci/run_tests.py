@@ -35,6 +35,8 @@ def main():
     run("home-native", display_command() + ["godot", "--path", ".", "--audio-driver", "Dummy", "--script", "tests/test_home_layout.gd"])
     env.pop("MICROGEN_HOME_CAPTURE", None)
 
+    run("tendril-native", display_command() + ["godot", "--path", ".", "--audio-driver", "Dummy", "--script", "tests/test_tendril_shape.gd"])
+
     run("family-native", display_command() + ["godot", "--path", ".", "--audio-driver", "Dummy", "--script", "tests/test_family_native.gd"])
 
     run("evolution-art", display_command() + ["godot", "--path", ".", "--audio-driver", "Dummy", "--script", "tests/test_evolution_art.gd"])

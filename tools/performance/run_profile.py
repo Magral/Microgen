@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Profile disposable copies; never instrument the source checkout in place."""
-import argparse, os, pathlib, shutil, socket, subprocess, tarfile, tempfile, time
+import argparse, os, pathlib, re, shutil, socket, subprocess, tarfile, tempfile, time
 HERE = pathlib.Path(__file__).resolve().parent
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--source', type=pathlib.Path, default=HERE.parents[1])
@@ -40,6 +40,8 @@ def run(script, log, native=False):
     command = base + (['--rendering-method','gl_compatibility','--audio-driver','Dummy','--disable-vsync'] if native else ['--headless']) + ['--script', 'res://tests/'+script]
     with (args.output/log).open('w') as stream:
         subprocess.run(command, env=env, stdout=stream, stderr=subprocess.STDOUT, check=True)
+    if re.search(r"(?m)^(?:SCRIPT ERROR:|ERROR:)", (args.output/log).read_text()):
+        raise RuntimeError("Godot reported an error: " + str(args.output/log))
 if not args.render_only:
     run('profile_long.gd', 'simulation.log')
 xorg = None

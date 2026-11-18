@@ -11,6 +11,7 @@ const OrganicVolume = preload("res://game/organic_volume.gd")
 var volume=OrganicVolume.new()
 var _tissue_basis=PackedVector2Array()
 var _tissue_indices=PackedInt32Array()
+var _tendril_indices=PackedInt32Array([0, 1, 18, 0, 18, 19, 1, 2, 17, 1, 17, 18, 2, 3, 16, 2, 16, 17, 3, 4, 15, 3, 15, 16, 4, 5, 14, 4, 14, 15, 5, 6, 13, 5, 13, 14, 6, 7, 12, 6, 12, 13, 7, 8, 11, 7, 11, 12, 8, 10, 11])
 var cache: Dictionary = {}
 var glow: GradientTexture2D
 var _anchor_contour=PackedVector2Array()
@@ -471,7 +472,6 @@ func _tendril(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,radius: 
 	var a = _anchor(contour,angle)
 	var normal = a.normalized().orthogonal()
 	var points = PackedVector2Array()
-	var flesh=PackedVector2Array()
 	for i in range(10):
 		var t = i/9.0
 		var resting=p+a*radius*(0.76+t*length_scale)+normal*radius*sin(t*4+time*1.5)*t*0.24
@@ -479,15 +479,20 @@ func _tendril(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,radius: 
 			var strike=(p+a*radius*0.76).lerp(p+Vector2(tip),t)+normal*sin(t*PI)*radius*0.25
 			resting=resting.lerp(strike,extension)
 		points.append(resting)
-	# A broad taper grows directly out of the cytoplasm and narrows to a whip.
+	# A whip can fold onto its anchor axis during a strike. A ribbon mesh
+	# keeps the authored edges without requiring a simple polygon at that pose.
+	RenderingServer.canvas_item_add_triangle_array(canvas.get_canvas_item(),_tendril_indices,_tendril_shape(points,normal,radius,width),PackedColorArray([Color(color.darkened(0.17),0.72)]))
+	canvas.draw_polyline(points,Color(color.lightened(0.08),0.76),maxf(0.7,width*0.65),true)
+
+static func _tendril_shape(points: PackedVector2Array,normal: Vector2,radius: float,width: float) -> PackedVector2Array:
+	var flesh=PackedVector2Array()
 	for i in range(points.size()):
 		var t=i/float(points.size()-1)
 		flesh.append(points[i]-normal*(radius*0.09+width*0.3)*pow(1.0-t,1.6))
 	for i in range(points.size()-1,-1,-1):
 		var t=i/float(points.size()-1)
 		flesh.append(points[i]+normal*(radius*0.09+width*0.3)*pow(1.0-t,1.6))
-	canvas.draw_colored_polygon(flesh,Color(color.darkened(0.17),0.72))
-	canvas.draw_polyline(points,Color(color.lightened(0.08),0.76),maxf(0.7,width*0.65),true)
+	return flesh
 
 func _branch(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,radius: float,angle: float,time: float,color: Color):
 	var a = _anchor(contour,angle)

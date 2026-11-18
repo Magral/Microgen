@@ -41,8 +41,16 @@ Connect family capacity/stock state to starting/resumed builds and paused in-run
 
 Full suite, review, native visual/input checks, ten-minute paired profile and multi-family save measurement against stable 1.0.1. Only after both stages pass: update version/export/manifest, build signed APK and verify package/certificate/assets. Current main auto-publishes; preparation stays on `release/1.1.0` until the publication workflow is made safe for this release.
 
-## Current checkpoint
+## Verified implementation checkpoint
 
-Stages 1–2 are implemented in the preparation branch: isolated family repository and migration; one living heir per family; confirmed family deletion; compact paged home/body/stock/legacy views; individual organ identities and transactional swaps; permanent discoverable capacity extensions. Targeted persistence, equipment, integration and UI tests pass. Independent review found an instance-quality/evolution identity issue; it was reproduced in a regression test and corrected.
+Pavel confirmed one living heir per family, simultaneous lives in different families, and confirmed deletion. Stages 1–2 are implemented: isolated repository and old-save migration; compact paged home/body/stock/legacy views; individual organ identity and transactional swaps; persistent discoverable capacity extensions. Infinite organ economy, new whole-organism mutations, ladder worlds and rebuilt bosses remain releases two–four.
 
-Publication remains blocked on the final full suite, native layout inspection, long-run performance comparison and Android release verification. No version bump or APK publication has been made. Stages 3–8 remain future work.
+- [x] Family persistence and migration regression tests, including failed writes and active/inactive/last-family deletion.
+- [x] Organ/capacity transactions, instance quality/evolution ownership and descendant inheritance tests.
+- [x] Full local ci/run_tests.py: 72 commands, exit0, no Godot script/errors; six source-importer tests also pass.
+- [x] Native 1280×640/720 layout captures inspected. Raw-touch family paging, deletion cancellation, heir resume and body/stock exchange checked separately.
+- [x] Independent review of family/equipment implementation; the important evolution/quality identity finding reproduced and fixed.
+- [x] Paired ten-minute simulation and native rendering, final repeated native logs clean; multi-family save/switch measurements recorded in docs/performance/1.1.0.md.
+- [x] First signed Android candidate passed CI, package/certificate/version/manifest/hash checked. Final publication build repeats these checks after the late tendril rendering correction.
+
+Publication is gated by the final main-branch workflow tests/export/signature/manifest checks. Android version1.1.0/code110. The preparation branch also builds signed artifacts but cannot publish stable releases. Preserve the existing package/certificate. No physical Android FPS or universal performance improvement is claimed; ten-family writes remain a measurable hitch risk. No videos.

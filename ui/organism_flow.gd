@@ -167,6 +167,8 @@ func show_part(id: String,tab: String="stats"):
 	part_preview.build.stats.evolutions={part.kind:true} if part.get("evolved",false) else {}
 	var source=app.sim if live_mode else preview
 	var projected=Build.new();projected.from_dict(source.build.to_dict());projected.organs[part.kind]=int(part.rank);projected.qualities[part.kind]=int(part.quality)
+	if part.get("evolved",false):projected.stats.evolutions[part.kind]=true
+	else:projected.stats.evolutions.erase(part.kind)
 	part.effect_text=Inspector.effect_text(projected,part.kind,source.ability_scale(),source.cooldown_factor())
 	part.detail_tab=tab
 	if part.kind in Catalog.EVOLUTIONS:

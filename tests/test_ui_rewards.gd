@@ -75,6 +75,18 @@ func run():
 	check(scene.stage=="organ_mutations" and has_text(scene.hud.content,"Последние повреждения"),"incoming history has a direct journal view")
 	scene.show_development(false)
 	check(scene.stage=="development" and has_text(scene.hud.content,"Тело"),"journal can return to build without resuming battle")
+	var flow=scene._lineage()
+	var identity=flow.state()
+	var n=int(identity.next_id)
+	identity.body_capacity+=2
+	identity.equipped.append({"id":"organ-%d"%n,"kind":"acid","cells":2,"rank":6,"quality":3,"evolved":true})
+	identity.reserve.append({"id":"organ-%d"%(n+1),"kind":"acid","cells":2,"rank":1,"quality":0})
+	identity.next_id=n+2
+	check(flow.commit_state(identity),"identity fixture persists distinct same-kind organs")
+	flow.show_part("organ-%d"%(n+1))
+	check(not has_text(scene.hud.content,"ответная кислота"),"plain archived organ inspector does not borrow equipped evolution")
+	flow.show_part("organ-%d"%n)
+	check(has_text(scene.hud.content,"ответная кислота"),"evolved organ inspector retains its own behavior")
 	scene.store.clear_test_files()
 	scene.queue_free()
 	await process_frame
