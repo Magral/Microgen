@@ -61,15 +61,17 @@ func run():
 	var elite=Sim.new()
 	elite.new_run(99)
 	elite.enemies.clear()
-	elite.elapsed=181
+	for nest_index in range(mini(2,elite.world.nests.size())):elite.world.nests[nest_index].used=true
 	elite.step(0.01,Vector2.ZERO)
-	check(elite.enemies.any(func(enemy):return enemy.kind=="miniboss"),"timed miniboss spawns")
-	var elite_id=elite.enemies.filter(func(enemy):return enemy.kind=="miniboss")[0].id
-	elite.enemies.filter(func(enemy):return enemy.id==elite_id)[0].pos=elite.player+Vector2(1700,0)
-	elite._update_enemies(0.01)
-	check(elite.enemies.any(func(enemy):return enemy.id==elite_id),"unique miniboss cannot disappear when avoided")
-	var restored=Sim.new()
-	restored.restore(JSON.parse_string(JSON.stringify(elite.snapshot())))
-	check(restored.minibosses_spawned==elite.minibosses_spawned,"miniboss progress persists")
+	var minibosses=elite.enemies.filter(func(enemy):return enemy.kind=="miniboss")
+	check(not minibosses.is_empty(),"explored nests spawn a miniboss")
+	if not minibosses.is_empty():
+		var elite_id=minibosses[0].id
+		elite.enemies.filter(func(enemy):return enemy.id==elite_id)[0].pos=elite.player+Vector2(1700,0)
+		elite._update_enemies(0.01)
+		check(elite.enemies.any(func(enemy):return enemy.id==elite_id),"unique miniboss cannot disappear when avoided")
+		var restored=Sim.new()
+		restored.restore(JSON.parse_string(JSON.stringify(elite.snapshot())))
+		check(restored.minibosses_spawned==elite.minibosses_spawned,"miniboss progress persists")
 	print("COMBAT PACING: %d failures" % fails)
 	quit(0 if fails==0 else 1)
