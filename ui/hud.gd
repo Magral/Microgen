@@ -84,7 +84,7 @@ func _ready():
 	root.add_child(pending_button)
 	message = label("",22,Color("e8d9b5"))
 	message.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
-	message.position = Vector2(-330,208)
+	message.position = Vector2(-330,260)
 	message.custom_minimum_size = Vector2(660,0)
 	message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(message)
