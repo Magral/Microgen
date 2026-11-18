@@ -835,7 +835,7 @@ func _mutation_card(id: String,callback: Callable,quality: int=0) -> PanelContai
 		if evolution_id in sim.build.evolution_candidates():continue
 		column.add_child(hud.label("✦ ДОСТУПЕН РЕЦЕПТ ЭВОЛЮЦИИ",20,Color("f1c36e"),true))
 		column.add_child(hud.label(str(Catalog.EVOLUTIONS[evolution_id].name)+" · подробности в Кодексе",18,Color("e5c8ff"),true))
-	column.add_child(hud.button("Заменить" if full else "ВЫБРАТЬ",callback,true))
+	column.add_child(hud.button("Заменить" if full else "Выбрать",callback,true))
 	return card
 
 func _passive_change(id: String,before,after)->String:
