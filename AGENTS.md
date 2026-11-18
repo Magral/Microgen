@@ -6,3 +6,6 @@
 - Profile before claiming optimization. Desktop stress measurements do not establish Android FPS.
 
 - Every release must include a concrete optimization and measured long-run comparison; visual quality and readable builds remain the priorities.
+
+- Do not publish releases for small fixes. Accumulate them until a substantial advance on ROADMAP.md; current stable remains available meanwhile. Never push a small-fix branch to main while the main workflow auto-publishes.
+- Pavel wants more clarifying questions, especially about controls, progression, visual choices and substantial roadmap decisions. Ask targeted questions before settling ambiguous behavior; continue independent authorized fixes while awaiting answers.

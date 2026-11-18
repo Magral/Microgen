@@ -19,6 +19,7 @@ func run():
 		app.show_menu()
 		await process_frame;await process_frame;await process_frame
 		var viewport_rect=app.get_viewport_rect()
+		check(absf(app.hud.content.get_global_rect().get_center().x-viewport_rect.get_center().x)<0.5,"home actions are horizontally centered")
 		check(viewport_rect.size.is_equal_approx(Vector2(viewport_size)),"fixture uses actual requested logical viewport")
 		check(not descendants(app.hud.modal).any(func(node):return node is ScrollContainer),"home has no scroll container")
 		check(app.hud.modal.get_global_rect().is_equal_approx(viewport_rect),"home background layer fills viewport")

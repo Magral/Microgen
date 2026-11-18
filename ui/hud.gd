@@ -119,17 +119,13 @@ func open_home() -> VBoxContainer:
 	for side in ["left","right"]:margin.add_theme_constant_override("margin_"+side,40)
 	for side in ["top","bottom"]:margin.add_theme_constant_override("margin_"+side,24)
 	modal.add_child(margin)
-	var columns=HBoxContainer.new()
-	margin.add_child(columns)
+	var center=CenterContainer.new()
+	margin.add_child(center)
 	content=VBoxContainer.new()
 	content.custom_minimum_size.x=minf(700,root.get_viewport_rect().size.x-80)
 	content.size_flags_vertical=Control.SIZE_SHRINK_CENTER
 	content.add_theme_constant_override("separation",10)
-	columns.add_child(content)
-	var space=Control.new()
-	space.mouse_filter=Control.MOUSE_FILTER_IGNORE
-	space.size_flags_horizontal=Control.SIZE_EXPAND_FILL
-	columns.add_child(space)
+	center.add_child(content)
 	return content
 
 func open(title: String,subtitle: String="",width: float=1030) -> VBoxContainer:
