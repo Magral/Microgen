@@ -31,6 +31,7 @@ def main():
                       "--audio-driver", "Dummy", "--script", "tests/test_touch.gd"])
 
     env["MICROGEN_HOME_CAPTURE"] = str(Path("build/Microgen-home.png").resolve())
+    run("scroll-touch", display_command() + ["godot", "--path", ".", "--audio-driver", "Dummy", "--script", "tests/test_scroll_touch.gd"])
     run("home-native", display_command() + ["godot", "--path", ".", "--audio-driver", "Dummy", "--script", "tests/test_home_layout.gd"])
     env.pop("MICROGEN_HOME_CAPTURE", None)
 

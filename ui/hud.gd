@@ -1,5 +1,6 @@
 extends CanvasLayer
 const MiniMap = preload("res://ui/minimap.gd")
+const TouchScroll = preload("res://ui/touch_scroll.gd")
 const Catalog = preload("res://core/catalog.gd")
 var root: Control
 var status: VBoxContainer
@@ -155,7 +156,7 @@ func open(title: String,subtitle: String="",width: float=1030) -> VBoxContainer:
 	var close_button = button("×",func(): on_close.call())
 	close_button.custom_minimum_size = Vector2(56,56)
 	heading.add_child(close_button)
-	var scroll = ScrollContainer.new()
+	var scroll = TouchScroll.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll_container=scroll
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
