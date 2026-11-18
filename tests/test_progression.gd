@@ -19,7 +19,7 @@ func _initialize():
 	var snapshot = b.to_dict()
 	check(not b.apply("acid","missing",3) and b.to_dict()==snapshot, "failed replacement fully rolls back")
 	check(not b.evolve("tentacle") and b.to_dict()==snapshot, "ineligible evolution fully rolls back")
-	check(b.apply("acid","tentacle",1) and b.rank("acid")==2 and b.quality("acid")==3, "replacement inherits invested rank and best quality")
+	check(b.apply("acid","tentacle",1) and b.rank("acid")==4 and b.quality("acid")==3, "replacement inherits quality-based invested rank and best quality")
 	check(b.quality("tentacle")==0 and not b.evolved("tentacle"), "removed organ metadata cleared")
 	var before = b.to_dict()
 	var preview = Inspector.comparison(b,"acid",0)
