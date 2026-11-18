@@ -28,7 +28,7 @@ func _initialize():
 	check(direct_install.ok and direct_install.state.equipped.any(func(part):return part.id==result.id) and direct_install.state.reserve.any(func(part):return part.id==small.equipped[0].id),"archived discovery can be installed directly while displaced organ remains archived")
 	check(small.reserve.is_empty(),"award does not alias input")
 	var same=equipment.award(small,"devour",2)
-	check(same.ok and same.state.equipped.size()==1 and same.state.equipped[0].rank==2 and same.state.equipped[0].quality==2,"normal level-up improves existing instance")
+	check(same.ok and same.state.equipped.size()==1 and same.state.equipped[0].rank==4 and same.state.equipped[0].quality==2,"rare level-up improves existing instance by three ranks")
 	same.state.equipped[0].rank=9007199254740991
 	check(not equipment.award(same.state,"devour",1).ok,"max rank without quality improvement rejects")
 	check(equipment.award(same.state,"devour",3).state.equipped[0].quality==3,"max rank can gain quality")
