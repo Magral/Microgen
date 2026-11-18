@@ -83,6 +83,7 @@ jobs:
         run: python3 ci/run_tests.py
 
       - name: Build signed release APK
+        id: opengl
         if: steps.source.outputs.ready == 'true'
         run: |
           godot --headless --path . --export-release Android build/Microgen.apk 2>&1 | tee build/logs/export.log
@@ -129,13 +130,20 @@ jobs:
           if grep -Eq 'SCRIPT ERROR:|ERROR:' build/logs/export-vulkan.log; then exit 1; fi
           "$ANDROID_HOME/build-tools/35.0.1/apksigner" verify --verbose --print-certs build/Microgen-Vulkan.apk > build/APK_VULKAN_SIGNATURE.txt
           diff -u build/APK_SIGNATURE.txt build/APK_VULKAN_SIGNATURE.txt
-          "$ANDROID_HOME/build-tools/35.0.1/aapt" dump badging build/Microgen-Vulkan.apk > build/APK_VULKAN_METADATA.txt
-          diff -u <(grep "^package:" build/APK_METADATA.txt) <(grep "^package:" build/APK_VULKAN_METADATA.txt)
+          aapt="$ANDROID_HOME/build-tools/35.0.1/aapt"
+          "$aapt" dump xmltree build/Microgen.apk AndroidManifest.xml > "$RUNNER_TEMP/microgen-opengl-manifest.txt"
+          "$aapt" dump xmltree build/Microgen-Vulkan.apk AndroidManifest.xml > build/APK_VULKAN_METADATA.txt
+          manifest_id='A: (package=|android:version(Code|Name)\()'
+          grep -E "$manifest_id" "$RUNNER_TEMP/microgen-opengl-manifest.txt" > "$RUNNER_TEMP/microgen-opengl-identity.txt"
+          grep -E "$manifest_id" build/APK_VULKAN_METADATA.txt > "$RUNNER_TEMP/microgen-vulkan-identity.txt"
+          test "$(wc -l < "$RUNNER_TEMP/microgen-vulkan-identity.txt")" -eq 3
+          diff -u "$RUNNER_TEMP/microgen-opengl-identity.txt" "$RUNNER_TEMP/microgen-vulkan-identity.txt"
+          if grep -q 'android:debuggable.*0xffffffff' build/APK_VULKAN_METADATA.txt; then exit 1; fi
           cd build
           sha256sum Microgen-Vulkan.apk >> SHA256SUMS.txt
 
       - name: Upload APK and sources
-        if: steps.source.outputs.ready == 'true'
+        if: always() && steps.opengl.outcome == 'success'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Microgen-android-${{ github.run_number }}
