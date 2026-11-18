@@ -103,12 +103,27 @@ func _initialize():
 	soak.step(0.01,Vector2.ZERO)
 	check(soak.boss_spawned, "boss unlocks after the miniboss objective")
 	soak.enemies.clear()
+	soak.shots.clear()
 	soak.spawn_enemy(soak.player+Vector2(120,0),"boss")
+	var boss = soak.enemies[0]
+	boss.shot_cd = 0.0
+	soak._update_boss_attack(boss, 0.01)
+	check(boss.get("boss_windup", 0.0) > 0.0 and soak.shots.is_empty(), "boss locks its direction before firing")
+	var charging = Sim.new()
+	check(charging.restore(soak.snapshot()), "checkpoint accepts boss windup")
+	var resumed_boss = charging.enemies[0]
+	charging._update_boss_attack(resumed_boss, 1.2)
+	check(charging.shots.size() == int(charging.boss_attack().count) and resumed_boss.get("boss_exposed", 0.0) > 0.0, "resumed windup fires one procedural attack and exposes the core")
+	resumed_boss.tissue_budget = 100.0
+	var exposed_hit = charging.hit_enemy(resumed_boss, 10.0)
+	resumed_boss.boss_exposed = 0.0
+	check(exposed_hit > charging.hit_enemy(resumed_boss, 10.0), "exposed core increases damage below the tissue ceiling")
 	soak.enemies[0].hp = 0
 	soak.step(0.01,Vector2.ZERO)
 	check(soak.stage_transition and soak.outcome=="", "boss death continues the run at the next stage")
 	var terminal = Sim.new()
 	check(terminal.restore(soak.snapshot()) and terminal.stage_transition and terminal.stage_index==1, "stage transition survives checkpoint")
+	check(terminal.boss_reward.get("organ", "") == terminal.boss_attack().organ and not terminal.boss_reward.get("claimed", true), "boss organ persists until the player claims it")
 	var reward_count = 0
 	for event in soak.events:
 		if event.type == "core" and event.token.begins_with(soak.run_id+":boss:"): reward_count += 1

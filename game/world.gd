@@ -94,9 +94,18 @@ func reachable(p: Vector2) -> bool:
 	return c.y*W+c.x in _flood(start)
 
 func walkable(p: Vector2,radius: float = 0.0) -> bool:
-	for offset in [Vector2(-radius,-radius),Vector2(radius,-radius),Vector2(-radius,radius),Vector2(radius,radius)]:
-		var c = tile(p+offset)
-		if c.x<0 or c.y<0 or c.x>=W or c.y>=H or cells[c.y*W+c.x] == 1: return false
+	var extent = Vector2.ONE * absf(radius)
+	var low = tile(p - extent)
+	var high = low if radius == 0.0 else tile(p + extent)
+	if low.x < 0 or low.y < 0 or high.x >= W or high.y >= H:
+		return false
+	var top = low.y * W
+	if cells[top + low.x] == 1 or (high.x != low.x and cells[top + high.x] == 1):
+		return false
+	if high.y != low.y:
+		var bottom = high.y * W
+		if cells[bottom + low.x] == 1 or (high.x != low.x and cells[bottom + high.x] == 1):
+			return false
 	return true
 
 func move_body(p: Vector2,delta: Vector2,radius: float) -> Vector2:

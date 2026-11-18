@@ -1,6 +1,7 @@
 extends Node2D
 const Catalog = preload("res://core/catalog.gd")
 const World = preload("res://game/world.gd")
+const BossEncounter = preload("res://game/boss_encounter.gd")
 const Painter = preload("res://game/organism_painter.gd")
 const TissueDamage=preload("res://game/tissue_damage.gd")
 const Absorption = preload("res://game/absorption.gd")
@@ -217,7 +218,11 @@ func _draw():
 	for resident in sim.residents:
 		if not resident.active and not resident.dead and area.grow(resident.r).has_point(resident.pos):_silhouette(resident)
 	for e in sim.enemies:
-		if e.r>sim.body_radius()*2 and e.pos.distance_to(sim.player)>sim.body_radius()*6+e.r:
+		var boss_attack_visible = e.kind == "boss" and float(e.get("boss_windup", 0.0)) > 0.0
+		var boss_core_visible = e.kind == "boss" and float(e.get("boss_exposed", 0.0)) > 0.0
+		if boss_attack_visible and area.grow(510.0).has_point(e.pos):
+			_draw_boss_telegraph(e)
+		if not (boss_attack_visible or boss_core_visible) and e.r>sim.body_radius()*2 and e.pos.distance_to(sim.player)>sim.body_radius()*6+e.r:
 			if area.grow(e.r).has_point(e.pos):_silhouette(e)
 			continue
 		if not area.has_point(e.pos): continue
@@ -225,6 +230,11 @@ func _draw():
 		if can_mark_absorbable(e):absorbable.append(e)
 		var organs = enemy_organs(e)
 		painter.paint(self,screen(e.pos),e.r*1.17*(1.0-float(e.get("engulf",0))*0.65),e.genome,organs,visual_time,"prey" if e.r<sim.body_radius()*0.82 else e.kind,e.kind=="boss" or detailed_enemies.has(e.id),motion_for(e.id),[],Color(-1,-1,-1),0.0,e.hp/e.max_hp)
+		if boss_core_visible:
+			var core = screen(e.pos)
+			var pulse = 0.5 + 0.5 * sin(visual_time * 12.0)
+			draw_circle(core, e.r * 0.28, Color(0.50, 1.0, 0.90, 0.18 + pulse * 0.12))
+			draw_arc(core, e.r * 0.29, 0, TAU, 24, Color("a2ffe1"), 2.5, true)
 		if float(e.get("enzyme_time",0))>0:OrganicFX.infected(self,screen(e.pos),e.r,e.genome,visual_time,float(e.enzyme_time),motion_for(e.id),true)
 		if e.infect>0: OrganicFX.infected(self,screen(e.pos),e.r,e.genome,visual_time,float(e.infect),motion_for(e.id))
 		if e.kind=="miniboss":draw_string(font,screen(e.pos)+Vector2(-e.r,-e.r*1.5-20),e.get("title","Минибосс"),HORIZONTAL_ALIGNMENT_LEFT,-1,14,Color("f1c987"))
@@ -237,11 +247,14 @@ func _draw():
 		for p in clones:
 			painter.paint(self,screen(p),17,sim.player_genome,{"trail":sim.build.rank("trail")},visual_time+1,"clone",false,motion_for("clone:%d" % clone_index),[],sim.body_color(),0.0,sim.hp/sim.max_hp)
 			clone_index += 1
+	if not sim.boss_breakup.is_empty():
+		_draw_boss_breakup(sim.boss_breakup)
 	_draw_player()
 	if sim.last_damage.get("kind","")=="toxin" and sim.elapsed-float(sim.last_damage.get("time",-10))<1.5:OrganicFX.infected(self,screen(sim.player),sim.body_radius(),sim.player_genome,visual_time,2.0,motion_for("player"))
 	for cyst in sim.cysts:
 		if cyst.get("captured",false):RewardArt.paint(self,screen(cyst.pos),int(cyst.tier),visual_time,int(cyst.id),float(cyst.get("progress",0.0)))
 	for shot in sim.shots:
+		if not area.has_point(shot.pos):continue
 		var p = screen(shot.pos)
 		var col = Color("e27e9d") if shot.hostile else Color("e7d1a7")
 		draw_line(p-shot.vel.normalized()*13,p,col,3,true)
@@ -378,8 +391,42 @@ func _draw_player():
 	painter.paint(self,p,radius,sim.player_genome,anatomy,visual_time,"player",true,motion_for("player"),feeding,sim.body_color(),reaction,sim.hp/sim.max_hp,sim.bite_flash,appearance)
 	if sim.invuln>0: draw_arc(p,radius*1.4,0,TAU,40,Color("f2c3d1",0.2+0.2*sin(visual_time*24)),2,true)
 
+func _draw_boss_telegraph(enemy: Dictionary):
+	var attack = sim.boss_attack()
+	var origin = screen(enemy.pos)
+	var charge = 1.0 - clampf(float(enemy.boss_windup) / BossEncounter.WINDUP_SECONDS, 0.0, 1.0)
+	for ray in range(int(attack.count)):
+		var heading = BossEncounter.direction(attack, float(enemy.boss_angle), ray)
+		var start = origin + heading * enemy.r * 0.85
+		var finish = origin + heading * float(attack.speed) * 2.0
+		draw_line(start, finish, Color(attack.color, 0.12 + charge * 0.20), 9.0, true)
+		draw_line(start, finish, Color(attack.color, 0.55 + charge * 0.4), 2.0, true)
+
+func _draw_boss_breakup(breakup: Dictionary):
+	var center = screen(breakup.pos)
+	var progress = clampf(float(breakup.time) / BossEncounter.BREAKUP_SECONDS, 0.0, 1.0)
+	var drift = 1.0 - pow(1.0 - progress, 3.0)
+	var radius = float(breakup.radius)
+	var tint: Color = breakup.color
+	for segment in range(7):
+		var angle = float(segment) * TAU / 7.0
+		var piece = center + Vector2.from_angle(angle) * radius * (0.10 + drift * 0.74)
+		var points = PackedVector2Array([piece + Vector2.from_angle(angle) * radius * 0.23])
+		for step in range(8):
+			var edge_angle = angle - 0.38 + float(step) * 0.76 / 7.0
+			var stretch = 0.81 + 0.065 * sin(step * 1.9 + segment) * (1.0 - progress)
+			points.append(piece + Vector2.from_angle(edge_angle) * radius * stretch)
+		draw_colored_polygon(points, Color(tint, 0.48 * (1.0 - progress)))
+		points.append(points[0])
+		draw_polyline(points, Color(tint.lightened(0.45), 0.9 * (1.0 - progress)), 2.4, true)
+	RewardArt.paint(self, center, 3, visual_time, 19)
+
 func enemy_organs(e: Dictionary) -> Dictionary:
 	var signature=hash(e.kind)^(int(e.variant)*31)^hash(e.get("traits",[]))
+	var attack_organ = ""
+	if e.kind == "boss":
+		attack_organ = str(sim.boss_attack().organ)
+		signature ^= hash(attack_organ)
 	var cached=organ_cache.get(e.id,{})
 	if cached.get("signature",-1)==signature:
 		organ_cache_hits+=1
@@ -387,7 +434,7 @@ func enemy_organs(e: Dictionary) -> Dictionary:
 	organ_cache_misses+=1
 	var organs = {}
 	if e.kind=="spitter": organs.infection = 1
-	if e.kind in ["boss","miniboss"]:
+	if e.kind == "miniboss":
 		organs.tentacle = 2
 		organs.spikes = 2
 	if int(e.variant)==1: organs.armor = 1
@@ -395,6 +442,7 @@ func enemy_organs(e: Dictionary) -> Dictionary:
 	for mutation in e.get("traits",[]):
 		var id = {"shell":"armor","swift":"speed","regen":"regen","toxic":"acid","spores":"infection"}.get(mutation,"")
 		if id!="": organs[id] = 2
+	if not attack_organ.is_empty(): organs[attack_organ] = 4
 	organ_cache[e.id]={"signature":signature,"organs":organs}
 	return organs
 

@@ -18,6 +18,7 @@ var imprint_origin="menu"
 const CystReveal=preload("res://ui/cyst_reveal.gd")
 var reward_reveal
 const Sim = preload("res://game/simulation.gd")
+const BossEncounter = preload("res://game/boss_encounter.gd")
 const View = preload("res://game/world_view.gd")
 const HUD = preload("res://ui/hud.gd")
 const Save = preload("res://core/save_store.gd")
@@ -53,6 +54,7 @@ var replacement_stock = -1
 var synergy_continue: Callable
 var stage_reveal_tween: Tween
 var stage_preview_world
+var stage_action_error: Label
 var deferred_choices = false
 var reward_index = -1
 var checkpoint_timer = 0.0
@@ -110,6 +112,22 @@ func _ready():
 			for i in range(16): sim.spawn_enemy(sim.player+Vector2.from_angle(i*TAU/16)*randf_range(160,440),"hunter" if i%3 else "prey")
 			for i in range(18): sim.step(0.016,Vector2.ZERO)
 			sim.paused = true
+		elif capture_mode in ["boss-fight", "boss-reward"]:
+			sim.level = 12
+			sim.spawn_enemy(sim.player + Vector2(228, 60), "boss")
+			var boss = sim.enemies.back()
+			sim.boss_spawned = true
+			sim.boss_marker = boss.pos
+			if capture_mode == "boss-fight":
+				boss.boss_angle = (sim.player - boss.pos).angle()
+				boss.boss_windup = 0.35
+				boss.hp *= 0.65
+				sim.paused = true
+				hud.message.text = ""
+				hud.update_game(sim)
+			else:
+				sim._die(sim.enemies.size() - 1, false)
+				show_boss_reward()
 		elif capture_mode == "habitat":
 			sim.level=8
 			sim.build.organs={"tentacle":3,"acid":3,"devour":3,"barrier":3,"electric":3}
@@ -230,6 +248,11 @@ func _process(dt):
 		sim.step(dt,dir)
 		if not _handle_events():return
 		if sim.stage_transition:
+			if not sim.boss_breakup.is_empty():
+				if sim.boss_breakup.time == 0.0:hud.update_game(sim)
+				sim.boss_breakup.time += dt
+				if sim.boss_breakup.time < BossEncounter.BREAKUP_SECONDS:return
+				sim.boss_breakup.clear()
 			show_stage_briefing()
 		elif sim.outcome!="":
 			finish_run()
@@ -464,7 +487,7 @@ func _run_matches_family() -> bool:
 	return sim!=null and not sim.family_id.is_empty() and sim.family_id==store.family_id()
 
 func save_run() -> bool:
-	if sim==null or stage not in ["game","pause","development","map","shop","level","reward","replace","synergy_reveal","stage_briefing","save_error","capacity_notice"]:return false
+	if sim==null or stage not in ["game","pause","development","map","shop","level","reward","replace","synergy_reveal","stage_briefing","boss_reward","save_error","capacity_notice"]:return false
 	if stage=="development" and not _lineage().live_mode:return false
 	if not _run_matches_family():message("Другая жизнь не может перезаписать семейство",5);return false
 	var next=store.profile.duplicate(true)
@@ -546,8 +569,81 @@ func show_capacity_notice():
 func stage_reroll_cost()->int:
 	return 8+mini(40,sim.stage_index*4)
 
+func show_boss_reward(error_text: String = ""):
+	var reward = sim.boss_reward
+	set_stage("boss_reward")
+	hud.game_visible(false)
+	var box = hud.open_fixed("Босс повержен", "%s · ступень %d" % [reward.name, sim.stage_index], 800)
+	var art = OrganArt.new()
+	art.organ_id = reward.organ
+	art.specimen_recipe = reward.genome
+	art.quality = 3
+	art.custom_minimum_size = Vector2(140, 168)
+	box.add_child(art)
+	box.add_child(hud.label("Легендарный орган · " + Catalog.item(reward.organ).name, 25, Rewards.quality_color(3), true))
+	if reward.claimed:
+		if not str(reward.get("receipt", "")).is_empty():
+			box.add_child(hud.label(reward.receipt, 22, Color("9ce3cf"), true))
+		box.add_child(hud.button("К организму", func(): development_origin = "stage_briefing"; _lineage().show_body(true)))
+		box.add_child(hud.button("Следующая ступень", show_stage_briefing, true))
+	else:
+		var materials = sim.boss_reward_materials()
+		box.add_child(hud.button("Забрать орган", func(): _claim_boss_reward(true), true))
+		box.add_child(hud.button("Расщепить ткани босса", func(): _claim_boss_reward(false)))
+		box.add_child(hud.label("+%d органелл · +%d мембраны · +%d плазмы" % [materials.organelle, materials.membrane, materials.plasma], 20, Color("c7ded8"), true))
+	_add_stage_error(box)
+	if not error_text.is_empty():_show_stage_error(error_text)
+
+func _add_stage_error(box: VBoxContainer):
+	stage_action_error = hud.label("", 19, Color("ffaaa7"), true)
+	stage_action_error.hide()
+	box.add_child(stage_action_error)
+
+func _show_stage_error(error_text: String):
+	if not is_instance_valid(stage_action_error):return
+	stage_action_error.text = error_text if not error_text.is_empty() else "Не удалось сохранить. Попробуй ещё раз."
+	stage_action_error.show()
+
+func _claim_boss_reward(take_organ: bool):
+	if stage != "boss_reward" or sim.boss_reward.is_empty() or sim.boss_reward.claimed or not _run_matches_family():return
+	var flow = _lineage()
+	var equipment = flow.capture(sim.build.to_dict())
+	if equipment.is_empty():return
+	var economy = {}
+	var receipt = "Материалы сохранены у семейства"
+	if take_organ:
+		var result = Equipment.award(equipment, sim.boss_reward.organ, 3)
+		if not result.ok:
+			_show_stage_error(result.error)
+			return
+		equipment = result.state
+		receipt = {"body": "Орган сохранён в теле", "stock": "Орган сохранён в запасе", "reserve": "Орган сохранён в архиве семейства"}[result.location]
+	else:
+		var materials = store.profile.get("organ_materials", {}).duplicate(true)
+		var payout = sim.boss_reward_materials()
+		for material in payout:
+			materials[material] = mini(9007199254740991, int(materials.get(material, 0)) + int(payout[material]))
+		economy.organ_materials = materials
+	flow.live_mode = true
+	var before = sim.build.active_synergies().duplicate()
+	sim.boss_reward.claimed = true
+	sim.boss_reward.receipt = receipt
+	if not flow.commit_state(equipment, economy):
+		sim.boss_reward.claimed = false
+		sim.boss_reward.erase("receipt")
+		show_boss_reward(store.last_error if not store.last_error.is_empty() else "Не удалось сохранить награду")
+		return
+	_tone(660)
+	var activated = sim.build.active_synergies().filter(func(id): return id not in before)
+	if activated.is_empty():show_boss_reward()
+	else:show_synergy_reveal(activated, show_boss_reward)
+
 func show_stage_briefing():
 	if sim==null or not sim.stage_transition:return
+	if not _handle_events():return
+	if not sim.boss_reward.is_empty() and not sim.boss_reward.claimed:
+		show_boss_reward()
+		return
 	set_stage("stage_briefing")
 	var stage_number=sim.stage_index+1
 	var seed_value=maxi(1,sim.pending_stage_seed)
@@ -561,11 +657,13 @@ func show_stage_briefing():
 	var wide=screen_size.x>=900
 	var box=hud.open_fixed("Переход на ступень %d"%stage_number,"Карта, условия и награды следующей области.",1120)
 	var map=Map.new();map.sim=preview_sim;map.large=wide;map.custom_minimum_size=Vector2(430,290) if wide else Vector2(230,clampf(screen_size.y*0.18,100,140))
+	var details=VBoxContainer.new();details.size_flags_horizontal=Control.SIZE_EXPAND_FILL
 	if wide:
 		var row=hud.row();box.add_child(row);row.add_child(map)
+		row.add_child(details)
 	else:
 		map.size_flags_horizontal=Control.SIZE_SHRINK_CENTER;box.add_child(map)
-	var details=VBoxContainer.new();details.size_flags_horizontal=Control.SIZE_EXPAND_FILL;box.add_child(details)
+		box.add_child(details)
 	var final_stage_name=sim.stage_name(stage_number,seed_value)
 	var title=hud.label("Сканирование среды…",30 if wide else 25,Color("9ce3cf"),true);details.add_child(title)
 	var danger=[]
@@ -578,8 +676,9 @@ func show_stage_briefing():
 		danger.append(("Питательная" if biome==0 else "Токсичная")+" · "+effect)
 	details.add_child(hud.label("СРЕДА · "+"  /  ".join(danger),21 if wide else 20,Color("c7ded8"),true))
 	var boss=sim.boss_title(stage_number,seed_value)
-	var boss_hp=roundi(1600.0*(1.0+0.14*float(stage_number-1)))
-	details.add_child(hud.label("БОСС · %s · база ~%d HP\nАтака: веер из 10 сгустков / 1,5 с"%[boss,boss_hp],23 if wide else 20,Color("efa3a9"),true))
+	var boss_hp = roundi(BossEncounter.health(stage_number))
+	var attack = sim.boss_attack(stage_number, seed_value)
+	details.add_child(hud.label("БОСС · %s · %d HP\n%s · %s" % [boss, boss_hp, attack.name, attack.hint], 23 if wide else 20, attack.color, true))
 	var miniboss_target=sim.stage_miniboss_target(stage_number)
 	var nest_target=mini(4,miniboss_target*2)
 	details.add_child(hud.label("ЦЕЛЬ · гнёзда %d · минибоссы %d · затем босс"%[nest_target,miniboss_target],21 if wide else 20,Color("d3dfd8"),true))
@@ -608,6 +707,7 @@ func show_stage_briefing():
 	reroll.disabled=int(store.profile.get("organium",0))<cost
 	actions.add_child(reroll)
 	actions.add_child(enter)
+	_add_stage_error(box)
 	for info_index in range(1,details.get_child_count()):details.get_child(info_index).hide()
 	actions.hide()
 	var skip_button:Button
@@ -655,12 +755,26 @@ func reroll_stage_area():
 	next.checkpoint=sim.snapshot()
 	if not store.write_profile(next):
 		sim.pending_stage_seed=previous_seed
-		message(store.last_error,6)
+		_show_stage_error(store.last_error)
 		return
 	show_stage_briefing()
 
 func enter_next_stage():
-	if sim==null or not sim.enter_next_stage(stage_preview_world):return
+	if sim==null or not sim.stage_transition:return
+	if not sim.boss_reward.is_empty() and not sim.boss_reward.claimed:return
+	if not _handle_events():
+		_show_stage_error(store.last_error)
+		return
+	var previous = sim.snapshot()
+	if not sim.enter_next_stage(stage_preview_world):return
+	if not save_run():
+		var rollback = Sim.new()
+		if rollback.restore(previous):
+			sim = rollback
+			sim.paused = true
+			view.sim = sim
+		_show_stage_error(store.last_error)
+		return
 	stage_preview_world=null
 	view.sim=sim;view.motions.clear();view.detailed_enemies.clear()
 	checkpoint_timer=0
@@ -668,7 +782,6 @@ func enter_next_stage():
 	set_stage("game")
 	hud.game_visible(true)
 	hud.update_game(sim)
-	save_run()
 
 func finish_run():
 	sim.flush_family_materials()
@@ -1075,6 +1188,9 @@ func close_development():
 	_lineage().close_body()
 
 func resume_game():
+	if sim.stage_transition:
+		show_stage_briefing()
+		return
 	hud.close()
 	set_stage("game")
 	hud.game_visible(true)
@@ -1165,7 +1281,7 @@ func _notification(what):
 	elif what==NOTIFICATION_WM_GO_BACK_REQUEST:
 		if stage=="game": show_pause()
 		elif stage=="development": close_development()
-		elif stage in ["level","reward","replace"]: close_modal()
+		elif stage in ["level","reward","boss_reward","replace"]: close_modal()
 		elif stage=="synergy_reveal":finish_synergy_reveal()
 		elif stage=="stage_briefing":enter_next_stage()
 		elif stage in ["pause","map","shop"]: resume_game()
@@ -1204,6 +1320,7 @@ func close_modal():
 		"inherit": _close_imprints()
 		"synergy_reveal":finish_synergy_reveal()
 		"stage_briefing":enter_next_stage()
+		"boss_reward":show_pause()
 		"updates": show_menu()
 		"level","reward","replace":
 			deferred_choices = true

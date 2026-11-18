@@ -101,6 +101,16 @@ func update_game(sim):
 	var required_minibosses=sim.stage_miniboss_target()
 	var required_nests=mini(4,required_minibosses*2)
 	stage_objective.text="ГЛАВНАЯ УГРОЗА: %s"%sim.boss_title() if sim.boss_spawned else "ЦЕЛЬ: гнёзда %d/%d · минибоссы %d/%d"%[mini(discovered,required_nests),required_nests,int(sim.minibosses_defeated),required_minibosses]
+	if sim.stage_transition:
+		stage_objective.text = "БОСС ПОВЕРЖЕН"
+	elif sim.boss_spawned and sim.boss_marker.distance_squared_to(sim.player) < 520.0 * 520.0:
+		for enemy in sim.enemies:
+			if enemy.kind != "boss":continue
+			var phase = ""
+			if float(enemy.get("boss_windup", 0.0)) > 0.0:phase = " · " + str(sim.boss_attack().name)
+			elif float(enemy.get("boss_exposed", 0.0)) > 0.0:phase = " · ЯДРО ОТКРЫТО"
+			stage_objective.text = "%s · %d%% HP%s" % [enemy.get("title", sim.boss_title()), ceili(enemy.hp / enemy.max_hp * 100.0), phase]
+			break
 	stats.text = "Размер ×%.1f  ·  Ур. %d  ·  %d/%d HP\nБиомасса %d  ·  %02d:%02d" % [sim.body_radius()/22.0,sim.level,int(sim.hp),int(sim.max_hp),sim.build.biomass,int(sim.elapsed)/60,int(sim.elapsed)%60]
 	var damage = sim.last_damage
 	damage_source.text = "Последний урон: −%.1f HP · %s" % [float(damage.get("amount",0)),damage.get("name","неизвестный источник")] if not damage.is_empty() else ""

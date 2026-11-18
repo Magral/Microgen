@@ -1,5 +1,6 @@
 extends RefCounted
 const World = preload("res://game/world.gd")
+const BossEncounter = preload("res://game/boss_encounter.gd")
 const Build = preload("res://core/build_model.gd")
 const Catalog = preload("res://core/catalog.gd")
 const Genome = preload("res://core/genome.gd")
@@ -34,6 +35,8 @@ var stage_index=1
 var best_stage=0
 var stage_transition=false
 var pending_stage_seed=0
+var boss_reward: Dictionary = {}
+var boss_breakup: Dictionary = {}
 var _danger_at=-10.0
 const SizeRules=preload("res://core/size_rules.gd")
 var facing=0.0
@@ -95,6 +98,8 @@ var last_tile = Vector2i(-100,-100)
 func new_run(seed_value: int, unlocked: Array = Catalog.base_unlocked(), permanent: Dictionary = {}, selected_branch: String = "predator",loadout: Dictionary={}):
 	family_id="";stock_capacity=3
 	stage_index=1;best_stage=0;stage_transition=false;pending_stage_seed=0;minibosses_spawned=0;minibosses_defeated=0
+	boss_reward = {}
+	boss_breakup = {}
 	pickups.clear()
 	next_id=0
 	run_loadout=Heredity.normalize(loadout)
@@ -178,6 +183,8 @@ func enter_next_stage(prepared_world=null):
 	cooldowns.clear();explored.clear();cysts.clear();events.clear();current_offers.clear();offer_quality.clear()
 	digesting_id=-1;boss_spawned=false;boss_marker=Vector2.ZERO;minibosses_spawned=0;minibosses_defeated=0
 	stage_transition=false
+	boss_reward.clear()
+	boss_breakup.clear()
 	spawn_timer=0.0
 	last_tile=Vector2i(-100,-100)
 	_populate_stage()
@@ -219,6 +226,8 @@ func _feedback(kind: String,position: Vector2,amount: float=0.0,source: String="
 func hit_enemy(enemy: Dictionary,amount: float,source: String="unknown") -> float:
 	if enemy.hp<=0 or enemy.get("captured",false):return 0.0
 	var raw=maxf(0.0,amount)*(1.0+build.passive("catalysis"))*build.power(source)
+	if float(enemy.get("boss_exposed", 0.0)) > 0.0:
+		raw *= BossEncounter.EXPOSED_DAMAGE_MULTIPLIER
 	var budget=float(enemy.get("tissue_budget",enemy.max_hp*0.01))
 	var dealt=minf(enemy.hp,minf(raw,budget))
 	enemy.tissue_budget=maxf(0,budget-dealt)
@@ -324,6 +333,30 @@ func boss_title(index: int=0,seed_value: int=-1)->String:
 	var source=world.seed_value if seed_value<0 else seed_value
 	var target=stage_index if index<=0 else index
 	return BOSS_NAMES[posmod(source+target*7,BOSS_NAMES.size())]
+
+func boss_attack(index: int=0,seed_value: int=-1)->Dictionary:
+	return BossEncounter.pattern(world.seed_value if seed_value < 0 else seed_value, stage_index if index <= 0 else index)
+
+func _update_boss_attack(enemy: Dictionary, dt: float):
+	var exposed = float(enemy.get("boss_exposed", 0.0))
+	enemy.boss_exposed = maxf(0.0, exposed - dt)
+	var windup = float(enemy.get("boss_windup", 0.0))
+	if windup > 0.0:
+		enemy.boss_windup = maxf(0.0, windup - dt)
+		if enemy.boss_windup == 0.0:
+			var attack = boss_attack()
+			for ray in range(int(attack.count)):
+				var heading = BossEncounter.direction(attack, float(enemy.boss_angle), ray)
+				_shot(enemy.pos, heading * float(attack.speed), 13.0, true, "enemy", _enemy_label(enemy) + " · " + attack.name, int(enemy.id))
+			enemy.boss_exposed = 1.5
+			enemy.shot_cd = 1.8 if enemy.hp < enemy.max_hp * 0.35 else 3.0
+		return
+	enemy.shot_cd = maxf(0.0, enemy.shot_cd - dt)
+	if enemy.shot_cd > 0.0 or enemy.pos.distance_squared_to(player) > 460.0 * 460.0 or _safe_zone(player):
+		return
+	enemy.boss_angle = (player - enemy.pos).angle()
+	enemy.boss_windup = BossEncounter.WINDUP_SECONDS
+	_feedback("danger", enemy.pos)
 
 var _radius_level=-1
 var _radius_xp=-1.0
@@ -455,7 +488,7 @@ func gain_xp(amount: float):
 		pending_levels += 1
 
 func step(dt: float,direction: Vector2):
-	if paused or outcome != "": return
+	if paused or stage_transition or outcome != "": return
 	dt = clampf(dt,0,0.5)
 	elapsed += dt
 	invuln = maxf(0,invuln-dt)
@@ -487,14 +520,13 @@ func step(dt: float,direction: Vector2):
 	_update_minibosses()
 	_update_enemies(dt)
 	if outcome != "" or stage_transition:return
+	if _check_run_death():return
 	if not boss_spawned and minibosses_defeated>=stage_miniboss_target() and enemies.size()<ENEMY_CAP:
 		boss_spawned=true
 		boss_marker=world.boss_pos
 		spawn_enemy(world.boss_pos,"boss")
 		if not enemies.is_empty() and enemies.back().kind=="boss":
-			var boss_enemy=enemies.back()
-			boss_enemy.title=boss_title()
-			events.append({"type":"message","text":"Открыт путь к главной угрозе: "+str(boss_enemy.title)+". Найди её на карте."})
+			events.append({"type":"message","text":"Открыт путь к главной угрозе: "+boss_title()+". Найди её на карте."})
 	_attack_dt = dt
 	_attack()
 	_update_shots(dt)
@@ -508,9 +540,13 @@ func step(dt: float,direction: Vector2):
 	for i in range(effects.size()-1,-1,-1):
 		effects[i].life -= dt
 		if effects[i].life<=0: effects.remove_at(i)
-	if hp <= 0:
-		outcome = "death"
-		events.append({"type":"end","outcome":"death"})
+	_check_run_death()
+
+func _check_run_death() -> bool:
+	if hp > 0.0:return false
+	outcome = "death"
+	events.append({"type":"end","outcome":"death"})
+	return true
 
 func _reveal():
 	var c = world.tile(player)
@@ -547,9 +583,10 @@ func spawn_enemy(p: Vector2,kind: String):
 	var variant = rng.randi_range(0,3)
 	var traits = Genome.traits(world.seed_value,next_id,elapsed,kind)
 	var health = (8.0 if prey else 40.0+elapsed*0.17)*(1.4 if variant == 1 else 1.0)
-	if boss: health = 1600.0*(1.0+0.14*float(stage_index-1))
-	if "shell" in traits: health *= 1.3
+	if boss: health = BossEncounter.health(stage_index)
+	elif "shell" in traits: health *= 1.3
 	enemies.append({"pos":p,"kind":kind,"hp":health,"max_hp":health,"r":12.0 if prey else (140.0 if boss else 23.0+rng.randf()*6),"speed":42.0 if prey else (48.0 if boss else 44.0+minf(25,elapsed*0.035)+(12 if variant==2 else 0)),"vel":Vector2.ZERO,"engulf":0.0,"phase":rng.randf()*TAU,"variant":variant,"infect":0.0,"slow":0.0,"shot_cd":2.5,"id":next_id,"biome":world.biome(p),"genome":Genome.create(world.seed_value,next_id,kind,world.biome(p)),"traits":traits,"emission_cd":rng.randf_range(1.0,3.0)})
+	if boss:enemies.back().title = boss_title()
 	if not prey and not boss and posmod(next_id*31+world.seed_value,7)==0:
 		enemies.back().r=44.0+float(posmod(next_id,5))
 		enemies.back().hp*=1.7
@@ -580,8 +617,11 @@ func _update_enemies(dt: float):
 		var e = enemies[i]
 		if e.hp <= 0:
 			_die(i,false)
+			if stage_transition:return
 			continue
 		var rate=CombatTissue.damage_rate(e.r/body_radius(),e.kind in ["boss","miniboss"])
+		if e.kind == "boss" and float(e.get("boss_exposed", 0.0)) > 0.0:
+			rate *= BossEncounter.EXPOSED_DAMAGE_MULTIPLIER
 		e.tissue_budget=minf(e.max_hp*0.06,float(e.get("tissue_budget",0))+e.max_hp*rate*dt)
 		e.slow = maxf(0,e.slow-dt)
 		e.grasp=maxf(0.0,float(e.get("grasp",0))-dt)
@@ -607,6 +647,7 @@ func _update_enemies(dt: float):
 				_field(e.pos,48,6.0,2.8,"enemy_toxin",true,_enemy_label(e)+" · токсин",int(e.id))
 		if e.hp <= 0:
 			_die(i,false)
+			if stage_transition:return
 			continue
 		var offset = player-e.pos
 		var dist = offset.length()
@@ -642,20 +683,24 @@ func _update_enemies(dt: float):
 		desired+=e.impulse
 		var old_velocity = e.get("vel",Vector2.ZERO)
 		var response = exp(-dt/0.28)
-		e.vel = desired+(old_velocity-desired)*response
-		e.pos = world.move_body(e.pos,desired*dt+(old_velocity-desired)*0.28*(1.0-response),minf(26.0,e.r*0.6))
-		if e.kind=="boss": boss_marker = e.pos
-		if e.kind in ["spitter","boss","miniboss"]:
+		if e.kind == "boss" and float(e.get("boss_windup", 0.0)) > 0.0:
+			e.vel = Vector2.ZERO
+		else:
+			e.vel = desired+(old_velocity-desired)*response
+			e.pos = world.move_body(e.pos,desired*dt+(old_velocity-desired)*0.28*(1.0-response),minf(26.0,e.r*0.6))
+		if e.kind == "boss":
+			boss_marker = e.pos
+			_update_boss_attack(e, dt)
+		elif e.kind in ["spitter","miniboss"]:
 			e.shot_cd -= dt
 			if e.shot_cd<=0 and dist<850:
 				e.shot_cd = 2.0 if e.kind=="spitter" else 1.5
-				if e.kind == "boss":
-					for n in range(10): _shot(e.pos,Vector2.from_angle(n*TAU/10.0+elapsed*0.2)*135,10,true,"enemy",_enemy_label(e),int(e.id))
-				elif e.kind=="miniboss":
+				if e.kind=="miniboss":
 					for n in range(5):_shot(e.pos,Vector2.from_angle(n*TAU/5+elapsed)*100,7,true,"enemy",_enemy_label(e),int(e.id))
 				else: _shot(e.pos,offset.normalized()*155,8,true,"enemy",_enemy_label(e),int(e.id))
 		if dist<e.r+body_radius()*0.75 and rules.impact>0 and invuln<=0 and not _safe_zone(player):
 			hurt_player(rules.impact*(1.2 if e.kind in ["boss","miniboss"] else 1.0),{"kind":"collision","name":_enemy_label(e),"pos":e.pos,"id":e.id})
+			if hp <= 0.0:return
 			invuln = 0.65
 			e.impulse=-offset.normalized()*24.0
 			_effect({"type":"hurt","pos":player,"life":0.3,"max":0.3,"r":45.0})
@@ -678,12 +723,16 @@ func _die(index: int,absorbed: bool):
 		heal_player(build.rank("devour")*0.8)
 		if e.get("meal_infected",e.infect>0):_infected_meal()
 		if e.infect>0 and "spore_feast" in build.active_synergies(): _field(e.pos,100,14,2.5,"spore")
-	else:
+	elif e.kind != "boss":
 		_leave_remains(e)
 		if kills%3==0: _drop(e.pos,"heal",6)
 	if e.kind == "boss":
 		stage_transition=true
 		pending_stage_seed=rng.randi()
+		var attack = boss_attack()
+		boss_reward = {"name": _enemy_label(e), "organ": str(attack.organ), "genome": e.genome.duplicate(), "claimed": false}
+		boss_breakup = {"pos": e.pos, "radius": e.r, "time": 0.0, "color": attack.color}
+		flush_family_materials()
 		events.append({"type":"core","token":run_id+":boss:"+str(stage_index),"amount":12+mini(20,stage_index)})
 		events.append({"type":"stage_clear","token":run_id+":stage-clear:"+str(stage_index),"stage":stage_index})
 		events.append({"type":"message","text":"Главная угроза разрушена. Путь ведёт на следующую ступень."})
@@ -695,6 +744,9 @@ func _die(index: int,absorbed: bool):
 	elif kills%18 == 0:
 		_drop(e.pos,"core",1)
 	_effect({"type":"burst","pos":e.pos,"life":0.4,"max":0.4,"r":e.r+20})
+
+func boss_reward_materials() -> Dictionary:
+	return {"organelle": 5 + mini(15, stage_index), "membrane": 4 + mini(12, stage_index), "plasma": 3 + mini(10, stage_index)}
 
 # Body rewards remain embodied until a single fragment is fully digested.
 func _leave_remains(e: Dictionary):
@@ -960,12 +1012,16 @@ func _shot(p: Vector2,velocity: Vector2,damage: float,hostile: bool,source: Stri
 
 func _update_shots(dt: float):
 	_attack_dt = dt
+	if shots.is_empty():return
 	# Bucket enemy positions: projectiles inspect nearby cells instead of every enemy.
 	var buckets = {}
-	for e in enemies:
-		var key = Vector2i(e.pos/100.0)
-		if not key in buckets: buckets[key] = []
-		buckets[key].append(e)
+	for shot in shots:
+		if shot.hostile:continue
+		for e in enemies:
+			var key = Vector2i(e.pos/100.0)
+			if not key in buckets: buckets[key] = []
+			buckets[key].append(e)
+		break
 	for i in range(shots.size()-1,-1,-1):
 		var shot = shots[i]
 		shot.life -= dt
@@ -1064,7 +1120,7 @@ func nearby_colony() -> int:
 	return -1
 
 func snapshot() -> Dictionary:
-	return {"version":1,"family_id":family_id,"stock_capacity":stock_capacity,"run_loadout":run_loadout.duplicate(true),"spore_charge":spore_charge,"combat_stats":combat_stats.duplicate(true),"last_damage":last_damage.duplicate(true),"cysts":_pack(cysts),"reward_queue":reward_queue.duplicate(true),"reward_options":reward_options.duplicate(true),"pending_inventory":pending_inventory.duplicate(),"offer_quality":offer_quality.duplicate(),"claimed_rewards":claimed_rewards.duplicate(),"player_genome":player_genome.duplicate(true),"minibosses_spawned":minibosses_spawned,"minibosses_defeated":minibosses_defeated,"stage_index":stage_index,"best_stage":best_stage,"stage_transition":stage_transition,"pending_stage_seed":pending_stage_seed,"next_miniboss_at":next_miniboss_at,"facing":facing,"tissue_pigment":tissue_pigment.duplicate(true),"residents":_pack(residents),"outcome":outcome,"events":_pack(events),"material_pending":material_pending.duplicate(true),"material_batch":material_batch,"seed":world.seed_value,"rng_state":str(rng.state),"run_id":run_id,"player":_vec(player),"player_velocity":_vec(player_velocity),"remains":_pack(remains),"digesting_id":digesting_id,"hp":hp,"max_hp":max_hp,"elapsed":elapsed,"xp":xp,"level":level,"pending_levels":pending_levels,"build":build.to_dict(),"enemies":_pack(enemies),"pickups":_pack(pickups),"colonies":_pack(world.colonies),"nests":_pack(world.nests),"explored":explored.keys(),"boss_spawned":boss_spawned,"kills":kills,"cores_found":cores_found,"next_id":next_id,"upgrades":upgrades,"cooldowns":cooldowns.duplicate(),"offers":current_offers.duplicate(),"rerolls":rerolls,"fields":_pack(fields),"shots":_pack(shots)}
+	return {"version":1,"family_id":family_id,"stock_capacity":stock_capacity,"run_loadout":run_loadout.duplicate(true),"spore_charge":spore_charge,"combat_stats":combat_stats.duplicate(true),"last_damage":last_damage.duplicate(true),"cysts":_pack(cysts),"reward_queue":reward_queue.duplicate(true),"reward_options":reward_options.duplicate(true),"pending_inventory":pending_inventory.duplicate(),"offer_quality":offer_quality.duplicate(),"claimed_rewards":claimed_rewards.duplicate(),"player_genome":player_genome.duplicate(true),"minibosses_spawned":minibosses_spawned,"minibosses_defeated":minibosses_defeated,"stage_index":stage_index,"best_stage":best_stage,"stage_transition":stage_transition,"boss_reward":boss_reward.duplicate(),"pending_stage_seed":pending_stage_seed,"next_miniboss_at":next_miniboss_at,"facing":facing,"tissue_pigment":tissue_pigment.duplicate(true),"residents":_pack(residents),"outcome":outcome,"events":_pack(events),"material_pending":material_pending.duplicate(true),"material_batch":material_batch,"seed":world.seed_value,"rng_state":str(rng.state),"run_id":run_id,"player":_vec(player),"player_velocity":_vec(player_velocity),"remains":_pack(remains),"digesting_id":digesting_id,"hp":hp,"max_hp":max_hp,"elapsed":elapsed,"xp":xp,"level":level,"pending_levels":pending_levels,"build":build.to_dict(),"enemies":_pack(enemies),"pickups":_pack(pickups),"colonies":_pack(world.colonies),"nests":_pack(world.nests),"explored":explored.keys(),"boss_spawned":boss_spawned,"kills":kills,"cores_found":cores_found,"next_id":next_id,"upgrades":upgrades,"cooldowns":cooldowns.duplicate(),"offers":current_offers.duplicate(),"rerolls":rerolls,"fields":_pack(fields),"shots":_pack(shots)}
 
 func restore(data: Dictionary) -> bool:
 	family_id=str(data.get("family_id",""))
@@ -1099,6 +1155,14 @@ func restore(data: Dictionary) -> bool:
 	stage_index=maxi(1,int(data.get("stage_index",1)))
 	best_stage=maxi(0,int(data.get("best_stage",0)))
 	stage_transition=bool(data.get("stage_transition",false))
+	boss_reward = {}
+	boss_breakup = {}
+	var saved_boss_reward = data.get("boss_reward", {})
+	if stage_transition and saved_boss_reward is Dictionary and str(saved_boss_reward.get("organ", "")) in Catalog.ORGANS:
+		var sample = saved_boss_reward.get("genome", {})
+		if not sample is Dictionary or not Genome.validate(sample):
+			sample = Genome.create(world.seed_value, stage_index, "boss", 0)
+		boss_reward = {"name": str(saved_boss_reward.get("name", boss_title())), "organ": str(saved_boss_reward.organ), "genome": sample.duplicate(), "claimed": bool(saved_boss_reward.get("claimed", false)), "receipt": str(saved_boss_reward.get("receipt", ""))}
 	pending_stage_seed=int(data.get("pending_stage_seed",0))
 	minibosses_spawned=int(data.get("minibosses_spawned",0))
 	minibosses_defeated=int(data.get("minibosses_defeated",0))

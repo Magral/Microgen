@@ -3,6 +3,7 @@ extends Control
 const Catalog = preload("res://core/catalog.gd")
 const Painter = preload("res://game/organism_painter.gd")
 var organ_id = ""
+var specimen_recipe: Dictionary = {}
 var quality=0
 var animation_time=0.0
 var sim
@@ -14,6 +15,11 @@ func _process(dt):
 	if is_visible_in_tree():queue_redraw()
 func _draw():
 	var center = size/2
+	if not specimen_recipe.is_empty():
+		if painter == null:painter = Painter.new()
+		var radius = minf(68.0, minf(size.x, size.y) * 0.34)
+		painter.paint(self, center, radius, specimen_recipe, {organ_id: 4}, animation_time, "specimen", true, null, [], Color(-1, -1, -1), 0.0, 1.0, 0.0, {"qualities": {organ_id: quality}})
+		return
 	if sim!=null:
 		if painter==null: painter=Painter.new()
 		var organs=sim.build.organs.duplicate()

@@ -29,5 +29,40 @@ func run():
 	check(app.stage=="development" and app.sim.paused,"closing legacy returns to paused body")
 	flow.confirm_delete(good.family_id());app.close_modal()
 	check(app.stage=="menu" and good.family_summaries().size()==1,"closing delete dialog cancels deletion")
+	app.continue_run()
+	app.sim.spawn_enemy(app.sim.player + Vector2(85, 0), "boss")
+	app.sim._die(app.sim.enemies.size() - 1, false)
+	check(app._handle_events(), "boss clear awards legacy cores before the reward choice")
+	app.show_stage_briefing()
+	check(app.stage == "boss_reward", "unclaimed reward is shown before the next stage")
+	faulty.profile = good.profile.duplicate(true)
+	app.store = faulty
+	app._claim_boss_reward(false)
+	check(not app.sim.boss_reward.claimed and faulty.profile == good.profile and app.stage_action_error.visible, "failed reward write preserves the choice and shows a visible error")
+	app.store = good
+	var materials_before = int(good.profile.organ_materials.get("organelle", 0))
+	app._claim_boss_reward(false)
+	app._claim_boss_reward(false)
+	check(good.profile.checkpoint.boss_reward.claimed and int(good.profile.organ_materials.organelle) == materials_before + int(app.sim.boss_reward_materials().organelle), "boss materials and the receipt are written together once")
+	app.show_stage_briefing()
+	var previous_stage = app.sim.stage_index
+	var prepared_seed = app.sim.pending_stage_seed
+	faulty.profile = good.profile.duplicate(true)
+	app.store = faulty
+	app.enter_next_stage()
+	check(app.sim.stage_transition and app.sim.stage_index == previous_stage and app.sim.pending_stage_seed == prepared_seed and app.stage_action_error.visible, "failed stage entry preserves the prepared area and shows a visible error")
+	app.store = good
+	app.enter_next_stage()
+	check(app.sim.stage_index == previous_stage + 1 and app.sim.world.seed_value == prepared_seed and int(good.profile.checkpoint.stage_index) == previous_stage + 1, "retry saves and enters the same prepared area")
+	app.sim.spawn_enemy(app.sim.player + Vector2(85, 0), "boss")
+	app.sim._die(app.sim.enemies.size() - 1, false)
+	app.show_stage_briefing()
+	var trophy_kind = app.sim.boss_reward.organ
+	app._claim_boss_reward(true)
+	var saved_body = good.profile.organism
+	var trophy_saved = (saved_body.equipped + saved_body.stock + saved_body.reserve).any(func(part): return part.kind == trophy_kind and int(part.quality) == 3)
+	check(trophy_saved and good.profile.checkpoint.boss_reward.claimed, "legendary organ and receipt survive as family equipment")
+	app.continue_run()
+	check(app.stage == "stage_briefing" and app.sim.boss_reward.claimed, "reloading after an organ claim does not offer it again")
 	good.clear_test_files();app.queue_free();await process_frame
 	print("FAMILY WRITE FAILURE: %d failures"%failures);quit(0 if failures==0 else 1)

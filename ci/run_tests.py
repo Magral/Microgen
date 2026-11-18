@@ -46,7 +46,7 @@ def main():
     run("render-cache", display_command() + ["godot", "--path", ".", "--audio-driver", "Dummy", "--script", "tests/test_render_cache.gd"])
 
     if Path("core/genome.gd").is_file():
-        for mode in ["game", "gallery", "development", "codex", "jaw", "habitat", "rewards", "feedback", "journal", "mutations", "cyst", "foundation-start", "foundation-genome", "inheritance"]:
+        for mode in ["game", "boss-fight", "boss-reward", "gallery", "development", "codex", "jaw", "habitat", "rewards", "feedback", "journal", "mutations", "cyst", "foundation-start", "foundation-genome", "inheritance"]:
             target = str(Path("build/Microgen-" + mode + ".png").resolve())
             run("render-" + mode, display_command() + ["godot", "--path", ".",
                 "--audio-driver", "Dummy", "--", "--preview=" + mode, "--capture=" + target])
