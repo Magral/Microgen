@@ -91,7 +91,7 @@ static func normalize(profile: Dictionary) -> Dictionary:
 	if presets is Array:
 		for preset in presets:
 			if not preset is Dictionary or clean.presets.size()>=6: continue
-			var preset_profile=profile.duplicate(true)
+			var preset_profile={"unlocked":profile.get("unlocked",[]).duplicate()}
 			preset_profile.legacy=clean.duplicate(true)
 			preset_profile.legacy.presets=[]
 			preset_profile.legacy.selected_form=preset.get("form","predator")

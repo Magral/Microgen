@@ -42,12 +42,16 @@ func run():
 	scene.store.profile.checkpoint = {}
 	scene.show_menu()
 	await tap(find_button(scene.hud.content,"Новый организм"))
-	check(scene.stage=="start","native touch activates start menu")
+	check(scene.stage=="new_family","native touch activates form choice")
+	if scene.stage=="new_family":
+		await tap(find_button(scene.hud.content,"Выбрать"))
+		check(scene.stage=="start","chosen family opens body preparation")
 	if scene.stage=="start":
 		await tap(find_button(scene.hud.content,"Начать жизнь"))
 		check(scene.stage=="game","native touch starts game")
 		# Seed 72 places another colony near colony 0 + (500,0). Keep this
 		# overlap deterministic: a fixed offset is not guaranteed to be water.
+		scene.store.profile.checkpoint={}
 		scene.start_run(72)
 		scene.sim.gain_xp(12)
 		scene.show_level()
@@ -119,23 +123,7 @@ func run():
 		Input.parse_input_event(held)
 		await process_frame
 		check(scene.stage=="development" and scene.sim.paused and scene.stick_id==-1,"second finger opens development while joystick held")
-		var scrollbar=scene.hud.scroll_container.get_v_scroll_bar()
-		var scroll_before=scrollbar.value
-		var scroll_touch=InputEventScreenTouch.new()
-		scroll_touch.index=0;scroll_touch.pressed=true
-		scroll_touch.position=scrollbar.global_position+Vector2(scrollbar.size.x/2,25)
-		Input.parse_input_event(scroll_touch)
-		await process_frame
-		for n in range(1,5):
-			var scroll_drag=InputEventScreenDrag.new()
-			scroll_drag.index=0;scroll_drag.position=scroll_touch.position+Vector2(0,n*45)
-			scroll_drag.relative=Vector2(0,45);scroll_drag.velocity=Vector2(0,300)
-			Input.parse_input_event(scroll_drag)
-			await process_frame
-		scroll_touch.position+=Vector2(0,180);scroll_touch.pressed=false
-		Input.parse_input_event(scroll_touch)
-		await process_frame
-		check(scrollbar.value>scroll_before,"native touch drags the widened scrollbar")
+		check(scene.hud.scroll_container==null,"organism management fits without scrolling")
 		await tap(find_button(scene.hud.modal,"×"))
 		check(scene.stage=="game","native touch closes development")
 

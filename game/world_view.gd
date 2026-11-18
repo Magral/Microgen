@@ -188,7 +188,12 @@ func _draw():
 		var p = screen(pickup.pos)+Vector2(0,sin(visual_time*2+pickup.id)*2)
 		var col = Color("6bffb8") if pickup.type=="heal" else (Color("87eed2") if pickup.type=="dna" else (Color("ecc185") if pickup.type=="bio" else Color("c794f2")))
 		draw_circle(p,10 if pickup.type=="core" else 6,Color(col,0.07))
-		if pickup.type=="heal":
+		if pickup.type in ["body_extension","stock_extension"]:
+			var cell_color=Color("98f2d3") if pickup.type=="body_extension" else Color("c5b1ff")
+			draw_circle(p,17,Color(cell_color,0.13))
+			_blob(p,11,Color(cell_color,0.75),float(pickup.id),0.7,true)
+			for offset in [-4,4]:draw_circle(p+Vector2(offset,0),2,Color("e1fff0"))
+		elif pickup.type=="heal":
 			draw_circle(p,12,Color(col,0.12))
 			_blob(p,6.0,Color(col,0.8),float(pickup.id),0.8,true)
 			draw_line(p-Vector2(2,0),p+Vector2(2,0),Color("e1fff0"),1.0,true)
@@ -357,7 +362,7 @@ func _draw_player():
 		draw_circle(p,(75+sim.build.rank("acid")*9)*sim.ability_scale(),Color(0.55,0.83,0.3,0.04))
 		draw_arc(p,(75+sim.build.rank("acid")*9)*sim.ability_scale(),0,TAU,48,Color(0.6,0.85,0.4,0.14),1.0,true)
 	var anatomy = player_anatomy if not player_anatomy.is_empty() else sim.build.organs.merged(sim.build.adaptations,true)
-	var appearance={"qualities":sim.build.qualities,"evolved":sim.build.stats.evolutions,"hereditary_traits":sim.inherited_traits,"growth":evolution_growth,"spore_charge":sim.spore_charge,"mantle_flash":0.0,"lashes":{}}
+	var appearance={"body_chambers":maxi(0,sim.build.organ_capacity-preload("res://core/organism_equipment.gd").base_capacity(str(sim.run_loadout.get("form","predator")))),"stock_chambers":maxi(0,sim.stock_capacity-3),"qualities":sim.build.qualities,"evolved":sim.build.stats.evolutions,"hereditary_traits":sim.inherited_traits,"growth":evolution_growth,"spore_charge":sim.spore_charge,"mantle_flash":0.0,"lashes":{}}
 	for effect in sim.effects:
 		if effect.type=="mantle":appearance.mantle_flash=sin(PI*(1-float(effect.life)/float(effect.max)))
 		if effect.type=="lash":

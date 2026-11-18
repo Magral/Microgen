@@ -46,12 +46,12 @@ A run must carry its family ID. Saving an old simulation after selecting a diffe
 - Switching family is atomic; failure cannot charge, duplicate, overwrite another family or change in-memory selection.
 - Credits and reward tokens remain local to a family; menu previews never become gameplay checkpoints.
 - A new family starts independently, while former families stay available.
-- No destructive family deletion is part of this release.
+- Family deletion is explicit and confirmed; deleting the final family returns to clean new-family preparation without deleting unrelated application files.
 - New capacity defaults cannot strand existing equipped organs; migration preserves enough capacity to hold them.
 
 ## Decisions requiring Pavel
 
-One live organism per family versus several concurrent lives in the same family is not yet explicit. Several living FAMILIES must be supported either way. If concurrent lives share the same item collection, ownership/reservation rules are required; that cannot be guessed after coding equipment transactions.
+Pavel confirmed one living heir per family. Several different families can each have one living save. Families may be deleted; deletion must explicitly confirm that the live save and inherited organs/resources are removed. No deletion occurs merely when starting another family.
 
 ## Verification and release gate
 

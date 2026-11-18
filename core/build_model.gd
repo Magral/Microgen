@@ -1,5 +1,9 @@
 extends RefCounted
 const Catalog = preload("res://core/catalog.gd")
+const Equipment = preload("res://core/organism_equipment.gd")
+# Zero retains six-kind compatibility for legacy builds.
+var organ_capacity: int = 0
+var extra_organ_cells: int = 0
 var organs: Dictionary = {}
 var adaptations: Dictionary = {}
 var qualities: Dictionary = {}
@@ -15,11 +19,26 @@ var _synergy_cache: Array = []
 func rank(id: String) -> int:
 	return int(organs.get(id, adaptations.get(id, 0)))
 
+func used_organ_cells() -> int:
+	var total = maxi(0, extra_organ_cells)
+	for id in organs:
+		total += Equipment.cell_cost(id)
+	return total
+
+func can_fit(id: String, replace_id: String = "") -> bool:
+	if Catalog.item(id).is_empty(): return false
+	var is_organ = id in Catalog.ORGANS
+	var target = organs if is_organ else adaptations
+	if id in target: return replace_id == ""
+	if replace_id != "" and replace_id not in target: return false
+	if is_organ and organ_capacity > 0:
+		return used_organ_cells() + Equipment.cell_cost(id) - Equipment.cell_cost(replace_id) <= organ_capacity
+	return replace_id != "" or target.size() < (6 if is_organ else 4)
+
 func apply(id: String, replace_id: String = "", grade: int = -1) -> bool:
 	if Catalog.item(id).is_empty() or id not in unlocked:
 		return false
 	var target = organs if id in Catalog.ORGANS else adaptations
-	var limit = 6 if id in Catalog.ORGANS else 4
 	if id in target:
 		if replace_id != "": return false
 		if target[id] >= Catalog.max_rank(id):
@@ -29,6 +48,7 @@ func apply(id: String, replace_id: String = "", grade: int = -1) -> bool:
 		target[id] += 1
 		qualities[id] = maxi(quality(id), clampi(grade, 0, 3))
 		return true
+	if not can_fit(id, replace_id): return false
 	if replace_id != "":
 		if replace_id not in target: return false
 		var inherited = 1 + int(floor((int(target[replace_id]) - 1) / 2.0))
@@ -39,7 +59,6 @@ func apply(id: String, replace_id: String = "", grade: int = -1) -> bool:
 		target[id] = mini(inherited, Catalog.max_rank(id))
 		qualities[id] = maxi(inherited_quality, clampi(grade, 0, 3))
 		return true
-	if target.size() >= limit: return false
 	target[id] = 1
 	qualities[id] = clampi(grade, 0, 3)
 	return true
@@ -91,9 +110,11 @@ func spend(amount: int) -> bool:
 	return true
 
 func to_dict() -> Dictionary:
-	return {"organs":organs.duplicate(), "adaptations":adaptations.duplicate(), "biomass":biomass, "unlocked":unlocked.duplicate(), "branch":branch, "qualities":qualities.duplicate(), "stats":stats.duplicate(true)}
+	return {"organ_capacity":organ_capacity,"extra_organ_cells":extra_organ_cells,"organs":organs.duplicate(), "adaptations":adaptations.duplicate(), "biomass":biomass, "unlocked":unlocked.duplicate(), "branch":branch, "qualities":qualities.duplicate(), "stats":stats.duplicate(true)}
 
 func from_dict(data: Dictionary):
+	organ_capacity = maxi(0, int(data.get("organ_capacity", 0)))
+	extra_organ_cells = maxi(0, int(data.get("extra_organ_cells", 0)))
 	organs = {}
 	adaptations = {}
 	qualities = {}
@@ -105,10 +126,9 @@ func from_dict(data: Dictionary):
 		var source = data.get(key, {})
 		if not source is Dictionary: continue
 		var target = organs if key == "organs" else adaptations
-		var limit = 6 if key == "organs" else 4
 		for id in source:
 			var valid = id in Catalog.ORGANS if key == "organs" else id in Catalog.ADAPTATIONS
-			if valid and target.size() < limit:
+			if valid and can_fit(id):
 				target[id] = clampi(int(source[id]), 1, Catalog.max_rank(id))
 	var saved_qualities = data.get("qualities", {})
 	if saved_qualities is Dictionary:

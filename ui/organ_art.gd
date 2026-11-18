@@ -18,7 +18,7 @@ func _draw():
 		if painter==null: painter=Painter.new()
 		var organs=sim.build.organs.duplicate()
 		organs.merge(sim.build.adaptations)
-		painter.paint(self,center,minf(57,minf(size.x,size.y)*0.24),sim.player_genome,organs,animation_time,"player",true,null,[],sim.body_color(),0.0,sim.hp/sim.max_hp,0.15+0.15*sin(animation_time*2),{"qualities":sim.build.qualities,"evolved":sim.build.stats.evolutions,"spore_charge":sim.spore_charge,"hereditary_traits":sim.inherited_traits})
+		painter.paint(self,center,minf(57,minf(size.x,size.y)*0.24),sim.player_genome,organs,animation_time,"player",true,null,[],sim.body_color(),0.0,sim.hp/sim.max_hp,0.15+0.15*sin(animation_time*2),{"body_chambers":maxi(0,sim.build.organ_capacity-preload("res://core/organism_equipment.gd").base_capacity(str(sim.run_loadout.get("form","predator")))),"stock_chambers":maxi(0,sim.stock_capacity-3),"qualities":sim.build.qualities,"evolved":sim.build.stats.evolutions,"spore_charge":sim.spore_charge,"hereditary_traits":sim.inherited_traits})
 		return
 	var color=Color(Catalog.item(organ_id).get("color","9ce3cf"))
 	if quality>0:color=color.lerp(preload("res://core/rewards.gd").quality_color(quality),0.55)

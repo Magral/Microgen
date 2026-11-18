@@ -104,7 +104,7 @@ func game_visible(value: bool):
 		if child != modal and not child.get_meta("retired",false): child.visible = value
 	shop_button.visible = false
 
-func open_home() -> VBoxContainer:
+func open_home(width: float=700) -> VBoxContainer:
 	close()
 	scroll_container=null
 	modal=Control.new()
@@ -123,13 +123,16 @@ func open_home() -> VBoxContainer:
 	var center=CenterContainer.new()
 	margin.add_child(center)
 	content=VBoxContainer.new()
-	content.custom_minimum_size.x=minf(700,root.get_viewport_rect().size.x-80)
+	content.custom_minimum_size.x=minf(width,root.get_viewport_rect().size.x-80)
 	content.size_flags_vertical=Control.SIZE_SHRINK_CENTER
 	content.add_theme_constant_override("separation",10)
 	center.add_child(content)
 	return content
 
-func open(title: String,subtitle: String="",width: float=1030) -> VBoxContainer:
+func open_fixed(title: String,subtitle: String="",width: float=1100) -> VBoxContainer:
+	return open(title,subtitle,width,false)
+
+func open(title: String,subtitle: String="",width: float=1030,scrolling: bool=true) -> VBoxContainer:
 	close()
 	modal = Control.new()
 	modal.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -156,6 +159,14 @@ func open(title: String,subtitle: String="",width: float=1030) -> VBoxContainer:
 	var close_button = button("×",func(): on_close.call())
 	close_button.custom_minimum_size = Vector2(56,56)
 	heading.add_child(close_button)
+	if not scrolling:
+		scroll_container=null
+		content=VBoxContainer.new()
+		content.size_flags_vertical=Control.SIZE_EXPAND_FILL
+		content.add_theme_constant_override("separation",10)
+		frame.add_child(content)
+		if subtitle!="":content.add_child(label(subtitle,22,Color("94b5b8"),true))
+		return content
 	var scroll = TouchScroll.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll_container=scroll

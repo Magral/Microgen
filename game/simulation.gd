@@ -7,6 +7,8 @@ const TissueDamage=preload("res://game/tissue_damage.gd")
 const CombatTissue=preload("res://core/combat_tissue.gd")
 const CombatStats=preload("res://core/combat_stats.gd")
 const Heredity=preload("res://game/heredity.gd")
+var family_id=""
+var stock_capacity=3
 var run_loadout: Dictionary={}
 var inherited_traits: Array=[]
 const MouthShape=preload("res://game/mouth_shape.gd")
@@ -80,6 +82,9 @@ var boss_marker = Vector2.ZERO
 var last_tile = Vector2i(-100,-100)
 
 func new_run(seed_value: int, unlocked: Array = Catalog.base_unlocked(), permanent: Dictionary = {}, selected_branch: String = "predator",loadout: Dictionary={}):
+	family_id="";stock_capacity=3
+	pickups.clear()
+	next_id=0
 	run_loadout=Heredity.normalize(loadout)
 	inherited_traits=Heredity.traits(run_loadout)
 	spore_charge=0
@@ -129,6 +134,7 @@ func new_run(seed_value: int, unlocked: Array = Catalog.base_unlocked(), permane
 	for i in range(12):
 		var p=player+Vector2.from_angle(i*2.399)*float(85+i*27)
 		if world.walkable(p,7): _drop(p,"heal",6)
+	_create_expansions()
 	_create_cysts()
 	_grade_stocks()
 	_reveal()
@@ -137,6 +143,28 @@ func new_run(seed_value: int, unlocked: Array = Catalog.base_unlocked(), permane
 		var p = player + Vector2.from_angle(i*TAU/8.0)*rng.randf_range(70,220)
 		pickups.append({"pos":p,"type":"dna","amount":3,"id":next_id})
 		next_id += 1
+
+func _create_expansions():
+	# Replace ordinary map nutrients: keeps the pickup budget and exact walkable
+	# positions, with no overlapping DNA hiding the find. Terrain determines loot.
+	var placed: Array = []
+	for kind in ["body_extension", "stock_extension"]:
+		var desired_distance = 750.0 if kind == "body_extension" else 1400.0
+		var best: Dictionary = {}
+		var best_score = INF
+		for item in pickups:
+			if item.type != "dna": continue
+			var distance = item.pos.distance_to(world.start)
+			if distance < 500.0 or not world.walkable(item.pos, 35): continue
+			if placed.any(func(p): return p.distance_to(item.pos) < 220.0): continue
+			var score = absf(distance - desired_distance)
+			if score < best_score:
+				best = item
+				best_score = score
+		if best.is_empty(): continue
+		best.type = kind
+		best.amount = 1
+		placed.append(best.pos)
 
 func _feedback(kind: String,position: Vector2,amount: float=0.0,source: String=""):
 	if feedback.size()>=48:
@@ -925,6 +953,8 @@ func _collect(dt: float):
 		_feedback("absorb",player)
 		if item.type=="dna":gain_xp(item.amount)
 		elif item.type=="bio":build.biomass+=int(item.amount)
+		elif item.type in ["body_extension","stock_extension"]:
+			events.append({"type":"expansion","target":"body" if item.type=="body_extension" else "stock","amount":int(item.amount),"token":run_id+":"+str(item.id)})
 		elif item.type=="heal":
 			heal_player(float(item.amount))
 			_effect({"type":"assimilate","pos":player,"end":item.pos,"r":body_radius(),"color":Color("7dfcd4"),"life":0.8,"max":0.8})
@@ -956,9 +986,11 @@ func nearby_colony() -> int:
 	return -1
 
 func snapshot() -> Dictionary:
-	return {"version":1,"run_loadout":run_loadout.duplicate(true),"spore_charge":spore_charge,"combat_stats":combat_stats.duplicate(true),"last_damage":last_damage.duplicate(true),"cysts":_pack(cysts),"reward_queue":reward_queue.duplicate(true),"reward_options":reward_options.duplicate(true),"offer_quality":offer_quality.duplicate(),"claimed_rewards":claimed_rewards.duplicate(),"player_genome":player_genome.duplicate(true),"minibosses_spawned":minibosses_spawned,"next_miniboss_at":next_miniboss_at,"facing":facing,"tissue_pigment":tissue_pigment.duplicate(true),"residents":_pack(residents),"outcome":outcome,"events":_pack(events),"seed":world.seed_value,"rng_state":str(rng.state),"run_id":run_id,"player":_vec(player),"player_velocity":_vec(player_velocity),"remains":_pack(remains),"digesting_id":digesting_id,"hp":hp,"max_hp":max_hp,"elapsed":elapsed,"xp":xp,"level":level,"pending_levels":pending_levels,"build":build.to_dict(),"enemies":_pack(enemies),"pickups":_pack(pickups),"colonies":_pack(world.colonies),"nests":_pack(world.nests),"explored":explored.keys(),"boss_spawned":boss_spawned,"kills":kills,"cores_found":cores_found,"next_id":next_id,"upgrades":upgrades,"cooldowns":cooldowns.duplicate(),"offers":current_offers.duplicate(),"rerolls":rerolls,"fields":_pack(fields),"shots":_pack(shots)}
+	return {"version":1,"family_id":family_id,"stock_capacity":stock_capacity,"run_loadout":run_loadout.duplicate(true),"spore_charge":spore_charge,"combat_stats":combat_stats.duplicate(true),"last_damage":last_damage.duplicate(true),"cysts":_pack(cysts),"reward_queue":reward_queue.duplicate(true),"reward_options":reward_options.duplicate(true),"offer_quality":offer_quality.duplicate(),"claimed_rewards":claimed_rewards.duplicate(),"player_genome":player_genome.duplicate(true),"minibosses_spawned":minibosses_spawned,"next_miniboss_at":next_miniboss_at,"facing":facing,"tissue_pigment":tissue_pigment.duplicate(true),"residents":_pack(residents),"outcome":outcome,"events":_pack(events),"seed":world.seed_value,"rng_state":str(rng.state),"run_id":run_id,"player":_vec(player),"player_velocity":_vec(player_velocity),"remains":_pack(remains),"digesting_id":digesting_id,"hp":hp,"max_hp":max_hp,"elapsed":elapsed,"xp":xp,"level":level,"pending_levels":pending_levels,"build":build.to_dict(),"enemies":_pack(enemies),"pickups":_pack(pickups),"colonies":_pack(world.colonies),"nests":_pack(world.nests),"explored":explored.keys(),"boss_spawned":boss_spawned,"kills":kills,"cores_found":cores_found,"next_id":next_id,"upgrades":upgrades,"cooldowns":cooldowns.duplicate(),"offers":current_offers.duplicate(),"rerolls":rerolls,"fields":_pack(fields),"shots":_pack(shots)}
 
 func restore(data: Dictionary) -> bool:
+	family_id=str(data.get("family_id",""))
+	stock_capacity=maxi(3,int(data.get("stock_capacity",3)))
 	if data.get("version",0) != 1 or not data.get("player",null) is Array: return false
 	for key in ["enemies","pickups","colonies","nests","explored"]:
 		if not data.get(key,null) is Array: return false

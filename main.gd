@@ -1,4 +1,12 @@
 extends Node2D
+const OrganismFlow=preload("res://ui/organism_flow.gd")
+const Equipment=preload("res://core/organism_equipment.gd")
+var lineage_flow
+var capacity_notice=false
+func _lineage():
+	if lineage_flow==null:lineage_flow=OrganismFlow.new(self)
+	return lineage_flow
+
 const Legacy=preload("res://core/genome_legacy.gd")
 const GenomeView=preload("res://ui/genome_view.gd")
 const UpdateFeed=preload("res://core/update_feed.gd")
@@ -57,6 +65,9 @@ var sound_player: AudioStreamPlayer
 func _ready():
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	get_tree().auto_accept_quit = false
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--preview="):
+			store.path="user://test-preview-release-one.json";store.clear_test_files()
 	store.load_profile()
 	view = View.new()
 	add_child(view)
@@ -207,9 +218,11 @@ func _process(dt):
 		var keyboard = Vector2(float(Input.is_physical_key_pressed(KEY_D) or Input.is_physical_key_pressed(KEY_RIGHT))-float(Input.is_physical_key_pressed(KEY_A) or Input.is_physical_key_pressed(KEY_LEFT)),float(Input.is_physical_key_pressed(KEY_S) or Input.is_physical_key_pressed(KEY_DOWN))-float(Input.is_physical_key_pressed(KEY_W) or Input.is_physical_key_pressed(KEY_UP)))
 		var dir = keyboard if keyboard.length_squared()>0 else movement
 		sim.step(dt,dir)
-		_handle_events()
+		if not _handle_events():return
 		if sim.outcome!="":
 			finish_run()
+		elif capacity_notice:
+			show_capacity_notice()
 		elif not deferred_choices and not sim.reward_queue.is_empty():
 			show_reward()
 		elif not deferred_choices and sim.pending_levels>0:
@@ -299,40 +312,9 @@ func set_stage(value: String):
 	view.menu = stage=="menu"
 
 func show_menu():
-	set_stage("menu")
-	sim = Sim.new()
-	sim.new_run(14481)
-	sim.paused = true
-	view.sim = sim
-	hud.game_visible(false)
-	var box = hud.open_home()
-	box.add_child(hud.label("МИКРОГЕН",46,Color("e2f4ed")))
-	box.add_child(hud.label("Маленькая жизнь. Непредсказуемая эволюция.",22,Color("9ce3cf"),true))
-	if not store.profile.checkpoint.is_empty(): box.add_child(hud.button("Завершить итоги жизни" if str(store.profile.checkpoint.get("outcome",""))!="" else "Продолжить забег",continue_run,true))
-	box.add_child(hud.button("Новый организм",show_start,true))
-	var row = hud.row()
-	box.add_child(row)
-	for entry in [["Геном",show_genome],["Атлас",show_atlas],["Как играть",show_help]]:
-		var b = hud.button(entry[0],entry[1])
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(b)
-	var services=hud.row()
-	box.add_child(services)
-	var updates=hud.button("Обновления",show_updates)
-	updates.size_flags_horizontal=Control.SIZE_EXPAND_FILL
-	services.add_child(updates)
-	if not store.profile.legacy.pending.is_empty():
-		var inheritance=hud.button("Отпечатки · наследие",func():show_imprints("menu"),true)
-		inheritance.size_flags_horizontal=Control.SIZE_EXPAND_FILL
-		services.add_child(inheritance)
-	var footer_actions=hud.row()
-	box.add_child(footer_actions)
-	var gallery_button=hud.button("Коллекция форм",show_gallery)
-	gallery_button.size_flags_horizontal=Control.SIZE_EXPAND_FILL
-	footer_actions.add_child(gallery_button)
-	footer_actions.add_child(hud.button("Выход",exit_game))
-	box.add_child(hud.label("Ядра: %d   ·   Забеги: %d   ·   Победы: %d" % [store.profile.cores,store.profile.runs,store.profile.wins],20,Color("ccb2e7"),true))
-	box.add_child(hud.label("Версия %s · игра работает без интернета" % ProjectSettings.get_setting("application/config/version","1.0.1"),20,Color("94b5b8"),true))
+	if stage in ["game","pause","development"] and sim!=null and not sim.family_id.is_empty():
+		if not save_run():return
+	_lineage().show_home()
 
 func exit_game():
 	save_run()
@@ -393,20 +375,16 @@ func _legacy_edit(action: String,value="",screen: String="start"):
 	if not ok:message(store.last_error if store.last_error!="" else "Действие сейчас недоступно.",4)
 	if screen=="genome":show_genome()
 	else:show_start()
-	hud.scroll_container.set_deferred("scroll_vertical",scroll)
+	if hud.scroll_container!=null:hud.scroll_container.set_deferred("scroll_vertical",scroll)
 
 func show_start():
-	set_stage("start")
-	var box=hud.open("Новое поколение", "Выбери основу, до двух признаков и один отпечаток. Остальные мутации возникнут в новой жизни.")
-	if not store.profile.checkpoint.is_empty():box.add_child(hud.label("Начало новой жизни заменит незавершённый забег. Наследие сохранится.",22,Color("e9b99b"),true))
-	GenomeView.populate_start(hud,box,store,_legacy_preview(),{
-		"form":func(id):_legacy_edit("form",id),"trait":func(id):_legacy_edit("trait",id),
-		"imprint":func(id):_legacy_edit("imprint",id),"reroll":func():_legacy_edit("reroll"),
-		"save_preset":func(index):_legacy_edit("save_preset",index),"load_preset":func(index):_legacy_edit("load_preset",index),
-		"start":func():start_run(),"imprints":func():show_imprints("start"),"back":show_menu})
+	_lineage().show_preparation()
 
 
 func start_run(seed_value: int = -1):
+	if not _lineage().ensure_family():message(store.last_error,5);return
+	if not store.profile.checkpoint.is_empty() and str(store.profile.checkpoint.get("outcome",""))=="":
+		continue_run();return
 	if str(store.profile.checkpoint.get("outcome",""))!="":
 		continue_run()
 		return
@@ -417,6 +395,13 @@ func start_run(seed_value: int = -1):
 	if seed_value<0: seed_value = int(Time.get_unix_time_from_system()*1000)%2147483647
 	sim = Sim.new()
 	sim.new_run(seed_value,store.profile.unlocked,store.profile.upgrades,store.profile.legacy.selected_form,Legacy.loadout(store.profile))
+	sim.family_id=store.family_id()
+	var equipment=Equipment.from_profile(store.profile)
+	if equipment.is_empty():message("Не удалось прочитать органы семейства",5);return
+	_lineage().bind_run(equipment)
+	OrganismFlow.apply_to_build(equipment,sim.build)
+	sim.stock_capacity=int(equipment.stock_capacity)
+	capacity_notice=false
 	view.sim = sim
 	checkpoint_timer = 0
 	deferred_choices = false
@@ -428,10 +413,20 @@ func start_run(seed_value: int = -1):
 	message("Веди палец по свободному месту.\nКасайся пищи телом; бирюзовые кусочки лечат.",6)
 
 func continue_run():
+	if not _lineage().ensure_family():message(store.last_error,5);return
 	var loaded = Sim.new()
 	if not loaded.restore(store.profile.checkpoint):
 		message("Сохранение забега повреждено. Геном сохранён.",5)
 		return
+	if not loaded.family_id.is_empty() and loaded.family_id!=store.family_id():
+		message("Сохранённая жизнь принадлежит другому семейству",5);return
+	loaded.family_id=store.family_id()
+	var equipment=Equipment.from_profile(store.profile)
+	if equipment.is_empty():message("Не удалось прочитать органы семейства",5);return
+	_lineage().bind_run(equipment)
+	OrganismFlow.apply_to_build(equipment,loaded.build)
+	loaded.stock_capacity=int(equipment.stock_capacity)
+	capacity_notice=false
 	sim = loaded
 	view.sim = sim
 	hud.close()
@@ -445,38 +440,79 @@ func continue_run():
 	if not deferred_choices and not sim.reward_queue.is_empty(): show_reward()
 	elif not deferred_choices and sim.pending_levels>0: show_level()
 
-func save_run():
-	if sim==null or stage not in ["game","pause","development","map","shop","level","reward","replace","save_error"]: return
-	var next = store.profile.duplicate(true)
-	next.checkpoint = sim.snapshot()
-	for id in sim.build.organs:
-		if not id in next.discovered: next.discovered.append(id)
-	for id in sim.build.adaptations:
-		if not id in next.discovered: next.discovered.append(id)
-	for id in sim.build.active_synergies():
-		if not id in next.synergies: next.synergies.append(id)
-	if not store.write_profile(next): message(store.last_error,6)
+func _run_matches_family() -> bool:
+	return sim!=null and not sim.family_id.is_empty() and sim.family_id==store.family_id()
 
-func _handle_events():
-	if sim.events.is_empty(): return
-	var next = store.profile.duplicate(true)
-	var changed = false
+func save_run() -> bool:
+	if sim==null or stage not in ["game","pause","development","map","shop","level","reward","replace","save_error","capacity_notice"]:return false
+	if stage=="development" and not _lineage().live_mode:return false
+	if not _run_matches_family():message("Другая жизнь не может перезаписать семейство",5);return false
+	var next=store.profile.duplicate(true)
+	var equipment=_lineage().capture(sim.build.to_dict())
+	if equipment.is_empty():message("Не удалось сохранить органы",5);return false
+	next.organism=equipment
+	next.checkpoint=sim.snapshot()
+	for id in sim.build.organs.keys()+sim.build.adaptations.keys():
+		if id not in next.discovered:next.discovered.append(id)
+	for id in sim.build.active_synergies():
+		if id not in next.synergies:next.synergies.append(id)
+	if not store.write_profile(next):message(store.last_error,6);return false
+	return true
+
+func _handle_events() -> bool:
+	if not _run_matches_family():return false
+	if sim.events.is_empty():return true
+	var next=store.profile.duplicate(true)
+	var equipment=_lineage().capture(sim.build.to_dict())
+	if equipment.is_empty():return false
+	var changed=false
+	var expanded=false
 	for event in sim.events:
-		if event.type=="message": message(event.text,5)
+		if event.type=="message":message(event.text,5)
 		elif event.type=="core" and not event.token in next.credited:
-			next.credited.append(event.token)
-			next.cores += event.amount
-			changed = true
-			message("Ядра наследия +%d" % event.amount,3)
+			next.credited.append(event.token);next.cores+=event.amount;changed=true
+			message("Ядра наследия +%d"%event.amount,3)
+		elif event.type=="expansion" and not event.token in next.credited:
+			var target=str(event.get("target",""))
+			var amount=event.get("amount",0)
+			if target not in ["body","stock"] or not (amount is int or amount is float) or not is_finite(float(amount)) or amount<=0 or float(amount)!=floorf(float(amount)):return false
+			var key=target+"_capacity"
+			if amount>9007199254740991-int(equipment[key]):return false
+			equipment[key]=int(equipment[key])+int(amount)
+			if Equipment.validate(equipment)!="":return false
+			next.credited.append(event.token);changed=true;expanded=true
 	if changed:
-		next.checkpoint = sim.snapshot()
-		if not store.write_profile(next):
-			message(store.last_error,6)
-			return
+		next.organism=equipment
+		next.checkpoint=sim.snapshot()
+		next.checkpoint.build.organ_capacity=int(equipment.body_capacity)
+		next.checkpoint.stock_capacity=int(equipment.stock_capacity)
+		if not store.write_profile(next):message(store.last_error,6);return false
+		_lineage().bind_run(equipment)
+		OrganismFlow.apply_to_build(equipment,sim.build)
+		sim.stock_capacity=int(equipment.stock_capacity)
+	if expanded:
+		capacity_notice=true
+		sim._effect({"type":"mutation","pos":sim.player,"r":sim.body_radius()*1.6,"color":Color("9ce3cf"),"life":1.8,"max":1.8})
 	sim.events.clear()
+	return true
+
+func show_capacity_notice():
+	capacity_notice=false
+	set_stage("capacity_notice")
+	var equipment=_lineage().state()
+	var box=hud.open_fixed("Новая камера организма","Найденное расширение сохраняется у этого семейства после любой гибели.",900)
+	var art=OrganArt.new();art.sim=sim;art.custom_minimum_size=Vector2(600,260);box.add_child(art)
+	box.add_child(hud.label("Тело: %d ячеек · запас: %d мест"%[int(equipment.body_capacity),int(equipment.stock_capacity)],26,Color("9ce3cf"),true))
+	var row=hud.row();box.add_child(row)
+	row.add_child(hud.button("К организму",func():development_origin="game";_lineage().show_body(true)))
+	row.add_child(hud.button("Продолжить",resume_game,true))
 
 func finish_run():
+	if not sim.events.is_empty() and not _handle_events():return
+	if not _run_matches_family():message("Итоги принадлежат другому семейству",5);return
 	var next = store.profile.duplicate(true)
+	var equipment=_lineage().capture(sim.build.to_dict())
+	if not equipment.is_empty():next.organism=equipment
 	for event in sim.events:
 		if event.type=="core" and not event.token in next.credited:
 			next.credited.append(event.token)
@@ -486,6 +522,7 @@ func finish_run():
 		if not Legacy.complete(next,sim):
 			var deferred=store.profile.duplicate(true)
 			deferred.checkpoint=sim.snapshot()
+			if not equipment.is_empty():deferred.organism=equipment
 			if not store.write_profile(deferred):
 				set_stage("save_error")
 				var error_box=hud.open("Не удалось сохранить завершённую жизнь",store.last_error)
@@ -617,7 +654,7 @@ func choose_mutation(id: String):
 	if _needs_replacement(id):
 		show_replacement(id,"level")
 		return
-	if sim.build.apply(id,"",int(sim.offer_quality.get(id,0))): _complete_level()
+	if (_lineage().award(id,int(sim.offer_quality.get(id,0))) if id in Catalog.ORGANS else sim.build.apply(id,"",int(sim.offer_quality.get(id,0)))): _complete_level()
 
 func _complete_level():
 	sim.pending_levels = maxi(0,sim.pending_levels-1)
@@ -632,6 +669,7 @@ func _complete_level():
 	save_run()
 
 func _needs_replacement(id: String) -> bool:
+	if id in Catalog.ORGANS:return false
 	if sim.build.rank(id)>0: return false
 	return sim.build.organs.size()>=6 if id in Catalog.ORGANS else sim.build.adaptations.size()>=4
 
@@ -714,7 +752,7 @@ func buy_shop(index: int):
 	elif _needs_replacement(item.id):
 		show_replacement(item.id,"shop",index)
 		return
-	elif not sim.build.apply(item.id,"",int(item.get("quality",0))): return
+	elif not (_lineage().award(item.id,int(item.get("quality",0))) if item.id in Catalog.ORGANS else sim.build.apply(item.id,"",int(item.get("quality",0)))): return
 	sim.build.spend(item.price)
 	item.sold = true
 	save_run()
@@ -734,24 +772,15 @@ func show_pause():
 	box.add_child(hud.label("Seed: %d · %s" % [sim.world.seed_value,sim.run_id],15,Color("75949c"),true))
 
 func show_development(journal: bool=false):
-	# Only enter from contexts that can be restored without changing a choice.
-	if stage not in ["game","pause","development"]: return
-	if stage!="development":development_origin = stage
-	set_stage("development")
-	hud.game_visible(false)
-	var box = hud.open("Развитие организма", "Бой и время остановлены. Органы, пассивные эффекты и сочетания текущей сборки.")
-	var navigation=hud.row()
-	box.add_child(navigation)
-	navigation.add_child(hud.button("Сборка",func():show_development(false),not journal))
-	navigation.add_child(hud.button("Журнал урона",func():show_development(true),journal))
-	if journal:Development.damage_view(hud,box,sim)
-	else:Development.populate(hud,box,sim)
-	box.add_child(hud.button("Вернуться",close_development))
+	if stage not in ["game","pause","development","organ_mutations"]:return
+	if stage in ["game","pause"]:
+		development_origin=stage
+		if not save_run():return
+	_lineage().show_body(true)
+	if journal:_lineage().show_statistics()
 
 func close_development():
-	if stage!="development": return
-	if development_origin=="pause": show_pause()
-	else: resume_game()
+	_lineage().close_body()
 
 func resume_game():
 	hud.close()
@@ -773,19 +802,10 @@ func show_map():
 	box.add_child(hud.button("Вернуться",resume_game))
 
 func show_genome():
-	set_stage("genome")
-	var box=hud.open("Наследственный геном","Исследования и открытия сохраняются после гибели. Ядра: %d." % store.profile.cores)
-	GenomeView.populate_genome(hud,box,store,_legacy_preview(),{
-		"research":func(id):_legacy_edit("research",id,"genome"),"focus":func(id):_legacy_edit("focus",id,"genome"),
-		"upgrade":func(id):_legacy_edit("upgrade",id,"genome"),"imprints":func():show_imprints("genome"),"back":show_menu})
+	_lineage().show_legacy()
 
 func show_imprints(origin: String="menu"):
-	imprint_origin=origin
-	set_stage("inherit")
-	var box=hud.open("Генетические отпечатки","Выбор можно отложить крестиком. Новые жизни не стирают ожидающее наследие.")
-	GenomeView.populate_imprints(hud,box,store,{"claim":func(id):
-		if not store.claim_imprint(id):message(store.last_error if store.last_error!="" else "Отпечаток недоступен",4)
-		show_imprints(imprint_origin),"back":_close_imprints})
+	_lineage().show_pending(origin)
 
 func _close_imprints():
 	if imprint_origin=="start":show_start()
@@ -863,7 +883,11 @@ func _notification(what):
 		elif stage in ["level","reward","replace"]: close_modal()
 		elif stage in ["pause","map","shop"]: resume_game()
 		elif stage=="inherit":_close_imprints()
-		elif stage in ["genome","atlas","help","start","gallery","updates"]: show_menu()
+		elif stage in ["organ_detail","organ_picker","organ_exchange","organ_mutations"]:_lineage().show_body(_lineage().live_mode)
+		elif stage=="capacity_notice":resume_game()
+		elif stage in ["new_family","family_delete","family_error"]:show_menu()
+		elif stage=="genome":_lineage().close_legacy()
+		elif stage in ["atlas","help","start","gallery","updates"]: show_menu()
 	elif what==NOTIFICATION_WM_CLOSE_REQUEST:
 		save_run()
 		get_tree().quit()
@@ -873,7 +897,7 @@ func _capture():
 	var image = get_viewport().get_texture().get_image()
 	var result = image.save_png(capture_path)
 	print("CAPTURE: ",capture_path," status=",result)
-	if capture_mode in ["foundation-start","foundation-genome","inheritance"]:store.clear_test_files()
+	if capture_mode!="":store.clear_test_files()
 	get_tree().quit()
 
 func open_pending():
@@ -883,8 +907,11 @@ func open_pending():
 
 func close_modal():
 	match stage:
+		"organ_detail","organ_picker","organ_exchange","organ_mutations":_lineage().show_body(_lineage().live_mode)
+		"new_family","family_delete","family_error":show_menu()
 		"menu": get_tree().quit()
-		"start","genome","atlas","help","gallery","results": show_menu()
+		"genome":_lineage().close_legacy()
+		"start","atlas","help","gallery","results": show_menu()
 		"development": close_development()
 		"inherit": _close_imprints()
 		"updates": show_menu()
@@ -892,6 +919,7 @@ func close_modal():
 			deferred_choices = true
 			save_run()
 			resume_game()
+		"capacity_notice":resume_game()
 		"save_error": resume_game()
 		_: resume_game()
 
@@ -946,7 +974,13 @@ func claim_reward(index: int,replace_id: String=""):
 		reward_index = index
 		show_replacement(option.id,"reward")
 		return
-	if not sim.claim_reward(index,replace_id): return
+	if option.kind=="mutation" and option.id in Catalog.ORGANS and replace_id=="":
+		if sim.reward_queue.is_empty() or str(sim.reward_queue[0].token) in sim.claimed_rewards:return
+		if not _lineage().award(str(option.id),int(option.quality)):return
+		sim.claimed_rewards.append(str(sim.reward_queue[0].token));sim.reward_queue.pop_front();sim.reward_options.clear()
+		sim._feedback("reward",sim.player,float(option.quality))
+	else:
+		if not sim.claim_reward(index,replace_id): return
 	_tone(720)
 	save_run()
 	if not sim.reward_queue.is_empty(): show_reward()

@@ -6,7 +6,7 @@ func check(ok: bool, message: String):
 		push_error(message)
 func inspect_readability(node):
 	if node is Label and node.text!="": check(node.get_theme_font_size("font_size")>=20,"body text is readable: "+node.text.left(30))
-	if node is Button: check(node.get_theme_font_size("font_size")>=24,"button text is readable")
+	if node is Button: check(node.get_theme_font_size("font_size")>=(20 if node.get_meta("compact_action",false) else 24),"button text is readable")
 	for child in node.get_children(): inspect_readability(child)
 func find_text(node,needle):
 	if node is Label and needle in node.text: return true
@@ -41,14 +41,11 @@ func run():
 		check(scene.stage=="development" and scene.sim.paused,"development pauses game")
 		await process_frame
 		inspect_readability(scene.hud.content)
-		check(find_text(scene.hud.content,"Следующий ранг"),"build shows next rank bonus")
-		check(find_text(scene.hud.content,"Рубежи"),"build shows milestone status")
+		check(find_text(scene.hud.content,"Тело"),"body shows actual cell budget")
 		check(scene.hud.stats.get_theme_font_size("font_size")>=22,"HUD stats enlarged")
-		check(scene.hud.content.get_child_count()>10,"development shows growth organs and all synergy cards")
-		var scroll=scene.hud.scroll_container
-		check(scroll is ScrollContainer and scroll.size.y<=root.get_visible_rect().size.y,"development scroll fits screen")
-		check(scene.hud.content.size.y>scroll.size.y,"long development content scrolls vertically")
-		check(scene.hud.content.size.x<=scroll.size.x,"development cards fit without horizontal scroll")
+		check(scene.hud.scroll_container==null,"organism management has no long scroll")
+		for button in scene.hud.content.find_children("*","Button",true,false):
+			check(scene.get_viewport_rect().encloses(button.get_global_rect()),"organism actions fit without scrolling")
 		var old = scene.sim.elapsed
 		scene._process(1)
 		check(scene.sim.elapsed==old,"development freezes elapsed time")

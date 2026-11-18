@@ -9,7 +9,7 @@
 
 ## Global constraints
 
-No release until both stages form a complete flow. No videos. Preserve existing data, signing identity, size/contact/digestion rules and raw-touch fixes. Families own resources; free equipment exchange cannot lose an organ. Three initial stock cells. Exact form capacities and organ cell costs are provisional balance values, not approved facts. Concurrent lives within a family require clarification before implementing ownership transactions.
+No release until both stages form a complete flow. No videos. Preserve existing data, signing identity, size/contact/digestion rules and raw-touch fixes. Families own resources; free equipment exchange cannot lose an organ. Three initial stock cells. Exact form capacities and organ cell costs are provisional balance values, not approved facts. Approved ownership rule: one living heir per family; different families can retain separate live saves. A family can be deleted only after an explicit confirmation covering its life and permanent progress.
 
 ## Review focus
 
@@ -41,6 +41,8 @@ Connect family capacity/stock state to starting/resumed builds and paused in-run
 
 Full suite, review, native visual/input checks, ten-minute paired profile and multi-family save measurement against stable 1.0.1. Only after both stages pass: update version/export/manifest, build signed APK and verify package/certificate/assets. Current main auto-publishes; preparation stays on `release/1.1.0` until the publication workflow is made safe for this release.
 
-Preparation checkpoint: eight-stage roadmap rewritten into four paired releases; old roadmap archived. Builder check confirms the unresolved within-family concurrent-life question. Minimal persistent organ records, run-family binding, inactive-record validation and preview/live isolation were added to the spec. Capacity transactions are independent of that decision and passed RED→GREEN; no save migration or product screen has been switched to the new model yet.
+## Current checkpoint
 
-Task 1 checkpoint: independent code review found no blocker. Documented helper preconditions and added nested-property aliasing, non-finite counts and numeric-sum boundary coverage. Targeted tests pass, resource import passes, and the complete ci/run_tests.py finished exit0 without script errors; final additional model boundary tests also pass. Product family migration and screens remain unimplemented pending the one within-family live-organism decision. No APK/version change or release was made.
+Stages 1–2 are implemented in the preparation branch: isolated family repository and migration; one living heir per family; confirmed family deletion; compact paged home/body/stock/legacy views; individual organ identities and transactional swaps; permanent discoverable capacity extensions. Targeted persistence, equipment, integration and UI tests pass. Independent review found an instance-quality/evolution identity issue; it was reproduced in a regression test and corrected.
+
+Publication remains blocked on the final full suite, native layout inspection, long-run performance comparison and Android release verification. No version bump or APK publication has been made. Stages 3–8 remain future work.

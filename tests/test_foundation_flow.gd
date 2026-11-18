@@ -19,7 +19,7 @@ func run():
 	app.show_imprints("results");app.close_modal();check(app.stage=="results" and not app.store.profile.legacy.pending.is_empty(),"X defers inherited reward safely")
 	check(app.store.claim_imprint("acid"),"earned organ can be kept")
 	app.store.select_imprint("acid");app.start_run(601)
-	check(app.sim.build.rank("acid")==1 and app.sim.build.quality("acid")==0,"descendant begins at ordinary rank1")
+	check(app.sim.build.rank("acid")==3 and app.sim.build.quality("acid")==0,"descendant keeps the family organ rank while old imprint metadata remains compatible")
 	app.sim.elapsed=123;app.save_run();var checkpoint=JSON.stringify(app.store.profile.checkpoint)
 	app.show_menu();app.show_updates();app.save_run()
 	check(JSON.stringify(app.store.profile.checkpoint)==checkpoint,"update screen cannot replace active checkpoint with menu demo")

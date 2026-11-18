@@ -226,6 +226,11 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 			_soft_tissue(canvas,bud,radius*(0.19+0.02*sin(time*2+i)),Color(_organ_color("division",body,appearance),0.82),phase+i)
 			_soft_tissue(canvas,bud-Vector2.ONE*radius*0.015,radius*0.14,Color(edge,0.14),phase+i)
 			_nucleus(canvas,bud,radius*0.08,core,edge,time+i,false)
+	if role=="player" and detail:
+		var chambers=mini(3,int(appearance.get("body_chambers",0)))+mini(3,int(appearance.get("stock_chambers",0)))
+		for i in range(chambers):
+			var chamber=p+_anchor(contour,phase+0.8+i*2.399)*radius*0.67
+			_vesicle(canvas,chamber,radius*(0.10+0.01*sin(time*2+i)),body.lerp(edge,0.28),true)
 	if role=="player" and detail:_hereditary_marks(canvas,p,contour,radius,time,phase,body,edge,appearance.get("hereditary_traits",[]))
 	if role=="player" and detail:_evolved_organs(canvas,p,contour,radius,organs,time,phase,body,edge,appearance)
 	if role=="player" and detail:_living_marks(canvas,p,contour,radius,organs,time,phase,body,edge,appearance)
