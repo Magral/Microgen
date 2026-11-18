@@ -60,10 +60,10 @@ func run():
 	check(button(box,"empty_stock_cell_1")!=null,"large stock organ uses one position")
 	var regular_capacity=model.body_capacity
 	model.body_capacity=1000000000
-	box=fixed(hud);Body.populate(hud,box,model,null,bcb,124999999)
+	box=fixed(hud);Body.populate(hud,box,model,null,bcb,166666666)
 	await verify(hud)
 	check(button(box,"empty_body_cell_999999999")!=null,"large capacity renders only the selected page")
-	check(box.find_children("empty_body_cell_*","Button",true,false).size()==8,"empty body cells remain bounded to eight per page")
+	check(box.find_children("empty_body_cell_*","Button",true,false).size()<=6,"short-screen body pages stay bounded to six cells")
 	model.body_capacity=regular_capacity
 	model.live=true
 	box=fixed(hud);Body.populate(hud,box,model,null,bcb,1)
@@ -101,6 +101,7 @@ func run():
 		all_parts.append({"id":"all-"+kind,"kind":kind,"cells":3,"rank":10,"quality":3})
 	model.equipped=all_parts
 	box=fixed(hud);Body.populate(hud,box,model,null,bcb)
+	await process_frame;await process_frame
 	await verify(hud)
 	box=fixed(hud);Body.picker(hud,box,all_parts,{"choose":func(id):calls.append(["choose",id])})
 	await verify(hud)

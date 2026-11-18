@@ -23,6 +23,7 @@ var damage_markers: Array=[]
 var cysts: Array=[]
 var reward_queue: Array=[]
 var reward_options: Array=[]
+var pending_inventory: Array=[]
 var offer_quality: Dictionary={}
 var claimed_rewards: Array=[]
 var feedback: Array=[]
@@ -73,6 +74,8 @@ var invuln = 0.0
 var boss_spawned = false
 var kills = 0
 var cores_found = 0
+var material_pending: Dictionary = {}
+var material_batch = 0
 var next_id = 0
 var run_id = ""
 var upgrades: Dictionary = {}
@@ -88,7 +91,8 @@ func new_run(seed_value: int, unlocked: Array = Catalog.base_unlocked(), permane
 	run_loadout=Heredity.normalize(loadout)
 	inherited_traits=Heredity.traits(run_loadout)
 	spore_charge=0
-	combat_stats=CombatStats.create();last_damage={};damage_markers=[];cysts=[];reward_queue=[];reward_options=[];offer_quality={};claimed_rewards=[]
+	material_pending={};material_batch=0
+	combat_stats=CombatStats.create();last_damage={};damage_markers=[];cysts=[];reward_queue=[];reward_options=[];pending_inventory=[];offer_quality={};claimed_rewards=[]
 	rng.seed = seed_value
 	world.generate(seed_value)
 	player_genome = Genome.create(seed_value,0,"player",0) if run_loadout.is_empty() else Heredity.recipe(run_loadout)
@@ -573,7 +577,7 @@ func _update_enemies(dt: float):
 		if _safe_zone(player) and e.kind != "prey": dir = -dir
 		var rules=interaction(e)
 		var desired = dir*e.speed*rules.speed*(0.35 if e.slow>0 else 1.0)*(1.2 if "swift" in e.get("traits",[]) else 1.0)
-		var pull_range=maxf(attraction_radius(),(165+build.rank("tentacle")*12)*ability_scale() if e.grasp>0 else 0.0)
+		var pull_range=maxf(attraction_radius(),(165+build.rank("tentacle")*12)*build.specialization_value("tentacle","reach_mult")*ability_scale() if e.grasp>0 else 0.0)
 		if e.crown_time>0:
 			var mouth=_crown_destination()
 			desired=desired*0.25+(mouth-e.pos).normalized()*rules.pull*1.35
@@ -682,12 +686,24 @@ func _update_remains(dt: float):
 		part.progress=minf(1.0,float(part.progress)+dt/float(part.duration))
 		if part.progress<1.0: continue
 		_assimilate(part.genome,maxf(0.5,part.r*0.12),part.pos,part.get("pigment",{}))
+		var tissue=str(part.get("material","plasma"))
+		if tissue not in ["organelle","membrane","plasma"]: tissue="plasma"
+		material_pending[tissue]=int(material_pending.get(tissue,0))+1+int(int(part.get("quality",0))/2)
+		var pending_total=0
+		for amount in material_pending.values():pending_total+=int(amount)
+		if pending_total>=3:flush_family_materials()
 		if part.infected:_infected_meal()
 		gain_xp(part.dna)
 		build.biomass+=int(part.bio)
 		if part.infected and "spore_feast" in build.active_synergies():_field(part.pos,100,14,2.5,"spore")
 		remains.remove_at(i)
 	if remains.is_empty():digesting_id=-1
+
+func flush_family_materials():
+	if material_pending.is_empty():return
+	events.append({"type":"family_material","token":run_id+":materials:"+str(material_batch),"materials":material_pending.duplicate(true)})
+	material_batch+=1
+	material_pending.clear()
 
 func _drop(p: Vector2,kind: String,amount: int):
 	if pickups.size()>=600:
@@ -730,7 +746,7 @@ func _bite():
 		var distance=player.distance_squared_to(enemy.pos)
 		if distance<nearest:nearest=distance;target=enemy
 	if target.is_empty():return
-	cooldowns.bite=0.45
+	cooldowns.bite=0.45*build.specialization_value("devour","bite_cooldown_mult")
 	bite_flash=1.0
 	hit_enemy(target,Catalog.scaled_damage(7.0+rank*5.0,rank)*(1.25 if "enzyme_bite" in build.active_synergies() else 1.0),"devour")
 	if "enzyme_bite" in build.active_synergies():
@@ -745,7 +761,7 @@ func _attack():
 		var touched=false
 		for enemy in enemies:
 			var offset=enemy.pos-player
-			if enemy.get("captured",false) or offset.length()>(100+build.rank("cilia")*10)*ability_scale():continue
+			if enemy.get("captured",false) or offset.length()>(100+build.rank("cilia")*10)*build.specialization_value("cilia","reach_mult")*ability_scale():continue
 			if offset.normalized().dot(Vector2.from_angle(facing))<0.5:continue
 			hit_enemy(enemy,Catalog.scaled_damage(10+build.rank("cilia")*6,build.rank("cilia")),"cilia")
 			touched=true
@@ -758,7 +774,7 @@ func _attack():
 	if build.rank("enzymes")>0 and cooldowns.get("enzymes",0)<=0:
 		var target=_nearest(230*ability_scale())
 		if not target.is_empty():
-			target.enzyme_time=4.0
+			target.enzyme_time=4.0*build.specialization_value("enzymes","duration_mult")
 			cooldowns.enzymes=2.0
 			_effect({"type":"enzymes","pos":player,"end":target.pos,"r":float(target.r),"life":0.5,"max":0.5})
 	if build.rank("electric")>0 and cooldowns.get("electric",0)<=0:
@@ -766,7 +782,7 @@ func _attack():
 		if not target.is_empty():
 			var previous=player
 			var hit=[]
-			for i in range(Catalog.electric_targets(build.rank("electric"))):
+			for i in range(mini(7,Catalog.electric_targets(build.rank("electric"))+build.specialization_bonus("electric","target_bonus"))):
 				var nearest={}
 				var distance=pow(280*ability_scale(),2)
 				for enemy in enemies:
@@ -789,7 +805,7 @@ func _attack():
 	var metabolic = cooldown_factor()
 	var synergies = build.active_synergies()
 	if build.rank("tentacle")>0 and cooldowns.get("tentacle",0)<=0:
-		var reach=(165.0+build.rank("tentacle")*12)*ability_scale()
+		var reach=(165.0+build.rank("tentacle")*12)*build.specialization_value("tentacle","reach_mult")*ability_scale()
 		var targets=[]
 		for enemy in enemies:
 			if enemy.hp>0 and not enemy.get("captured",false) and player.distance_squared_to(enemy.pos)<reach*reach:targets.append(enemy)
@@ -826,20 +842,21 @@ func _attack():
 	if build.rank("acid")>0:
 		for e in enemies:
 			if _is_engulfing(e): continue
-			if player.distance_squared_to(e.pos)<pow((75+build.rank("acid")*9)*ability_scale(),2): hit_enemy(e,Catalog.scaled_damage(4+build.rank("acid")*3,build.rank("acid"))*_attack_dt,"acid")
+			if player.distance_squared_to(e.pos)<pow((75+build.rank("acid")*9)*build.specialization_value("acid","radius_mult")*ability_scale(),2): hit_enemy(e,Catalog.scaled_damage(4+build.rank("acid")*3,build.rank("acid"))*_attack_dt,"acid")
 	if build.rank("spikes")>0 and cooldowns.get("spikes",0)<=0:
 		var target = _nearest(650)
 		if not target.is_empty():
 			cooldowns.spikes = 1.3*metabolic
 			var dir = (target.pos-player).normalized()
-			for i in range(Catalog.shot_count(build.rank("spikes"))):
-				_shot(player,dir.rotated((i-(Catalog.shot_count(build.rank("spikes"))-1)/2.0)*0.13)*450,Catalog.scaled_damage(12+build.rank("spikes")*5,build.rank("spikes")),false)
+			var spike_count=mini(7,Catalog.shot_count(build.rank("spikes"))+build.specialization_bonus("spikes","shot_bonus"))
+			for i in range(spike_count):
+				_shot(player,dir.rotated((i-(spike_count-1)/2.0)*0.13)*450,Catalog.scaled_damage(12+build.rank("spikes")*5,build.rank("spikes")),false)
 	if build.rank("pulse")>0 and cooldowns.get("pulse",0)<=0:
 		cooldowns.pulse = 3.2*metabolic
 		if "shield_pulse" in synergies:
 			cooldowns.barrier=maxf(0,float(cooldowns.get("barrier",0))-2.0)
 			_effect({"type":"shield_pulse","pos":player,"r":body_radius()*2.4,"life":1.0,"max":1.0})
-		var radius = (130+build.rank("pulse")*18)*ability_scale()
+		var radius = (130+build.rank("pulse")*18)*build.specialization_value("pulse","radius_mult")*ability_scale()
 		for e in enemies:
 			if _is_engulfing(e): continue
 			if player.distance_squared_to(e.pos)<radius*radius:
@@ -852,15 +869,15 @@ func _attack():
 	if build.rank("infection")>0 and cooldowns.get("infection",0)<=0:
 		var target = _nearest(420*ability_scale())
 		if not target.is_empty():
-			target.infect = 4.5
+			target.infect = 4.5*build.specialization_value("infection","duration_mult")
 			_effect({"type":"infection","pos":player,"end":target.pos,"r":float(target.r),"life":0.85,"max":0.85})
 			cooldowns.infection = 1.6*metabolic
 	if build.rank("trail")>0 and cooldowns.get("trail",0)<=0:
 		cooldowns.trail = 0.6
-		_field(player,50+build.rank("trail")*6,Catalog.scaled_damage(5+build.rank("trail")*3,build.rank("trail")),3.0,"poison")
+		_field(player,50+build.rank("trail")*6,Catalog.scaled_damage(5+build.rank("trail")*3,build.rank("trail")),3.0*build.specialization_value("trail","duration_mult"),"poison")
 		if "toxic_colony" in synergies:
 			for p in clone_positions():
-				_field(p,40,Catalog.scaled_damage(3+build.rank("trail")*1.5,build.rank("trail")),2,"poison")
+				_field(p,40,Catalog.scaled_damage(3+build.rank("trail")*1.5,build.rank("trail")),2*build.specialization_value("trail","duration_mult"),"poison")
 			_effect({"type":"toxic_colony","pos":player,"r":105.0,"life":0.65,"max":0.65})
 	if build.rank("division")>0:
 		for p in clone_positions():
@@ -872,8 +889,9 @@ var _attack_dt = 0.016
 
 func clone_positions() -> Array:
 	var out = []
-	for i in range(Catalog.clone_count(build.rank("division"))):
-		out.append(player+Vector2.from_angle(elapsed*1.6+i*TAU/Catalog.clone_count(build.rank("division")))*105)
+	var count=mini(6,Catalog.clone_count(build.rank("division"))+build.specialization_bonus("division","clone_bonus"))
+	for i in range(count):
+		out.append(player+Vector2.from_angle(elapsed*1.6+i*TAU/count)*105)
 	return out
 
 func _shot(p: Vector2,velocity: Vector2,damage: float,hostile: bool,source: String="spikes",actor_name: String="",actor_id: int=0):
@@ -986,7 +1004,7 @@ func nearby_colony() -> int:
 	return -1
 
 func snapshot() -> Dictionary:
-	return {"version":1,"family_id":family_id,"stock_capacity":stock_capacity,"run_loadout":run_loadout.duplicate(true),"spore_charge":spore_charge,"combat_stats":combat_stats.duplicate(true),"last_damage":last_damage.duplicate(true),"cysts":_pack(cysts),"reward_queue":reward_queue.duplicate(true),"reward_options":reward_options.duplicate(true),"offer_quality":offer_quality.duplicate(),"claimed_rewards":claimed_rewards.duplicate(),"player_genome":player_genome.duplicate(true),"minibosses_spawned":minibosses_spawned,"next_miniboss_at":next_miniboss_at,"facing":facing,"tissue_pigment":tissue_pigment.duplicate(true),"residents":_pack(residents),"outcome":outcome,"events":_pack(events),"seed":world.seed_value,"rng_state":str(rng.state),"run_id":run_id,"player":_vec(player),"player_velocity":_vec(player_velocity),"remains":_pack(remains),"digesting_id":digesting_id,"hp":hp,"max_hp":max_hp,"elapsed":elapsed,"xp":xp,"level":level,"pending_levels":pending_levels,"build":build.to_dict(),"enemies":_pack(enemies),"pickups":_pack(pickups),"colonies":_pack(world.colonies),"nests":_pack(world.nests),"explored":explored.keys(),"boss_spawned":boss_spawned,"kills":kills,"cores_found":cores_found,"next_id":next_id,"upgrades":upgrades,"cooldowns":cooldowns.duplicate(),"offers":current_offers.duplicate(),"rerolls":rerolls,"fields":_pack(fields),"shots":_pack(shots)}
+	return {"version":1,"family_id":family_id,"stock_capacity":stock_capacity,"run_loadout":run_loadout.duplicate(true),"spore_charge":spore_charge,"combat_stats":combat_stats.duplicate(true),"last_damage":last_damage.duplicate(true),"cysts":_pack(cysts),"reward_queue":reward_queue.duplicate(true),"reward_options":reward_options.duplicate(true),"pending_inventory":pending_inventory.duplicate(),"offer_quality":offer_quality.duplicate(),"claimed_rewards":claimed_rewards.duplicate(),"player_genome":player_genome.duplicate(true),"minibosses_spawned":minibosses_spawned,"next_miniboss_at":next_miniboss_at,"facing":facing,"tissue_pigment":tissue_pigment.duplicate(true),"residents":_pack(residents),"outcome":outcome,"events":_pack(events),"material_pending":material_pending.duplicate(true),"material_batch":material_batch,"seed":world.seed_value,"rng_state":str(rng.state),"run_id":run_id,"player":_vec(player),"player_velocity":_vec(player_velocity),"remains":_pack(remains),"digesting_id":digesting_id,"hp":hp,"max_hp":max_hp,"elapsed":elapsed,"xp":xp,"level":level,"pending_levels":pending_levels,"build":build.to_dict(),"enemies":_pack(enemies),"pickups":_pack(pickups),"colonies":_pack(world.colonies),"nests":_pack(world.nests),"explored":explored.keys(),"boss_spawned":boss_spawned,"kills":kills,"cores_found":cores_found,"next_id":next_id,"upgrades":upgrades,"cooldowns":cooldowns.duplicate(),"offers":current_offers.duplicate(),"rerolls":rerolls,"fields":_pack(fields),"shots":_pack(shots)}
 
 func restore(data: Dictionary) -> bool:
 	family_id=str(data.get("family_id",""))
@@ -1048,6 +1066,8 @@ func restore(data: Dictionary) -> bool:
 		if enemy.kind=="boss": boss_marker = enemy.pos
 	kills = int(data.get("kills",0))
 	cores_found = int(data.get("cores_found",0))
+	material_pending=data.get("material_pending",{}).duplicate(true) if data.get("material_pending",{}) is Dictionary else {}
+	material_batch=int(data.get("material_batch",0))
 	next_id = int(data.get("next_id",0))
 	run_id = str(data.get("run_id","restored"))
 	upgrades = data.get("upgrades",{})
@@ -1063,6 +1083,11 @@ func restore(data: Dictionary) -> bool:
 	if not data.has("cysts"):_create_cysts()
 	reward_queue=data.get("reward_queue",[]).duplicate(true) if data.get("reward_queue") is Array else []
 	reward_options=data.get("reward_options",[]).duplicate(true) if data.get("reward_options") is Array else []
+	pending_inventory=[]
+	var saved_pending_inventory=data.get("pending_inventory",[])
+	if saved_pending_inventory is Array:
+		for pending_id in saved_pending_inventory:
+			if pending_id is String and not pending_id.is_empty() and not pending_id in pending_inventory:pending_inventory.append(pending_id)
 	offer_quality=data.get("offer_quality",{}).duplicate() if data.get("offer_quality") is Dictionary else {}
 	claimed_rewards=data.get("claimed_rewards",[]).duplicate() if data.get("claimed_rewards") is Array else []
 	var clean_queue=[]
@@ -1074,7 +1099,7 @@ func restore(data: Dictionary) -> bool:
 	for entry in reward_options:
 		if not entry is Dictionary:continue
 		var kind=str(entry.get("kind",""));var id=str(entry.get("id",""))
-		if (kind=="mutation" and not Catalog.item(id).is_empty()) or (kind=="evolution" and id in Catalog.EVOLUTIONS):
+		if (kind=="mutation" and not Catalog.item(id).is_empty()) or (kind=="temporary" and Catalog.TEMP_MUTATIONS.has(id)) or (kind=="evolution" and id in Catalog.EVOLUTIONS):
 			clean_options.append({"kind":kind,"id":id,"quality":clampi(int(entry.get("quality",0)),0,3)})
 		elif kind=="biomass":clean_options.append({"kind":kind,"id":"biomass","quality":clampi(int(entry.get("quality",0)),0,3),"amount":maxi(0,int(entry.get("amount",0)))})
 	reward_options=clean_options.slice(0,3) if not reward_queue.is_empty() else []
@@ -1161,10 +1186,16 @@ func prepare_reward() -> Array:
 	if tier>=2:
 		var evolutions=build.evolution_candidates()
 		if not evolutions.is_empty():reward_options.append({"kind":"evolution","id":evolutions[0],"quality":build.quality(evolutions[0])})
+	var temporary_pool=[]
+	for id in Catalog.TEMP_MUTATIONS:
+		if build.temporary_mutation_rank(str(id))<3 or build.temporary_mutation_quality(str(id))<tier:temporary_pool.append(str(id))
+	if not temporary_pool.is_empty():
+		var temporary_id=temporary_pool[rng.randi_range(0,temporary_pool.size()-1)]
+		reward_options.append({"kind":"temporary","id":temporary_id,"quality":maxi(tier,Rewards.roll_quality(rng,tier+2))})
 	var pool=build.offers(rng)
 	# Even a rank-capped organ can still gain a truly superior material quality.
 	for id in build.organs.keys()+build.adaptations.keys():
-		if build.rank(id)>=Catalog.max_rank(id) and build.quality(id)<tier and not id in pool:pool.append(id)
+		if build.stored_rank(id)>=Catalog.max_rank(id) and build.quality(id)<tier and not id in pool:pool.append(id)
 	for id in pool:
 		if reward_options.size()>=3:break
 		var grade=maxi(tier,Rewards.roll_quality(rng,tier+2))
@@ -1176,7 +1207,8 @@ func _refresh_reward_options():
 	for i in range(reward_options.size()):
 		var option=reward_options[i]
 		var obsolete=false
-		if option.kind=="mutation":obsolete=build.rank(str(option.id))>=Catalog.max_rank(str(option.id)) and build.quality(str(option.id))>=int(option.quality)
+		if option.kind=="mutation":obsolete=build.stored_rank(str(option.id))>=Catalog.max_rank(str(option.id)) and build.quality(str(option.id))>=int(option.quality)
+		elif option.kind=="temporary":obsolete=build.temporary_mutation_rank(str(option.id))>=3 and build.temporary_mutation_quality(str(option.id))>=int(option.quality)
 		elif option.kind=="evolution":obsolete=not str(option.id) in build.evolution_candidates()
 		if obsolete:
 			var grade=int(option.get("quality",1))
@@ -1191,6 +1223,7 @@ func claim_reward(index: int,replace_id: String="") -> bool:
 	var accepted=false
 	match str(option.kind):
 		"mutation":accepted=build.apply(str(option.id),replace_id,int(option.quality))
+		"temporary":accepted=build.apply_temporary_mutation(str(option.id),int(option.quality))
 		"evolution":accepted=replace_id=="" and build.evolve(str(option.id))
 		"biomass":
 			if replace_id=="":build.biomass+=int(option.amount);accepted=true

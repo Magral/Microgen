@@ -10,6 +10,7 @@ const Build=preload("res://core/build_model.gd")
 const Inspector=preload("res://core/build_inspector.gd")
 const Development=preload("res://ui/development_view.gd")
 const Catalog=preload("res://core/catalog.gd")
+const Rewards=preload("res://core/rewards.gd")
 var app
 var live_mode=false
 var pages={"alive":0,"ancestral":0}
@@ -21,6 +22,7 @@ var preview
 var incoming=""
 var selected=[]
 var picker_mode="stock"
+var last_award_location=""
 
 func _init(owner):app=owner
 
@@ -113,6 +115,7 @@ func capture(build: Dictionary) -> Dictionary:
 static func apply_to_build(value: Dictionary,build):
 	var merged=Equipment.aggregate(value)
 	build.organs=merged.organs
+	build.specializations=merged.specializations
 	for kind in Catalog.ORGANS:
 		build.qualities.erase(kind)
 		build.stats.evolutions.erase(kind)
@@ -146,6 +149,7 @@ func show_body(live: bool):
 	preview=app.sim if live else app._legacy_preview()
 	if not live:apply_to_build(value,preview.build)
 	var model=value.duplicate(true);model.family_name=family_name();model.live=live;model.stock_page=stock_page
+	model.organium=int(app.store.profile.get("organium",0));model.organ_materials=app.store.profile.get("organ_materials",{}).duplicate(true)
 	var box=app.hud.open_fixed("Организм","Нажми на орган или свободные ячейки. Перестановка бесплатна; бой на паузе.")
 	Body.populate(app.hud,box,model,preview,{"part":show_part,"empty_body":func():show_picker("stock"),"empty_stock":show_stock_sources,"page":func(index):body_page=index;show_body(live_mode),"stock_page":func(index):stock_page=index;show_body(live_mode),"start":app.start_run,"back":close_body,"archive":func():show_picker("archive"),"legacy":app.show_genome,"mutations":show_statistics,"reroll":func():
 		if app.store.reroll_morphology():show_body(false)},body_page)
@@ -167,22 +171,41 @@ func show_part(id: String,tab: String="stats"):
 	part_preview.build.stats.evolutions={part.kind:true} if part.get("evolved",false) else {}
 	var source=app.sim if live_mode else preview
 	var projected=Build.new();projected.from_dict(source.build.to_dict());projected.organs[part.kind]=int(part.rank);projected.qualities[part.kind]=int(part.quality)
+	projected.specializations[part.kind]=str(part.get("specialization",""))
 	if part.get("evolved",false):projected.stats.evolutions[part.kind]=true
 	else:projected.stats.evolutions.erase(part.kind)
 	part.effect_text=Inspector.effect_text(projected,part.kind,source.ability_scale(),source.cooldown_factor())
 	part.detail_tab=tab
 	if part.kind in Catalog.EVOLUTIONS:
 		var recipe=Catalog.EVOLUTIONS[part.kind]
-		part.growth_text="%s\n%s %d/6 + %s %d/3"%[recipe.name,Catalog.item(part.kind).name,int(part.rank),Catalog.item(recipe.passive).name,source.build.rank(recipe.passive)]
-		part.growth_text+="\n"+str(recipe.get("behavior","Урон органа ×1,30 после эволюции"))
+		part.growth_text="%s · ранг %d\nПассив: %s · %d/3 · урон органа ×1,30"%[recipe.name,int(part.rank),Catalog.item(recipe.passive).name,source.build.rank(recipe.passive)]
 	else:part.growth_text=Catalog.milestone_text(part.kind,int(part.rank))
-	part.synergy_text=Inspector.synergy_lines((app.sim if live_mode else preview).build,part.kind)
-	part.can_equip=location=="stock"
+	part.synergy_text=Inspector.synergy_summary((app.sim if live_mode else preview).build,part.kind)
+	part.organium=int(app.store.profile.get("organium",0));part.upgrade_cost=Equipment.upgrade_cost(part)
+	part.upgrade_ingredient=mini(128,1+int(floor(float(part.rank)/8.0)))
+	var current_spec=str(part.get("specialization",""))
+	var active_spec=Catalog.specialization_data(part.kind,current_spec)
+	part.specialization_name=str(active_spec.get("name","Нет"))
+	part.specialization_effect=str(active_spec.get("name","Не выбрана"))
+	var resources=app.store.profile.get("organ_materials",{})
+	part.materials_available=resources.duplicate(true)
+	part.specialization_options=[]
+	for choice in Catalog.SPECIALIZATIONS.get(part.kind,[]):
+		var option=choice.duplicate(true)
+		option.active=str(option.id)==current_spec
+		option.cost=12 if current_spec.is_empty() else mini(9007199254740991,18+int(part.rank))
+		option.ingredient=1 if current_spec.is_empty() else 2
+		option.material=part.kind if int(resources.get(part.kind,0))>=int(option.ingredient) else "organelle"
+		option.available=not option.active and int(app.store.profile.get("organium",0))>=int(option.cost) and int(resources.get(option.material,0))>=int(option.ingredient)
+		part.specialization_options.append(option)
+	part.materials_text="Материал «%s»: %d · Органеллы: %d"%[Catalog.item(part.kind).name,int(resources.get(part.kind,0)),int(resources.get("organelle",0))]
+	part.can_dismantle=true
+	part.can_equip=location in ["stock","reserve"]
 	part.can_unequip=location=="equipped" and value.stock.size()<int(value.stock_capacity)
 	part.can_archive=not live_mode and location!="reserve"
 	app.set_stage("organ_detail")
 	var box=app.hud.open_fixed(Catalog.item(part.kind).name,"Свойства принадлежат этому экземпляру и сохраняются в семействе.")
-	Body.detail(app.hud,box,part,part_preview,{"equip":func():incoming=id;selected=[];show_exchange(),"unequip":func():move(id,"stock"),"archive":func():move(id,"archive"),"tab":func(value):show_part(id,value),"back":func():show_body(live_mode)})
+	Body.detail(app.hud,box,part,part_preview,{"equip":func():incoming=id;selected=[];show_exchange(),"unequip":func():move(id,"stock"),"archive":func():move(id,"archive"),"tab":func(value):show_part(id,value),"upgrade":func():upgrade_part(id),"specialize":func(specialization):specialize_part(id,str(specialization)),"dismantle":func():confirm_dismantle(id),"codex":func():app.show_codex_entry(str(part.kind)),"back":func():show_body(live_mode)})
 
 func show_picker(mode: String,page: int=0):
 	picker_mode=mode
@@ -209,11 +232,18 @@ func show_exchange(page: int=0):
 func move(id: String,destination: String,replacements: Array=[]):
 	var result=Equipment.move(state(),id,destination,replacements)
 	if not result.ok:app.message(result.error,4);return
-	if not commit_state(result.state):return
+	var resolves_pending=destination=="body" and live_mode and id in app.sim.pending_inventory
+	if resolves_pending:app.sim.pending_inventory.erase(id)
+	if not commit_state(result.state):
+		if resolves_pending:app.sim.pending_inventory.append(id)
+		return
+	if resolves_pending:app.open_pending();return
 	show_body(live_mode)
 
-func commit_state(value: Dictionary) -> bool:
+func commit_state(value: Dictionary,economy: Dictionary={}) -> bool:
 	var next=app.store.profile.duplicate(true);next.organism=value
+	if economy.has("organium"):next.organium=int(economy.organium)
+	if economy.has("organ_materials"):next.organ_materials=economy.organ_materials.duplicate(true)
 	if live_mode:
 		if app.sim.family_id!=app.store.family_id():_error("Семейство изменилось; жизнь не перезаписана");return false
 		var checkpoint=app.sim.snapshot()
@@ -221,6 +251,7 @@ func commit_state(value: Dictionary) -> bool:
 		checkpoint.build.organs=merged.organs
 		for kind in Catalog.ORGANS:checkpoint.build.qualities.erase(kind)
 		for kind in merged.qualities:checkpoint.build.qualities[kind]=merged.qualities[kind]
+		checkpoint.build.specializations=merged.specializations.duplicate(true)
 		checkpoint.build.organ_capacity=int(value.body_capacity)
 		var by_kind=0
 		for kind in merged.organs:by_kind+=Equipment.cell_cost(kind)
@@ -233,25 +264,87 @@ func commit_state(value: Dictionary) -> bool:
 	if live_mode:bind_run(value);apply_to_build(value,app.sim.build);app.sim.stock_capacity=int(value.stock_capacity)
 	return true
 
+func upgrade_part(id: String):
+	var result=Equipment.upgrade(state(),id,int(app.store.profile.get("organium",0)),app.store.profile.get("organ_materials",{}))
+	if not result.ok:app.message(result.error,4);return
+	if not commit_state(result.state,{"organium":result.organium,"organ_materials":result.materials}):return
+	show_part(id,"growth")
+
+func specialize_part(id: String,specialization: String):
+	var result=Equipment.specialize(state(),id,specialization,int(app.store.profile.get("organium",0)),app.store.profile.get("organ_materials",{}))
+	if not result.ok:app.message(result.error,4);return
+	if not commit_state(result.state,{"organium":result.organium,"organ_materials":result.materials}):return
+	show_part(id,"growth")
+
+func confirm_dismantle(id: String):
+	var materials=app.store.profile.get("organ_materials",{})
+	var result=Equipment.dismantle(state(),id,int(app.store.profile.get("organium",0)),materials)
+	if not result.ok:app.message(result.error,4);return
+	var box=app.hud.open_fixed("Расщепить орган?","Ранг и орган будут потеряны. Возврат записывается вместе с удалением.")
+	box.add_child(app.hud.label("Вернётся %d органиума и %d материала «%s»."%[int(result.get("refund",0)),int(result.materials.get(str(result.get("kind","")),0))-int(materials.get(str(result.get("kind","")),0)),Catalog.item(str(result.get("kind",""))).name],23,Color("c5eab8"),true))
+	var row=app.hud.row();box.add_child(row)
+	row.add_child(app.hud.button("Оставить",func():show_part(id)))
+	row.add_child(app.hud.button("Расщепить",func():
+		var resolves_pending=live_mode and id in app.sim.pending_inventory
+		if resolves_pending:app.sim.pending_inventory.erase(id)
+		if not commit_state(result.state,{"organium":result.organium,"organ_materials":result.materials}):
+			if resolves_pending:app.sim.pending_inventory.append(id)
+			return
+		if resolves_pending:app.open_pending()
+		else:show_body(live_mode),true))
+
 func award(kind: String,grade: int) -> bool:
 	var current=capture(app.sim.build.to_dict())
 	if current.is_empty():return false
 	var result=Equipment.award(current,kind,grade)
 	if not result.ok:app.message(result.error,4);return false
+	last_award_location=result.location
 	bind_run(result.state);apply_to_build(result.state,app.sim.build)
+	if result.location=="reserve" and not result.id in app.sim.pending_inventory:app.sim.pending_inventory.append(result.id)
 	if result.location!="body":app.message("Орган сохранён "+("в запасе" if result.location=="stock" else "в архиве семейства для следующей жизни"),5)
 	return true
+
+func show_inventory_review():
+	live_mode=true
+	var id=str(app.sim.pending_inventory[0]) if not app.sim.pending_inventory.is_empty() else ""
+	var value=state();var part={}
+	for candidate in value.reserve:
+		if str(candidate.get("id",""))==id:part=candidate;break
+	if part.is_empty():
+		app.sim.pending_inventory.erase(id)
+		app.open_pending();return
+	app.set_stage("inventory_review")
+	var box=app.hud.open_fixed("Запас заполнен","Находка сохранена в архиве. Выбери, что сделать с ней.",900)
+	var card=app.hud.card();box.add_child(card)
+	var row=app.hud.row();card.add_child(row)
+	var art=Home.Portrait.new();art.recipe=Home.recipe_for(part);art.organs={str(part.kind):int(part.rank)};art.custom_minimum_size=Vector2(120,120);row.add_child(art)
+	var summary=VBoxContainer.new();summary.size_flags_horizontal=Control.SIZE_EXPAND_FILL;row.add_child(summary)
+	summary.add_child(app.hud.label(Catalog.item(str(part.kind)).name+" · ранг %d · %s"%[int(part.rank),Rewards.quality_name(int(part.quality))],23,Color("9fe0ca"),true))
+	summary.add_child(app.hud.label("Тело %d/%d кл. · запас %d/%d мест"%[Slots.used_cells(value),int(value.body_capacity),value.stock.size(),int(value.stock_capacity)],20,Color("b8d0cd"),true))
+	var actions=app.hud.row();box.add_child(actions)
+	actions.add_child(app.hud.button("Подробности",func():show_part(id)))
+	var cells_fit=int(part.cells)<=int(value.body_capacity)
+	var equip_button=app.hud.button("Установить",func():incoming=id;selected=[];show_exchange(),true)
+	equip_button.disabled=not cells_fit
+	actions.add_child(equip_button)
+	actions.add_child(app.hud.button("Расщепить",func():confirm_dismantle(id)))
+	box.add_child(app.hud.button("Оставить в архиве",func():
+		app.sim.pending_inventory.erase(id)
+		app.save_run()
+		app.open_pending(),true))
 
 func show_mutations(page: int=0):
 	app.set_stage("organ_mutations")
 	var source=app.sim.build if live_mode else preview.build
-	var keys=source.adaptations.keys()
-	var box=app.hud.open_fixed("Приспособления этой жизни","Текущие эффекты. Полная новая система временных мутаций появится в следующем выпуске.")
-	for id in keys.slice(page*4,page*4+4):box.add_child(app.hud.label("%s · ранг %d\n%s"%[Catalog.item(id).name,source.rank(id),Catalog.item(id).desc],22,Color("9ce3cf"),true))
-	if keys.is_empty():box.add_child(app.hud.label("Пока нет дополнительных приспособлений.",24))
+	var keys=source.temporary_mutations
+	var box=app.hud.open_fixed("Временные мутации","Эти изменения принадлежат только текущей жизни и исчезнут после гибели.")
+	for active in keys.slice(page*3,page*3+3):
+		var data=Catalog.temporary_mutation(str(active.id))
+		box.add_child(app.hud.label("%s · ранг %d · %s\n%s"%[str(data.get("name",active.id)),int(active.get("rank",1)),Rewards.quality_name(int(active.get("quality",0))),str(data.get("summary","Временное усиление"))],20,Color(str(data.get("color","9ce3cf"))),true))
+	if keys.is_empty():box.add_child(app.hud.label("Редкие цисты дают временные мутации организма.",22,Color("a5c4c4"),true))
 	var row=app.hud.row();box.add_child(row)
 	var prev=app.hud.button("‹",func():show_mutations(maxi(0,page-1)));prev.disabled=page<=0;row.add_child(prev)
-	var next=app.hud.button("›",func():show_mutations(page+1));next.disabled=(page+1)*4>=keys.size();row.add_child(next)
+	var next=app.hud.button("›",func():show_mutations(page+1));next.disabled=(page+1)*3>=keys.size();row.add_child(next)
 	box.add_child(app.hud.button("К организму",func():show_body(live_mode)))
 
 func _error(message: String):
@@ -274,7 +367,7 @@ func show_statistics(page: int=0):
 	var nav=app.hud.row();box.add_child(nav)
 	var previous=app.hud.button("‹",func():show_statistics(maxi(0,page-1)));previous.disabled=page<=0;nav.add_child(previous)
 	var next=app.hud.button("›",func():show_statistics(page+1));next.disabled=(page+1)*4>=entries.size();nav.add_child(next)
-	nav.add_child(app.hud.button("Приспособления",show_mutations))
+	nav.add_child(app.hud.button("Мутации",show_mutations))
 	box.add_child(app.hud.button("К организму",func():show_body(live_mode)))
 
 func show_stock_sources():

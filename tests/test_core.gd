@@ -34,12 +34,12 @@ func _initialize():
 	b.biomass = 30
 	check(b.spend(20) and b.biomass == 10, "valid spend")
 	for i in range(10): b.apply("acid")
-	check(b.organs.acid == 10, "rank cap")
+	check(b.organs.acid == 11 and b.rank("acid")==10, "stored organ rank grows while combat rank soft-caps")
 	var rng = RandomNumberGenerator.new()
 	rng.seed = 42
 	var offers = b.offers(rng)
 	check(offers.size() == 3, "three choices")
-	check(not "acid" in offers, "max rank excluded")
+	check("acid" in offers, "endlessly growing organ remains available")
 	var restored = Build.new()
 	restored.from_dict(b.to_dict())
 	check(restored.to_dict() == b.to_dict(), "build roundtrip")

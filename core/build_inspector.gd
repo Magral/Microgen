@@ -17,37 +17,37 @@ static func effect_text(build, id: String, scale: float = 1.0,tempo: float = 1.0
 	match id:
 		"tentacle":
 			damage = 9+r*7; interval = 0.85
-			details = "; щупалец %d; суммарный залп делится между ними; дальность %.1f" % [Catalog.tentacle_count(r),(165+r*12)*scale]
+			details = "; щупалец %d; суммарный залп делится между ними; дальность %.1f" % [Catalog.tentacle_count(r),(165+r*12)*build.specialization_value(id,"reach_mult")*scale]
 		"acid":
 			damage = 4+r*3; continuous = true
-			details = "; радиус %.1f" % ((75+r*9)*scale)
+			details = "; радиус %.1f" % ((75+r*9)*build.specialization_value(id,"radius_mult")*scale)
 		"spikes":
 			damage = 12+r*5; interval = 1.3
-			details = "; шипов %d (DPS на один шип)" % Catalog.shot_count(r)
+			details = "; шипов %d (DPS на один шип)" % mini(7,Catalog.shot_count(r)+build.specialization_bonus(id,"shot_bonus"))
 		"pulse":
 			damage = 12+r*8; interval = 3.2
-			details = "; радиус %.1f" % ((130+r*18)*scale)
+			details = "; радиус %.1f" % ((130+r*18)*build.specialization_value(id,"radius_mult")*scale)
 		"division":
 			damage = 8+r*4; continuous = true
-			details = "; копий %d (урон одной копии)" % Catalog.clone_count(r)
+			details = "; копий %d (урон одной копии)" % mini(6,Catalog.clone_count(r)+build.specialization_bonus(id,"clone_bonus"))
 		"trail":
 			damage = 5+r*3; continuous = true
-			details = "; радиус %.1f; поле 3 с; интервал 0,6 с" % (50+r*6)
+			details = "; радиус %.1f; поле %.1f с; интервал 0,6 с" % [50+r*6,3.0*build.specialization_value(id,"duration_mult")]
 		"infection":
 			damage = 4+r*3; continuous = true
-			details = "; заражение 4,5 с; интервал %.2f с" % (1.6*tempo)
+			details = "; заражение %.1f с; интервал %.2f с" % [4.5*build.specialization_value(id,"duration_mult"),1.6*tempo]
 		"devour":
-			damage = 7+r*5; interval = 0.45
+			damage = 7+r*5; interval = 0.45*build.specialization_value(id,"bite_cooldown_mult")
 			details = "; сектор 80°; время переваривания −35%%; лечение %.1f HP за поглощение" % (r*0.8)
 		"cilia":
 			damage = 10+r*6; interval = 1.4
-			details = "; дальность %.1f; сектор 120°" % ((100+r*10)*scale)
+			details = "; дальность %.1f; сектор 120°" % ((100+r*10)*build.specialization_value(id,"reach_mult")*scale)
 		"enzymes":
 			damage = 3+r*2; continuous = true
-			details = "; ферменты 4 с; интервал 2 с"
+			details = "; ферменты %.1f с; интервал 2 с" % (4.0*build.specialization_value(id,"duration_mult"))
 		"electric":
 			damage = 12+r*6; interval = 2.6
-			details = "; целей %d" % Catalog.electric_targets(r)
+			details = "; целей %d" % mini(7,Catalog.electric_targets(r)+build.specialization_bonus(id,"target_bonus"))
 		"barrier":
 			return "Щит %.1f HP; восстановление 8 с" % (Catalog.scaled_damage(8+r*6,r)*build.power(id))
 		"armor": return "Снижение урона %.1f%% (предел 60%%)" % (build.passive(id)*100)
@@ -81,6 +81,12 @@ static func comparison(build, id: String, quality: int, replace_id: String = "",
 
 static func synergy_lines(build, id: String) -> String:
 	var lines: Array[String] = []
+	var specialization=Catalog.specialization_data(id,str(build.specializations.get(id,"")))
+	if specialization.has("synergy_power"):
+		var linked=false
+		for synergy_id in build.active_synergies():
+			if id in Catalog.SYNERGIES[synergy_id].needs:linked=true;break
+		lines.append("✦ %s: сила органа ×%.2f%s."%[str(specialization.name),float(specialization.synergy_power)," · активирована синергия" if linked else " · включится при синергии"])
 	for synergy in Catalog.SYNERGIES.values():
 		if id not in synergy.needs: continue
 		var a = synergy.needs[0]
@@ -93,3 +99,11 @@ static func synergy_lines(build, id: String) -> String:
 		var state = "✓ Эволюция" if build.evolved(organ) else ("Готова эволюция" if organ in build.evolution_candidates() else "◇ Эволюция")
 		lines.append(state+": "+recipe.name+". "+Catalog.item(organ).name+" %d/6 + " % build.rank(organ)+Catalog.item(recipe.passive).name+" %d/3; урон органа ×1,30 (+30%%)." % build.rank(recipe.passive))
 	return "\n".join(lines)
+
+static func synergy_summary(build,id: String)->String:
+	var lines=[]
+	for synergy in Catalog.SYNERGIES.values():
+		if id not in synergy.needs:continue
+		var a=str(synergy.needs[0]);var b=str(synergy.needs[1])
+		lines.append(("✓ " if build.rank(a)>0 and build.rank(b)>0 else "◇ ")+str(synergy.name)+" · "+str(Catalog.item(a).name)+" + "+str(Catalog.item(b).name))
+	return "\n".join(lines) if not lines.is_empty() else "Нет связей с другими органами."

@@ -95,8 +95,8 @@ func update_game(sim):
 	stats.text = "Размер ×%.1f  ·  Ур. %d  ·  %d/%d HP\nБиомасса %d  ·  %02d:%02d" % [sim.body_radius()/22.0,sim.level,int(sim.hp),int(sim.max_hp),sim.build.biomass,int(sim.elapsed)/60,int(sim.elapsed)%60]
 	var damage = sim.last_damage
 	damage_source.text = "Последний урон: −%.1f HP · %s" % [float(damage.get("amount",0)),damage.get("name","неизвестный источник")] if not damage.is_empty() else ""
-	pending_button.text = "Награда · %d" % sim.reward_queue.size() if not sim.reward_queue.is_empty() else "Мутация · %d" % sim.pending_levels
-	pending_button.visible = modal==null and (not sim.reward_queue.is_empty() or sim.pending_levels>0)
+	pending_button.text = "Орган в архиве · %d" % sim.pending_inventory.size() if not sim.pending_inventory.is_empty() else ("Награда · %d" % sim.reward_queue.size() if not sim.reward_queue.is_empty() else "Мутация · %d" % sim.pending_levels)
+	pending_button.visible = modal==null and (not sim.pending_inventory.is_empty() or not sim.reward_queue.is_empty() or sim.pending_levels>0)
 	shop_button.visible = sim.nearby_colony()>=0 and modal==null
 
 func game_visible(value: bool):

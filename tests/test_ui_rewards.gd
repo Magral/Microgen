@@ -6,6 +6,7 @@ func check(ok: bool, text: String):
 		push_error(text)
 func has_text(node,needle: String) -> bool:
 	if node is Label and needle in node.text: return true
+	if node is Button and needle in node.text: return true
 	for child in node.get_children():
 		if has_text(child,needle): return true
 	return false
@@ -67,9 +68,9 @@ func run():
 	var organ=scene._lineage().state().equipped.filter(func(part):return part.kind=="tentacle")[0]
 	scene._lineage().show_part(organ.id)
 	check(has_text(scene.hud.content,"дальность %.1f" % ((165+scene.sim.build.rank("tentacle")*12)*scene.sim.body_radius()/34.0)),"organ inspector uses actual world range rather than display-size scale")
-	check(has_text(scene.hud.content,"до сопротивления"),"inspector damage labels resistance limit")
+	check(has_text(scene.hud.content,"Урон"),"inspector shows the organ's key combat output")
 	scene._lineage().show_part(organ.id,"growth")
-	check(has_text(scene.hud.content,"/6 +"),"evolution recipe shows required/current ranks")
+	check(has_text(scene.hud.content,"Ловчая корона") and has_text(scene.hud.content,"Улучшить · ранг %d → %d"%[int(organ.rank),int(organ.rank)+1]),"growth tab shows this organ's evolution and exact next rank")
 	scene._lineage().show_body(true)
 	scene.show_development(true)
 	check(scene.stage=="organ_mutations" and has_text(scene.hud.content,"Последние повреждения"),"incoming history has a direct journal view")
@@ -87,6 +88,14 @@ func run():
 	check(not has_text(scene.hud.content,"ответная кислота"),"plain archived organ inspector does not borrow equipped evolution")
 	flow.show_part("organ-%d"%n)
 	check(has_text(scene.hud.content,"ответная кислота"),"evolved organ inspector retains its own behavior")
+	scene.show_atlas()
+	check(scene.stage=="atlas" and has_text(scene.hud.content,"Временные мутации"),"Codex groups run-only mutations separately")
+	scene.codex_view.open_category("temporary",0)
+	var mutation_button=scene.hud.content.find_children("*","Button",true,false).filter(func(button):return "Кислотные везикулы" in button.text)
+	check(not mutation_button.is_empty(),"Codex lists the detailed mutation entry")
+	if not mutation_button.is_empty():mutation_button[0].pressed.emit()
+	check(scene.stage=="codex_entry" and has_text(scene.hud.content,"Кислота +12%"),"Codex describes temporary mutation effects on the organism")
+	scene.close_modal()
 	scene.store.clear_test_files()
 	scene.queue_free()
 	await process_frame

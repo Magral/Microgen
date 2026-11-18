@@ -7,6 +7,8 @@ var extra_organ_cells: int = 0
 var organs: Dictionary = {}
 var adaptations: Dictionary = {}
 var qualities: Dictionary = {}
+var specializations: Dictionary = {}
+var temporary_mutations: Array = []
 var stats: Dictionary = {"evolutions": {}}
 var biomass: int = 0
 var unlocked: Array = Catalog.base_unlocked()
@@ -17,7 +19,12 @@ var _synergy_adaptations_hash: int = -1
 var _synergy_cache: Array = []
 
 func rank(id: String) -> int:
-	return int(organs.get(id, adaptations.get(id, 0)))
+	var stored=int(organs.get(id, adaptations.get(id, 0)))
+	if id in Catalog.ORGANS and stored>10:return Catalog.effective_rank(stored)
+	return stored
+
+func stored_rank(id: String) -> int:
+	return int(organs.get(id, adaptations.get(id,0)))
 
 func used_organ_cells() -> int:
 	var total = maxi(0, extra_organ_cells)
@@ -55,6 +62,7 @@ func apply(id: String, replace_id: String = "", grade: int = -1) -> bool:
 		var inherited_quality = quality(replace_id)
 		target.erase(replace_id)
 		qualities.erase(replace_id)
+		specializations.erase(replace_id)
 		stats.evolutions.erase(replace_id)
 		target[id] = mini(inherited, Catalog.max_rank(id))
 		qualities[id] = maxi(inherited_quality, clampi(grade, 0, 3))
@@ -82,7 +90,7 @@ func active_synergies() -> Array:
 func offers(rng: RandomNumberGenerator, filter_branch: String = "") -> Array:
 	var pool = []
 	for id in unlocked:
-		if Catalog.item(id).is_empty() or rank(id) >= Catalog.max_rank(id): continue
+		if Catalog.item(id).is_empty() or stored_rank(id) >= Catalog.max_rank(id): continue
 		if filter_branch != "" and Catalog.item(id).get("branch", "") != filter_branch: continue
 		pool.append(id)
 	var out = []
@@ -110,7 +118,7 @@ func spend(amount: int) -> bool:
 	return true
 
 func to_dict() -> Dictionary:
-	return {"organ_capacity":organ_capacity,"extra_organ_cells":extra_organ_cells,"organs":organs.duplicate(), "adaptations":adaptations.duplicate(), "biomass":biomass, "unlocked":unlocked.duplicate(), "branch":branch, "qualities":qualities.duplicate(), "stats":stats.duplicate(true)}
+	return {"organ_capacity":organ_capacity,"extra_organ_cells":extra_organ_cells,"organs":organs.duplicate(), "adaptations":adaptations.duplicate(), "biomass":biomass, "unlocked":unlocked.duplicate(), "branch":branch, "qualities":qualities.duplicate(), "specializations":specializations.duplicate(), "temporary_mutations":temporary_mutations.duplicate(true), "stats":stats.duplicate(true)}
 
 func from_dict(data: Dictionary):
 	organ_capacity = maxi(0, int(data.get("organ_capacity", 0)))
@@ -118,6 +126,8 @@ func from_dict(data: Dictionary):
 	organs = {}
 	adaptations = {}
 	qualities = {}
+	specializations = {}
+	temporary_mutations=[]
 	stats = {"evolutions": {}}
 	unlocked = []
 	for id in data.get("unlocked", Catalog.base_unlocked()):
@@ -134,6 +144,19 @@ func from_dict(data: Dictionary):
 	if saved_qualities is Dictionary:
 		for id in organs.keys() + adaptations.keys():
 			qualities[id] = clampi(int(saved_qualities.get(id, 0)), 0, 3)
+	var saved_specializations=data.get("specializations",{})
+	if saved_specializations is Dictionary:
+		for id in organs.keys():
+			var saved=str(saved_specializations.get(id,""))
+			var migrated=Catalog.legacy_specialization(str(id),saved)
+			if migrated!="":specializations[id]=migrated
+	var saved_temporary=data.get("temporary_mutations",[])
+	if saved_temporary is Array:
+		for active in saved_temporary:
+			if not active is Dictionary:continue
+			var id=str(active.get("id",""))
+			if not Catalog.TEMP_MUTATIONS.has(id) or temporary_mutations.size()>=3 or temporary_mutations.any(func(entry):return str(entry.id)==id):continue
+			temporary_mutations.append({"id":id,"rank":clampi(int(active.get("rank",1)),1,3),"quality":clampi(int(active.get("quality",0)),0,3)})
 	var saved_stats = data.get("stats", {})
 	if saved_stats is Dictionary and saved_stats.get("evolutions", {}) is Dictionary:
 		for id in Catalog.EVOLUTIONS:
@@ -146,13 +169,83 @@ func quality(id: String) -> int:
 	return clampi(int(qualities.get(id, 0)), 0, 3) if rank(id) > 0 else 0
 
 func power(id: String) -> float:
-	return Catalog.quality_multiplier(quality(id)) * (1.30 if evolved(id) else 1.0)
+	var saved_rank=stored_rank(id)
+	if str(specializations.get(id,"")).is_empty() and temporary_mutations.is_empty() and (id not in Catalog.ORGANS or saved_rank<=10):
+		return Catalog.quality_multiplier(quality(id))*(1.30 if evolved(id) else 1.0)
+	var mutation=1.0
+	var specialization=str(specializations.get(id,""))
+	if not specialization.is_empty():
+		var specification=Catalog.specialization_data(id,specialization)
+		mutation=float(specification.get("power",1.0))
+		if specification.has("synergy_power"):
+			for synergy_id in active_synergies():
+				if id in Catalog.SYNERGIES[synergy_id].needs:mutation=float(specification.synergy_power);break
+	var endless=1.0
+	if id in Catalog.ORGANS:
+		if saved_rank>10:endless=1.0+minf(0.45,0.02*log(1.0+float(saved_rank-10)))
+	var temporary=1.0
+	if not temporary_mutations.is_empty():
+		for active in temporary_mutations:
+			var targets=Catalog.temporary_mutation(str(active.get("id",""))).get("power_targets",{})
+			if not targets.has(id):continue
+			var potency=float(active.get("rank",1))*Catalog.quality_multiplier(int(active.get("quality",0)))
+			temporary*=pow(float(targets[id]),potency)
+	return Catalog.quality_multiplier(quality(id)) * mutation * endless * temporary * (1.30 if evolved(id) else 1.0)
+
+func specialization_value(id: String,key: String,fallback: float=1.0) -> float:
+	var value=Catalog.specialization_value(id,str(specializations.get(id,"")),key,fallback)
+	if not temporary_mutations.is_empty():
+		for active in temporary_mutations:
+			var targets=Catalog.temporary_mutation(str(active.get("id",""))).get("value_targets",{}).get(id,{})
+			if not targets.has(key):continue
+			var potency=float(active.get("rank",1))*Catalog.quality_multiplier(int(active.get("quality",0)))
+			value*=pow(float(targets[key]),potency)
+	return value
+
+func specialization_bonus(id: String,key: String) -> int:
+	var value=Catalog.specialization_bonus(id,str(specializations.get(id,"")),key)
+	if not temporary_mutations.is_empty():
+		for active in temporary_mutations:
+			var targets=Catalog.temporary_mutation(str(active.get("id",""))).get("bonus_targets",{}).get(id,{})
+			if targets.has(key):value+=int(targets[key])*int(active.get("rank",1))
+	return value
+
+func apply_temporary_mutation(id: String,grade: int=0) -> bool:
+	if not Catalog.TEMP_MUTATIONS.has(id):return false
+	for active in temporary_mutations:
+		if str(active.get("id",""))!=id:continue
+		if int(active.get("rank",1))>=3 and int(active.get("quality",0))>=grade:return false
+		active.rank=mini(3,int(active.get("rank",1))+1)
+		active.quality=maxi(int(active.get("quality",0)),clampi(grade,0,3))
+		return true
+	if temporary_mutations.size()>=3:return false
+	temporary_mutations.append({"id":id,"rank":1,"quality":clampi(grade,0,3)})
+	return true
+
+func temporary_mutation_rank(id: String)->int:
+	for active in temporary_mutations:
+		if str(active.get("id",""))==id:return int(active.get("rank",1))
+	return 0
+
+func temporary_mutation_quality(id: String)->int:
+	for active in temporary_mutations:
+		if str(active.get("id",""))==id:return int(active.get("quality",0))
+	return 0
+
+func temporary_passive_bonus(id: String) -> float:
+	var total=0.0
+	if not temporary_mutations.is_empty():
+		for active in temporary_mutations:
+			var bonus=float(Catalog.temporary_mutation(str(active.get("id",""))).get("passive_bonuses",{}).get(id,0.0))
+			total+=bonus*float(active.get("rank",1))*Catalog.quality_multiplier(int(active.get("quality",0)))
+	return total
 
 func passive(id: String) -> float:
 	var r = rank(id)
 	var multiplier = Catalog.quality_multiplier(quality(id))
 	match id:
-		"armor", "speed": return minf(0.60, Catalog.adaptation_bonus(r) * multiplier)
+		"armor": return minf(0.60, Catalog.adaptation_bonus(r) * multiplier+temporary_passive_bonus(id))
+		"speed": return minf(0.60, Catalog.adaptation_bonus(r) * multiplier)
 		"regen": return 0.5 * r * multiplier
 		"magnet": return 55.0 * r * multiplier
 		"metabolism": return 0.06 * r * multiplier

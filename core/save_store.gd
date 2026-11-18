@@ -12,7 +12,7 @@ func _init(file_path: String = "user://profile.json"):
 	profile = defaults()
 
 func defaults() -> Dictionary:
-	return {"version":1, "cores":0, "unlocked":Catalog.base_unlocked(), "discovered":[], "synergies":[], "upgrades":{"health":0,"collect":0,"regen":0}, "credited":[], "runs":0, "wins":0, "checkpoint":{}, "best":0.0, "legacy":Legacy.defaults(), "families":Families.registry()}
+	return {"version":1, "cores":0, "organium":0, "organ_materials":{}, "unlocked":Catalog.base_unlocked(), "discovered":[], "synergies":[], "upgrades":{"health":0,"collect":0,"regen":0}, "credited":[], "runs":0, "wins":0, "checkpoint":{}, "best":0.0, "legacy":Legacy.defaults(), "families":Families.registry()}
 
 func _read(candidate: String) -> Dictionary:
 	if not FileAccess.file_exists(candidate): return {}
@@ -32,6 +32,13 @@ func _normalize_state(data: Dictionary) -> Dictionary:
 	for key in ["cores","runs","wins","best"]:
 		var value = data.get(key, 0)
 		if not (value is int or value is float) or not is_finite(float(value)): return {}
+	var saved_organium=data.get("organium",0)
+	if not (saved_organium is int or saved_organium is float) or not is_finite(float(saved_organium)) or saved_organium<0 or saved_organium>9007199254740991 or float(saved_organium)!=floorf(float(saved_organium)):return {}
+	var saved_materials=data.get("organ_materials",{})
+	if not saved_materials is Dictionary:return {}
+	for kind in saved_materials:
+		var amount=saved_materials[kind]
+		if (kind not in Catalog.ORGANS and kind not in ["organelle","membrane","plasma"]) or not (amount is int or amount is float) or not is_finite(float(amount)) or amount<0 or amount>9007199254740991 or float(amount)!=floorf(float(amount)):return {}
 	for id in ["health","collect","regen"]:
 		var value = data.get("upgrades", {}).get(id, 0)
 		if not (value is int or value is float) or not is_finite(float(value)): return {}
@@ -42,6 +49,9 @@ func _normalize_state(data: Dictionary) -> Dictionary:
 	for id in Catalog.base_unlocked():
 		if not id in clean.unlocked:clean.unlocked.append(id)
 	clean.cores = maxi(0, int(clean.cores))
+	clean.organium=mini(9007199254740991,maxi(0,int(clean.organium)))
+	clean.organ_materials={}
+	for kind in saved_materials:clean.organ_materials[kind]=mini(9007199254740991,maxi(0,int(saved_materials[kind])))
 	for id in ["health","collect","regen"]:
 		clean.upgrades[id] = clampi(int(clean.upgrades.get(id,0)),0,5)
 	clean.legacy = Legacy.normalize(clean)

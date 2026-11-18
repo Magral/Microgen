@@ -33,8 +33,7 @@ static func populate(hud,box,sim):
 	for id in Catalog.EVOLUTIONS:
 		var recipe = Catalog.EVOLUTIONS[id]
 		var state = "✓ Получена" if sim.build.evolved(id) else ("Готова · ищи в наградах" if id in sim.build.evolution_candidates() else "◇ Требуются мутации")
-		if recipe.has("behavior"):box.add_child(hud.label(recipe.behavior,20,Color("b8daca"),true))
-		box.add_child(hud.label("%s · %s\n%s %d/6 + %s %d/3 · урон ×1,30" % [recipe.name,state,Catalog.item(id).name,sim.build.rank(id),Catalog.item(recipe.passive).name,sim.build.rank(recipe.passive)],20,Color("d3c19f"),true))
+		box.add_child(hud.label("%s · %s · %s %d/6 + %s %d/3" % [recipe.name,state,Catalog.item(id).name,sim.build.stored_rank(id),Catalog.item(recipe.passive).name,sim.build.rank(recipe.passive)],19,Color("d3c19f"),true))
 	var legacy=[]
 	for id in sim.upgrades:
 		var rank=int(sim.upgrades[id])
@@ -50,16 +49,13 @@ static func populate(hud,box,sim):
 			var synergy=Catalog.SYNERGIES[id]
 			var enabled=id in sim.build.active_synergies()
 			if enabled!=active: continue
-			var card=hud.card()
-			box.add_child(card)
 			var column=VBoxContainer.new()
-			card.add_child(column)
-			column.add_child(hud.label(("✓ Активна · " if enabled else "◇ Можно собрать · ")+synergy.name,22,Color("cdb3eb"),true))
+			box.add_child(column)
+			column.add_child(hud.label(("✓ " if enabled else "◇ ")+synergy.name,20,Color("cdb3eb"),true))
 			var names=[]
 			for required in synergy.needs:
 				names.append(("✓ " if sim.build.rank(required)>0 else "+ ")+Catalog.item(required).name)
-			column.add_child(hud.label(" + ".join(names),18,Color("abd1c8"),true))
-			column.add_child(hud.label(synergy.desc,18,Color("aec3c7"),true))
+			column.add_child(hud.label(" + ".join(names),17,Color("abd1c8"),true))
 
 static func _equipped(hud,box,sim,items):
 	if items.is_empty():
@@ -74,34 +70,45 @@ static func item_card(hud,id: String,rank: int,sim=null):
 	var art=Art.new()
 	art.organ_id=id
 	if sim!=null:art.quality=sim.build.quality(id)
-	art.custom_minimum_size=Vector2(112,112)
+	art.custom_minimum_size=Vector2(76,76)
 	row.add_child(art)
 	var details=VBoxContainer.new()
 	details.size_flags_horizontal=Control.SIZE_EXPAND_FILL
 	row.add_child(details)
 	var item=Catalog.item(id)
-	details.add_child(hud.label("%s · %d/%d" % [item.name,rank,Catalog.max_rank(id)],23,Color(item.color),true))
-	details.add_child(hud.label(item.desc,18,Color("bed2d1"),true))
+	var stored_rank=sim.build.stored_rank(id) if sim!=null else rank
+	details.add_child(hud.label(("%s · ранг %d"%[item.name,stored_rank] if id in Catalog.ORGANS else "%s · %d/%d" % [item.name,rank,Catalog.max_rank(id)]),22,Color(item.color),true))
 	if sim!=null:
-		details.add_child(hud.label(Rewards.quality_name(sim.build.quality(id))+(" · "+Catalog.EVOLUTIONS[id].name+" ×1,30" if sim.build.evolved(id) else ""),20,Rewards.quality_color(sim.build.quality(id)),true))
-		details.add_child(hud.label("Сейчас: "+Inspector.effect_text(sim.build,id,sim.ability_scale(),sim.cooldown_factor()),21,Color("9fe0ca"),true))
-		var actual = sim.combat_stats.get("organs",{}).get(id,{})
-		if id in Catalog.ORGANS:
-			details.add_child(hud.label("Факт: урон %.1f · событий урона %d (включая тики) · убийств %d · DPS %.2f (средний за время учёта)" % [float(actual.get("damage",0)),int(actual.get("hits",0)),int(actual.get("kills",0)),float(actual.get("damage",0))/maxf(0.01,sim.elapsed-float(sim.combat_stats.get("tracking_start",0)))],19,Color("b3cbd9"),true))
+		var grade=sim.build.quality(id)
+		var marks=Rewards.quality_name(grade)
+		if sim.build.evolved(id):marks+=" · Эволюция"
+		details.add_child(hud.label(marks,18,Rewards.quality_color(grade),true))
+		details.add_child(hud.label(short_effect(id,sim.build,sim.ability_scale(),sim.cooldown_factor()),19,Color("9fe0ca"),true))
 	else:
-		details.add_child(hud.label("Базовый эффект: "+effect_text(id,rank),22,Color("9fe0ca"),true))
-	var progress=ProgressBar.new()
-	progress.max_value=Catalog.max_rank(id)
-	progress.value=rank
-	progress.show_percentage=false
-	progress.custom_minimum_size.y=12
-	details.add_child(progress)
-	if rank<Catalog.max_rank(id):
-		details.add_child(hud.label(("Следующий ранг: "+Inspector.comparison(sim.build,id,sim.build.quality(id),"",sim.ability_scale(),sim.cooldown_factor())) if sim!=null else "Следующий ранг %d: %s" % [rank+1,effect_text(id,rank+1)],22,Color("c6d8eb"),true))
-	else:
-		details.add_child(hud.label("Максимальный ранг · орган полностью развит",22,Color("e5cc9c"),true))
-	details.add_child(hud.label(Catalog.milestone_text(id,rank),20,Color("d7c39f"),true))
+		details.add_child(hud.label(short_effect(id,null),19,Color("9fe0ca"),true))
 	return card
+
+static func short_effect(id: String,build,scale: float=1.0,tempo: float=1.0)->String:
+	var rank=build.rank(id) if build!=null else 1
+	var power=build.power(id) if build!=null else 1.0
+	var suffix=""
+	match id:
+		"tentacle":suffix="%d щупалец · залп %.0f · дальность %.0f"%[Catalog.tentacle_count(rank),Catalog.scaled_damage(9+rank*7,rank)*power,(165+rank*12)*build.specialization_value(id,"reach_mult")*scale if build!=null else 165+rank*12]
+		"acid":suffix="%.1f урона/с · радиус %.0f"%[Catalog.scaled_damage(4+rank*3,rank)*power,(75+rank*9)*build.specialization_value(id,"radius_mult")*scale if build!=null else 75+rank*9]
+		"spikes":suffix="%d шипов · %.1f урона за шип"%[mini(7,Catalog.shot_count(rank)+(build.specialization_bonus(id,"shot_bonus") if build!=null else 0)),Catalog.scaled_damage(12+rank*5,rank)*power]
+		"pulse":suffix="%.1f урона · радиус %.0f"%[Catalog.scaled_damage(12+rank*8,rank)*power,(130+rank*18)*build.specialization_value(id,"radius_mult")*scale if build!=null else 130+rank*18]
+		"division":suffix="%d копий · %.1f урона/с"%[mini(6,Catalog.clone_count(rank)+(build.specialization_bonus(id,"clone_bonus") if build!=null else 0)),Catalog.scaled_damage(8+rank*4,rank)*power]
+		"trail":suffix="%.1f урона/с · поле %.1f с"%[Catalog.scaled_damage(5+rank*3,rank)*power,3.0*(build.specialization_value(id,"duration_mult") if build!=null else 1.0)]
+		"infection":suffix="%.1f урона/с · заражение %.1f с"%[Catalog.scaled_damage(4+rank*3,rank)*power,4.5*(build.specialization_value(id,"duration_mult") if build!=null else 1.0)]
+		"devour":suffix="укус %.1f · интервал %.2f с"%[Catalog.scaled_damage(7+rank*5,rank)*power,0.45*(build.specialization_value(id,"bite_cooldown_mult") if build!=null else 1.0)]
+		"cilia":suffix="веер %.1f · дальность %.0f"%[Catalog.scaled_damage(10+rank*6,rank)*power,(100+rank*10)*build.specialization_value(id,"reach_mult")*scale if build!=null else 100+rank*10]
+		"enzymes":suffix="%.1f урона/с · метка %.1f с"%[Catalog.scaled_damage(3+rank*2,rank)*power,4.0*(build.specialization_value(id,"duration_mult") if build!=null else 1.0)]
+		"electric":suffix="%.1f урона · %d целей"%[Catalog.scaled_damage(12+rank*6,rank)*power,mini(7,Catalog.electric_targets(rank)+(build.specialization_bonus(id,"target_bonus") if build!=null else 0))]
+		"barrier":suffix="щит %.1f HP · перезарядка 8 с"%[Catalog.scaled_damage(8+rank*6,rank)*power]
+		_:
+			if build!=null:suffix=Inspector.effect_text(build,id,scale,tempo)
+			else:suffix=effect_text(id,rank)
+	return suffix
 
 static func effect_text(id: String,rank: int) -> String:
 	# Catalog owns combat numbers so descriptions stay synchronized with balance.

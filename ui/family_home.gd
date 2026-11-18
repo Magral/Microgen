@@ -63,7 +63,7 @@ static func populate(hud,box,entries: Array,callbacks: Dictionary,pages: Diction
 	_group(hud,groups,"Семьи · подготовка","ancestral",ancestral,callbacks,int(pages.get("ancestral",0)))
 	action(hud,box,"Новый организм",callbacks,"new",[],true,true)
 	var nav=hud.row();box.add_child(nav)
-	for item in [["Геном","genome"],["Атлас","atlas"],["Помощь","help"],["Обновления","updates"],["Выход","exit"]]:
+	for item in [["Геном","genome"],["Кодекс","atlas"],["Помощь","help"],["Обновления","updates"],["Выход","exit"]]:
 		action(hud,nav,item[0],callbacks,item[1])
 
 static func _group(hud,parent,title: String,group: String,entries: Array,callbacks: Dictionary,page: int):

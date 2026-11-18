@@ -537,9 +537,12 @@ func _living_marks(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,rad
 		var id=ids[index]
 		if int(organs.get(id,0))<=0:continue
 		var grade=int(appearance.get("qualities",{}).get(id,0))
+		var specialization=str(appearance.get("specializations",{}).get(id,""))
+		var specialization_data=Catalog.specialization_data(id,specialization) if not specialization.is_empty() else {}
 		var evolved=bool(appearance.get("evolved",{}).get(id,false))
-		if grade<=0 and not evolved:continue
-		var col=Rewards.quality_color(grade) if grade>0 else edge
+		if grade<=0 and not evolved and specialization_data.is_empty():continue
+		var col=Color(str(specialization_data.get("color",""))) if not specialization_data.is_empty() else edge
+		if grade>0:col=col.lerp(Rewards.quality_color(grade),0.38)
 		var a=phase+index*TAU/ids.size()
 		var points=PackedVector2Array()
 		var anchor_index=contour.find(_anchor(contour,a))
@@ -549,6 +552,48 @@ func _living_marks(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,rad
 		if evolved:
 			for j in range(points.size()):points[j]=p+(points[j]-p)*0.92
 			canvas.draw_polyline(points,Color(col,0.85),maxf(0.8,radius*0.018),true)
+		if not specialization_data.is_empty():
+			_draw_specialization_mark(canvas,p,contour,radius,a,time,col,str(specialization_data.get("motif","nodes")))
+	var temporary=appearance.get("temporary_mutations",[])
+	for index in range(temporary.size()):
+		var active=temporary[index]
+		var mutation=Catalog.temporary_mutation(str(active.get("id","")))
+		if mutation.is_empty():continue
+		var a=phase+index*TAU/maxi(1,temporary.size())+PI/5
+		var root=p+_anchor(contour,a)*radius*0.58
+		var col=Color(str(mutation.get("color","9ce3cf")))
+		var pulse=0.7+0.22*sin(time*4.0+index*2.2)
+		canvas.draw_arc(root,radius*0.10,0,TAU,20,Color(col,0.35*pulse),maxf(1.2,radius*0.025),true)
+		_soft_tissue(canvas,root,radius*0.10,Color(col,0.34),time+index)
+		_draw_specialization_mark(canvas,p,contour,radius,a,time,col,str(mutation.get("motif","nodes")))
+
+func _draw_specialization_mark(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,radius: float,angle: float,time: float,col: Color,motif: String):
+	var root=p+_anchor(contour,angle)*radius*0.82
+	match motif:
+		"spines","plates","jaws":
+			for i in range(3):
+				var direction=Vector2.from_angle(angle+(i-1)*0.16)
+				var origin=root+direction.orthogonal()*radius*(i-1)*0.035
+				var tip=origin+direction*radius*(0.12+0.025*sin(time*3+i))
+				canvas.draw_line(origin,tip,Color(col,0.88),maxf(1.2,radius*0.035),true)
+				canvas.draw_line(tip,origin+direction.orthogonal()*radius*0.025,Color(col,0.70),maxf(0.8,radius*0.021),true)
+		"waves","rings":
+			var pulse=0.75+0.20*sin(time*3.8+angle)
+			for i in range(2):
+				canvas.draw_arc(root,radius*(0.055+i*0.028),-1.1,1.1,14,Color(col,pulse*(1.0-i*0.2)),maxf(1.0,radius*0.018),true)
+		"threads","frills":
+			var line=PackedVector2Array()
+			for i in range(7):
+				var u=float(i)/6.0
+				line.append(root+Vector2.from_angle(angle+u*0.82)*radius*(0.03+u*0.14)+Vector2(0,sin(time*4+u*TAU)*radius*0.018))
+			canvas.draw_polyline(line,Color(col,0.82),maxf(1.0,radius*0.024),true)
+		_:
+			for i in range(3):
+				var node_angle=angle+i*TAU/3+time*0.15
+				var node=root+Vector2.from_angle(node_angle)*radius*(0.045+0.018*sin(time*4+i))
+				var size=maxf(1.5,radius*(0.018+0.006*sin(time*5+i)))
+				canvas.draw_circle(node,size,Color(col,0.84))
+				canvas.draw_circle(node,size*0.35,Color(col.lightened(0.35),0.92))
 
 func _evolved_organs(canvas: CanvasItem,p: Vector2,contour: PackedVector2Array,radius: float,organs: Dictionary,time: float,phase: float,body: Color,edge: Color,appearance: Dictionary):
 	var evolved=appearance.get("evolved",{})

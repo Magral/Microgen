@@ -359,10 +359,11 @@ func _draw_player():
 	for rank in sim.build.organs.values(): rank_sum += rank
 	var radius = player_radius()
 	if sim.build.rank("acid")>0:
-		draw_circle(p,(75+sim.build.rank("acid")*9)*sim.ability_scale(),Color(0.55,0.83,0.3,0.04))
-		draw_arc(p,(75+sim.build.rank("acid")*9)*sim.ability_scale(),0,TAU,48,Color(0.6,0.85,0.4,0.14),1.0,true)
+		var acid_radius=(75+sim.build.rank("acid")*9)*sim.build.specialization_value("acid","radius_mult")*sim.ability_scale()
+		draw_circle(p,acid_radius,Color(0.55,0.83,0.3,0.04))
+		draw_arc(p,acid_radius,0,TAU,48,Color(0.6,0.85,0.4,0.14),1.0,true)
 	var anatomy = player_anatomy if not player_anatomy.is_empty() else sim.build.organs.merged(sim.build.adaptations,true)
-	var appearance={"body_chambers":maxi(0,sim.build.organ_capacity-preload("res://core/organism_equipment.gd").base_capacity(str(sim.run_loadout.get("form","predator")))),"stock_chambers":maxi(0,sim.stock_capacity-3),"qualities":sim.build.qualities,"evolved":sim.build.stats.evolutions,"hereditary_traits":sim.inherited_traits,"growth":evolution_growth,"spore_charge":sim.spore_charge,"mantle_flash":0.0,"lashes":{}}
+	var appearance={"body_chambers":maxi(0,sim.build.organ_capacity-preload("res://core/organism_equipment.gd").base_capacity(str(sim.run_loadout.get("form","predator")))),"stock_chambers":maxi(0,sim.stock_capacity-3),"qualities":sim.build.qualities,"specializations":sim.build.specializations,"temporary_mutations":sim.build.temporary_mutations,"evolved":sim.build.stats.evolutions,"hereditary_traits":sim.inherited_traits,"growth":evolution_growth,"spore_charge":sim.spore_charge,"mantle_flash":0.0,"lashes":{}}
 	for effect in sim.effects:
 		if effect.type=="mantle":appearance.mantle_flash=sin(PI*(1-float(effect.life)/float(effect.max)))
 		if effect.type=="lash":

@@ -1,7 +1,9 @@
 extends Node2D
 const OrganismFlow=preload("res://ui/organism_flow.gd")
+const CodexView=preload("res://ui/codex_view.gd")
 const Equipment=preload("res://core/organism_equipment.gd")
 var lineage_flow
+var codex_view
 var capacity_notice=false
 func _lineage():
 	if lineage_flow==null:lineage_flow=OrganismFlow.new(self)
@@ -20,6 +22,7 @@ const View = preload("res://game/world_view.gd")
 const HUD = preload("res://ui/hud.gd")
 const Save = preload("res://core/save_store.gd")
 const Catalog = preload("res://core/catalog.gd")
+const Build = preload("res://core/build_model.gd")
 const Map = preload("res://ui/minimap.gd")
 const Genome = preload("res://core/genome.gd")
 const Specimen = preload("res://ui/specimen_view.gd")
@@ -147,6 +150,9 @@ func _ready():
 			sim.hurt_player(8,{"kind":"projectile","name":"Плюющая амёба","pos":sim.player+Vector2(200,-80),"id":target.id})
 			sim.heal_player(3)
 			show_development(capture_mode=="journal")
+		elif capture_mode == "codex":
+			sim.build.organs={"tentacle":4,"acid":3,"pulse":2}
+			show_codex_entry("tentacle")
 		elif capture_mode == "rewards":
 			sim.build.organs={"tentacle":6,"acid":4,"pulse":3}
 			sim.build.adaptations={"magnet":3,"armor":2}
@@ -472,6 +478,16 @@ func _handle_events() -> bool:
 		elif event.type=="core" and not event.token in next.credited:
 			next.credited.append(event.token);next.cores+=event.amount;changed=true
 			message("Ядра наследия +%d"%event.amount,3)
+		elif event.type=="family_material" and not event.token in next.credited:
+			var found=event.get("materials",{})
+			if not found is Dictionary or found.is_empty():return false
+			for material in found:
+				var amount=int(found[material])
+				if material not in ["organelle","membrane","plasma"] or amount<=0:return false
+				next.organ_materials[material]=mini(9007199254740991,int(next.organ_materials.get(material,0))+amount)
+			next.credited.append(event.token)
+			changed=true
+			message("Поглощённые части тела сохранены как семейные материалы",3)
 		elif event.type=="expansion" and not event.token in next.credited:
 			var target=str(event.get("target",""))
 			var amount=event.get("amount",0)
@@ -508,6 +524,7 @@ func show_capacity_notice():
 	row.add_child(hud.button("Продолжить",resume_game,true))
 
 func finish_run():
+	sim.flush_family_materials()
 	if not sim.events.is_empty() and not _handle_events():return
 	if not _run_matches_family():message("Итоги принадлежат другому семейству",5);return
 	var next = store.profile.duplicate(true)
@@ -535,6 +552,10 @@ func finish_run():
 		next.runs += 1
 		if sim.outcome=="victory": next.wins += 1
 		next.cores += 2 if sim.outcome=="victory" else (1 if sim.elapsed>=60 else 0)
+		var organium_token=sim.run_id+":organium"
+		if organium_token not in next.credited:
+			next.credited.append(organium_token)
+			next.organium=mini(9007199254740991,int(next.get("organium",0))+maxi(1,int(sim.kills/4))+int(sim.minibosses_spawned)*2+(5 if sim.outcome=="victory" else 0))
 	next.best = maxf(float(next.best),sim.elapsed)
 	next.checkpoint = {}
 	for id in sim.build.organs:
@@ -551,7 +572,7 @@ func finish_run():
 	var won = sim.outcome=="victory"
 	var box = hud.open("Эволюция состоялась" if won else "Жизнь продолжается в геноме", "Открытия и полученные ядра наследия сохранены.",820)
 	box.add_child(hud.label("%02d:%02d  ·  Уровень %d  ·  Поглощено и побеждено: %d" % [int(sim.elapsed)/60,int(sim.elapsed)%60,sim.level,sim.kills],24,Color("9ee0cc"),true))
-	box.add_child(hud.label("Ядра наследия: %d\nИзученные синергии: %d/%d" % [store.profile.cores,store.profile.synergies.size(),Catalog.SYNERGIES.size()],22))
+	box.add_child(hud.label("Ядра наследия: %d · Органиум: %d\nИзученные синергии: %d/%d" % [store.profile.cores,int(store.profile.get("organium",0)),store.profile.synergies.size(),Catalog.SYNERGIES.size()],22))
 	box.add_child(hud.label(Development.combat_summary(sim),21,Color("b8dacf"),true))
 	var progress=Legacy.focus_progress(store.profile)
 	if str(progress.get("id",""))!="":box.add_child(hud.label("Цель: "+Legacy.RESEARCH[progress.id].name+" · не хватает %d ядер" % int(progress.remaining),22,Color("cbb4e7"),true))
@@ -569,7 +590,7 @@ func show_level():
 	var box = hud.open("Мутация · уровень %d" % sim.level,"Выбери одно улучшение. Новые органы можно заменить прямо здесь. Биомасса: %d" % sim.build.biomass)
 	var row = hud.row()
 	box.add_child(row)
-	var usable=sim.current_offers.filter(func(id):return sim.build.rank(id)<Catalog.max_rank(id) or int(sim.offer_quality.get(id,0))>sim.build.quality(id))
+	var usable=sim.current_offers.filter(func(id):return sim.build.stored_rank(id)<Catalog.max_rank(id) or int(sim.offer_quality.get(id,0))>sim.build.quality(id))
 	if usable.is_empty():
 		box.add_child(hud.label("Все доступные мутации развиты. Получи 15 биомассы.",22))
 		box.add_child(hud.button("Поглотить ДНК",func(): sim.build.biomass+=15; _complete_level(),true))
@@ -589,35 +610,36 @@ func show_level():
 
 func _mutation_card(id: String,callback: Callable,quality: int=0) -> PanelContainer:
 	var card = hud.card()
-	card.custom_minimum_size.x = 250
+	card.custom_minimum_size.x = 220
 	var column = VBoxContainer.new()
-	column.add_theme_constant_override("separation",12)
+	column.add_theme_constant_override("separation",7)
 	card.add_child(column)
 	var item = Catalog.item(id)
 	var illustration = OrganArt.new()
 	illustration.organ_id = id
 	illustration.quality=maxi(quality,sim.build.quality(id))
-	illustration.custom_minimum_size = Vector2(120,100)
-	# Keep the action and explicit quality label visible before long details.
-	illustration.custom_minimum_size.y = 70
+	illustration.custom_minimum_size = Vector2(84,64)
 	column.add_child(illustration)
 	column.add_child(hud.label(item.name,23,Color(item.color),true))
 	var result_grade=maxi(quality,sim.build.quality(id))
 	if result_grade>0:card.add_theme_stylebox_override("panel",hud.box(Color("122e39").lerp(Rewards.quality_color(result_grade),0.07),Rewards.quality_color(result_grade),16))
-	column.add_child(hud.label(Rewards.quality_name(result_grade)+(" (сохранится)" if result_grade>quality else "")+" · сила ×%.2f" % Rewards.quality_multiplier(result_grade),20,Rewards.quality_color(result_grade),true))
+	column.add_child(hud.label(Rewards.quality_name(result_grade)+(" · новая редкость" if result_grade>quality else ""),17,Rewards.quality_color(result_grade),true))
 	var rank = sim.build.rank(id)
-	var rank_text = ("Новый орган · 1/10" if id in Catalog.ORGANS else "Адаптация · 1/6") if rank==0 else ("Улучшение качества · ранг %d/%d" % [rank,Catalog.max_rank(id)] if rank>=Catalog.max_rank(id) else "Ранг %d → %d / %d" % [rank,rank+1,Catalog.max_rank(id)])
-	column.add_child(hud.label(rank_text,20,Color("97b6ba"),true))
+	var shown_rank=sim.build.stored_rank(id)
+	var rank_text = ("Новый орган" if rank==0 else ("Ранг %d → %d"%[shown_rank,shown_rank+1] if id in Catalog.ORGANS else "Ранг %d/%d"%[rank,Catalog.max_rank(id)]))
+	column.add_child(hud.label(rank_text+" · "+("сохраняется в геноме" if id in Catalog.ORGANS else "на эту жизнь"),17,Color("b7cda9"),true))
 	var full = sim.build.rank(id)==0 and ((id in Catalog.ORGANS and sim.build.organs.size()>=6) or (id in Catalog.ADAPTATIONS and sim.build.adaptations.size()>=4))
 	column.add_child(hud.button("Заменить орган" if full else "Выбрать",callback,true))
-	var description = hud.label(item.desc,19,Color("c5d8d7"),true)
-	description.custom_minimum_size.y = 66
-	column.add_child(description)
-	column.add_child(hud.label(Inspector.comparison(sim.build,id,quality,"",sim.ability_scale(),sim.cooldown_factor()),20,Color("9fe0ca"),true))
-	column.add_child(hud.label(Catalog.milestone_text(id,rank),20,Color("d7c39f"),true))
-	var hints = hud.label(Inspector.synergy_lines(sim.build,id),16,Color("d0b3e8"),true)
-	hints.custom_minimum_size.y = 75
-	column.add_child(hints)
+	var preview=Build.new();preview.from_dict(sim.build.to_dict())
+	var target=preview.organs if id in Catalog.ORGANS else preview.adaptations
+	if id in target:target[id]=mini(Catalog.max_rank(id),int(target[id])+1)
+	else:target[id]=1
+	preview.qualities[id]=maxi(preview.quality(id),result_grade)
+	column.add_child(hud.label(Development.short_effect(id,preview,sim.ability_scale(),sim.cooldown_factor()),18,Color("9fe0ca"),true))
+	var related=[]
+	for synergy in Catalog.SYNERGIES.values():
+		if id in synergy.needs and preview.rank(synergy.needs[0])>0 and preview.rank(synergy.needs[1])>0:related.append(synergy.name)
+	if not related.is_empty():column.add_child(hud.label("Активирует: "+", ".join(related),16,Color("d0b3e8"),true))
 	return card
 
 func reroll_level(focused: bool):
@@ -663,7 +685,8 @@ func _complete_level():
 	deferred_choices = false
 	sim.rerolls = 0
 	_tone(640)
-	if not deferred_choices and not sim.reward_queue.is_empty(): show_reward()
+	if not sim.pending_inventory.is_empty(): _lineage().show_inventory_review()
+	elif not deferred_choices and not sim.reward_queue.is_empty(): show_reward()
 	elif not deferred_choices and sim.pending_levels>0: show_level()
 	else: resume_game()
 	save_run()
@@ -684,13 +707,12 @@ func show_replacement(id: String,origin: String,stock: int=-1):
 		var lost = []
 		for synergy in sim.build.active_synergies():
 			if old in Catalog.SYNERGIES[synergy].needs: lost.append(Catalog.SYNERGIES[synergy].name)
-		var inherited = mini(1+int(floor((sim.build.rank(old)-1)/2.0)),Catalog.max_rank(id))
-		var text = "%s %d → %s %d" % [Catalog.item(old).name,sim.build.rank(old),Catalog.item(id).name,inherited]
-		if not lost.is_empty(): text += "\nПотеря: "+", ".join(lost)
+		var inherited = mini(1+int(floor((sim.build.stored_rank(old)-1)/2.0)),Catalog.max_rank(id))
 		var grade = int(sim.offer_quality.get(id,0)) if origin=="level" else (int(sim.reward_options[reward_index].get("quality",0)) if origin=="reward" else int(sim.world.colonies[active_shop].stock[stock].get("quality",0)))
-		box.add_child(hud.button(text,func(): confirm_replacement(old)))
-		box.add_child(hud.label("Качество после замены: "+Rewards.quality_name(maxi(grade,sim.build.quality(old))),20,Rewards.quality_color(maxi(grade,sim.build.quality(old))),true))
-		box.add_child(hud.label(Inspector.comparison(sim.build,id,grade,old,sim.ability_scale(),sim.cooldown_factor()),19,Color("b9d9cf"),true))
+		box.add_child(hud.button("Заменить %s · ранг %d → %d" % [Catalog.item(old).name,sim.build.stored_rank(old),inherited],func(): confirm_replacement(old)))
+		box.add_child(hud.label(Rewards.quality_name(maxi(grade,sim.build.quality(old)))+((" · потеряется: "+", ".join(lost)) if not lost.is_empty() else ""),18,Rewards.quality_color(maxi(grade,sim.build.quality(old))),true))
+		var projected=Build.new();projected.from_dict(sim.build.to_dict());projected.apply(id,old,grade)
+		box.add_child(hud.label(Development.short_effect(id,projected,sim.ability_scale(),sim.cooldown_factor()),18,Color("b9d9cf"),true))
 	box.add_child(hud.button("Отмена",func(): show_level() if origin=="level" else (show_reward() if origin=="reward" else show_shop())))
 
 func confirm_replacement(old: String):
@@ -726,17 +748,21 @@ func show_shop():
 		card.add_child(col)
 		col.add_child(hud.label("Восстановление" if item.id=="heal" else Catalog.item(item.id).name,23,Color("a5e4ca"),true))
 		var b = hud.button("Получено" if item.sold else "Купить · %d" % item.price,func(): buy_shop(i),true)
-		b.disabled = item.sold or sim.build.biomass<item.price or (item.id=="heal" and sim.hp>=sim.max_hp) or (item.id!="heal" and sim.build.rank(item.id)>=Catalog.max_rank(item.id) and int(item.get("quality",0))<=sim.build.quality(item.id))
+		b.disabled = item.sold or sim.build.biomass<item.price or (item.id=="heal" and sim.hp>=sim.max_hp) or (item.id!="heal" and sim.build.stored_rank(item.id)>=Catalog.max_rank(item.id) and int(item.get("quality",0))<=sim.build.quality(item.id))
 		col.add_child(b)
 		if item.id!="heal":
-			col.add_child(hud.label(Rewards.quality_name(int(item.get("quality",0))),20,Rewards.quality_color(int(item.get("quality",0))),true))
+			col.add_child(hud.label(Rewards.quality_name(int(item.get("quality",0))),18,Rewards.quality_color(int(item.get("quality",0))),true))
 			var illustration=OrganArt.new()
 			illustration.organ_id=item.id
-			illustration.custom_minimum_size=Vector2(120,90)
+			illustration.custom_minimum_size=Vector2(90,68)
 			col.add_child(illustration)
-			col.add_child(hud.label(Inspector.comparison(sim.build,item.id,int(item.get("quality",0)),"",sim.ability_scale(),sim.cooldown_factor()),17,Color("9fe0ca"),true))
-		col.add_child(hud.label("Восстановить 40 здоровья" if item.id=="heal" else Catalog.item(item.id).desc,19,Color("b3cfcb"),true))
-		if item.id!="heal": col.add_child(hud.label(Catalog.synergy_hint(item.id,sim.build.organs.merged(sim.build.adaptations)),16,Color("ccb0e5"),true))
+			var projected=Build.new();projected.from_dict(sim.build.to_dict())
+			var current=projected.organs if item.id in Catalog.ORGANS else projected.adaptations
+			if item.id in current:current[item.id]=mini(Catalog.max_rank(item.id),int(current[item.id])+1)
+			else:current[item.id]=1
+			projected.qualities[item.id]=maxi(projected.quality(item.id),int(item.get("quality",0)))
+			col.add_child(hud.label(Development.short_effect(item.id,projected,sim.ability_scale(),sim.cooldown_factor()),17,Color("9fe0ca"),true))
+		else:col.add_child(hud.label("+40 здоровья",18,Color("b3cfcb"),true))
 
 	box.add_child(hud.button("Вернуться в микромир",resume_game))
 
@@ -825,20 +851,12 @@ func _update_screen():
 
 
 func show_atlas():
-	set_stage("atlas")
-	var box = hud.open("Атлас эволюции", "Изучи органы в забегах и открой все %d сочетаний." % Catalog.SYNERGIES.size())
-	for id in Catalog.SYNERGIES:
-		var item = Catalog.SYNERGIES[id]
-		var known = id in store.profile.synergies
-		box.add_child(hud.label(("✓ " if known else "◇ ")+item.name,23,Color("c8abe8")))
-		var text = Catalog.item(item.needs[0]).name+" + "+Catalog.item(item.needs[1]).name
-		box.add_child(hud.label(text+"\n"+(item.desc if known else "Собери оба органа, чтобы изучить взаимодействие."),18,Color("a8c5c5"),true))
-	box.add_child(hud.label("Органы и адаптации",25))
-	for id in Catalog.ORGANS.keys()+Catalog.ADAPTATIONS.keys():
-		var state = "Изучен" if id in store.profile.discovered else ("Доступен" if id in store.profile.unlocked else "Закрыт: геном")
-		box.add_child(hud.label(state,18,Color("a9ceca"),true))
-		box.add_child(Development.item_card(hud,id,1))
-	box.add_child(hud.button("В меню",show_menu))
+	if codex_view==null:codex_view=CodexView.new(self)
+	codex_view.home()
+
+func show_codex_entry(kind: String):
+	if codex_view==null:codex_view=CodexView.new(self)
+	codex_view.open_entry_for_kind(kind)
 
 func show_help():
 	set_stage("help")
@@ -887,7 +905,7 @@ func _notification(what):
 		elif stage=="capacity_notice":resume_game()
 		elif stage in ["new_family","family_delete","family_error"]:show_menu()
 		elif stage=="genome":_lineage().close_legacy()
-		elif stage in ["atlas","help","start","gallery","updates"]: show_menu()
+		elif stage in ["atlas","codex_category","codex_entry","help","start","gallery","updates"]: show_menu()
 	elif what==NOTIFICATION_WM_CLOSE_REQUEST:
 		save_run()
 		get_tree().quit()
@@ -902,16 +920,17 @@ func _capture():
 
 func open_pending():
 	deferred_choices = false
-	if not sim.reward_queue.is_empty(): show_reward()
+	if not sim.pending_inventory.is_empty(): _lineage().show_inventory_review()
+	elif not sim.reward_queue.is_empty(): show_reward()
 	elif sim.pending_levels>0: show_level()
 
 func close_modal():
 	match stage:
-		"organ_detail","organ_picker","organ_exchange","organ_mutations":_lineage().show_body(_lineage().live_mode)
+		"organ_detail","organ_picker","organ_exchange","organ_mutations","inventory_review":_lineage().show_body(_lineage().live_mode)
 		"new_family","family_delete","family_error":show_menu()
 		"menu": get_tree().quit()
 		"genome":_lineage().close_legacy()
-		"start","atlas","help","gallery","results": show_menu()
+		"start","atlas","codex_category","codex_entry","help","gallery","results": show_menu()
 		"development": close_development()
 		"inherit": _close_imprints()
 		"updates": show_menu()
@@ -951,6 +970,16 @@ func show_reward():
 		var option = sim.reward_options[i]
 		if option.kind=="mutation":
 			row.add_child(_mutation_card(option.id,func(): claim_reward(i),int(option.quality)))
+		elif option.kind=="temporary":
+			var card=hud.card();card.custom_minimum_size.x=250;row.add_child(card)
+			var column=VBoxContainer.new();card.add_child(column)
+			var data=Catalog.temporary_mutation(str(option.id))
+			var art_row=hud.row();column.add_child(art_row)
+			var art=OrganArt.new();art.organ_id=str(data.get("organ","devour"));art.quality=int(option.quality);art.custom_minimum_size=Vector2(72,72);art_row.add_child(art)
+			var title=hud.label(str(data.get("name",option.id)),21,Color(str(data.get("color","a9e5cf"))),true);title.size_flags_horizontal=Control.SIZE_EXPAND_FILL;art_row.add_child(title)
+			column.add_child(hud.label("Временная · ранг %d → %d · %s"%[sim.build.temporary_mutation_rank(str(option.id)),mini(3,sim.build.temporary_mutation_rank(str(option.id))+1),Rewards.quality_name(int(option.quality))],18,Color("b6c9cb"),true))
+			column.add_child(hud.label(str(data.get("summary","Временное усиление органа")),18,Color("9fe0ca"),true))
+			column.add_child(hud.button("Встроить в тело",func():claim_reward(i),true))
 		else:
 			var card = hud.card()
 			card.custom_minimum_size.x = 250
@@ -983,6 +1012,7 @@ func claim_reward(index: int,replace_id: String=""):
 		if not sim.claim_reward(index,replace_id): return
 	_tone(720)
 	save_run()
-	if not sim.reward_queue.is_empty(): show_reward()
+	if not sim.pending_inventory.is_empty(): _lineage().show_inventory_review()
+	elif not sim.reward_queue.is_empty(): show_reward()
 	elif sim.pending_levels>0: show_level()
 	else: resume_game()

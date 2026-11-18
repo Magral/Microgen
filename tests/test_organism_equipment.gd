@@ -24,10 +24,12 @@ func _initialize():
 	small.body_capacity=3;small.stock_capacity=0
 	var result=equipment.award(small,"acid",2)
 	check(result.ok and result.location=="reserve" and result.state.reserve.size()==1,"earned organ survives full body and stock")
+	var direct_install=equipment.move(result.state,result.id,"body",[result.state.equipped[0].id])
+	check(direct_install.ok and direct_install.state.equipped.any(func(part):return part.id==result.id) and direct_install.state.reserve.any(func(part):return part.id==small.equipped[0].id),"archived discovery can be installed directly while displaced organ remains archived")
 	check(small.reserve.is_empty(),"award does not alias input")
 	var same=equipment.award(small,"devour",2)
 	check(same.ok and same.state.equipped.size()==1 and same.state.equipped[0].rank==2 and same.state.equipped[0].quality==2,"normal level-up improves existing instance")
-	same.state.equipped[0].rank=10
+	same.state.equipped[0].rank=9007199254740991
 	check(not equipment.award(same.state,"devour",1).ok,"max rank without quality improvement rejects")
 	check(equipment.award(same.state,"devour",3).state.equipped[0].quality==3,"max rank can gain quality")
 	var expanded=equipment.expand(result.state,"stock").state
@@ -48,7 +50,7 @@ func _initialize():
 	check(exchange.ok and exchange.state.stock.size()==2,"one large organ can freely replace multiple small organs")
 	var duplicate=pair.equipped.filter(func(part):return part.kind=="spikes")[0].duplicate(true);duplicate.id="organ-99";duplicate.rank=9;duplicate.quality=3
 	pair.equipped.append(duplicate);pair.next_id=100
-	check(equipment.validate(pair)=="" and equipment.aggregate(pair).organs.spikes==10 and equipment.aggregate(pair).qualities.spikes==3,"same-kind instances aggregate capped ranks and best grade")
+	check(equipment.validate(pair)=="" and equipment.aggregate(pair).organs.spikes==12 and equipment.aggregate(pair).qualities.spikes==3,"same-kind instances aggregate unbounded ranks and best grade")
 	var twins=pair.duplicate(true)
 	for part in twins.equipped:
 		if part.kind=="spikes":part.rank=10;part.quality=3
