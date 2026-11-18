@@ -54,5 +54,16 @@ func run():
 	world.sim.paused = false
 	world._process(0.0)
 	check(display.target.render_target_update_mode == SubViewport.UPDATE_ALWAYS, "resumed world keeps rendering after paused resize")
+	var rich_view = View.new()
+	var direct_display = MobileDisplay.new()
+	root.add_child(direct_display)
+	direct_display.direct_world = true
+	direct_display.mount(root,rich_view)
+	direct_display.set_engine_metrics(true)
+	check(direct_display.target==null and rich_view.get_viewport()==root and root.disable_3d, "detailed world only uses the root 2D viewport")
+	check(not rich_view.mobile_detail and not rich_view.terrain.mobile_detail and not rich_view.painter.mobile_tissue, "the full detail path draws authored assets")
+	for i in range(80):direct_display.sample_frame(1.0/12.0,true)
+	check(direct_display.level==0 and direct_display.frame_summary.contains("432 px"), "the measured resolution never drops during the renderer comparison")
+	direct_display.set_engine_metrics(false)
 	print("MOBILE DISPLAY: %d failures" % failures)
 	quit(0 if failures == 0 else 1)

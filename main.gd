@@ -88,6 +88,7 @@ func _ready():
 	view = View.new()
 	if OS.get_name() == "Android" or "--mobile-profile" in OS.get_cmdline_user_args():
 		mobile_display = MobileDisplay.new()
+		mobile_display.direct_world = true
 		add_child(mobile_display)
 		mobile_display.mount(get_window(), view)
 	else:

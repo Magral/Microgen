@@ -34,6 +34,7 @@ var organ_cache_misses=0
 var absorbable: Array=[]
 var canvas_extent := Vector2.ZERO
 var mobile_detail := false
+var mobile_profile := false
 var detail_limit := 6
 var paused_frame_key := 0
 var paused_frame_ready := false
@@ -82,10 +83,10 @@ var joystick_visible = false
 var font = ThemeDB.fallback_font
 
 func _process(dt):
-	var view_started = Time.get_ticks_usec() if mobile_detail else 0
+	var view_started = Time.get_ticks_usec() if mobile_profile else 0
 	if sim != null:
 		var size = layout_size()
-		if mobile_detail:
+		if mobile_profile:
 			var buffer = get_viewport() as SubViewport
 			if sim.paused:
 				var key = hash([sim.get_instance_id(), size, sim.world.seed_value, sim.player, sim.hp, sim.level,
@@ -182,14 +183,14 @@ func _process(dt):
 		_prune_organ_cache(alive)
 	water_surface.queue_redraw()
 	queue_redraw()
-	if mobile_detail:view_update_us += Time.get_ticks_usec()-view_started
+	if mobile_profile:view_update_us += Time.get_ticks_usec()-view_started
 
 func screen(p: Vector2) -> Vector2:
 	return p-sim.player+layout_size()*Vector2(0.5,0.51)
 
 func _draw():
 	if sim == null: return
-	var draw_started = Time.get_ticks_usec() if mobile_detail else 0
+	var draw_started = Time.get_ticks_usec() if mobile_profile else 0
 	var size = layout_size()
 	var b = sim.world.biome(sim.player)
 	var center=size*Vector2(0.5,0.51)
@@ -317,9 +318,9 @@ func _draw():
 			clone_index += 1
 	if not sim.boss_breakup.is_empty():
 		_draw_boss_breakup(sim.boss_breakup)
-	var body_started = Time.get_ticks_usec() if mobile_detail else 0
+	var body_started = Time.get_ticks_usec() if mobile_profile else 0
 	_draw_player()
-	if mobile_detail:body_draw_us += Time.get_ticks_usec()-body_started
+	if mobile_profile:body_draw_us += Time.get_ticks_usec()-body_started
 	if sim.last_damage.get("kind","")=="toxin" and sim.elapsed-float(sim.last_damage.get("time",-10))<1.5:OrganicFX.infected(self,screen(sim.player),sim.body_radius(),sim.player_genome,visual_time,2.0,motion_for("player"))
 	for cyst in sim.cysts:
 		if cyst.get("captured",false):RewardArt.paint(self,screen(cyst.pos),int(cyst.tier),visual_time,int(cyst.id),float(cyst.get("progress",0.0)))
@@ -331,7 +332,7 @@ func _draw():
 		draw_circle(p,3,col)
 	# Several pickups can finish in one instant. One tissue pulse is enough
 	# because each piece has already crossed the membrane in _draw_player.
-	var effects_started = Time.get_ticks_usec() if mobile_detail else 0
+	var effects_started = Time.get_ticks_usec() if mobile_profile else 0
 	var latest_assimilation = {}
 	for effect in sim.effects:
 		if effect.type in ["damage","heal","lash"]:continue
@@ -352,7 +353,7 @@ func _draw():
 			draw_arc(p,effect.r*(1-alpha*0.6),0,TAU,40,Color(col,alpha*0.55),2,true)
 	if not latest_assimilation.is_empty():
 		OrganicFX.paint(self,latest_assimilation,sim.player,center,visual_time,clones,true)
-	if mobile_detail:effects_draw_us += Time.get_ticks_usec()-effects_started
+	if mobile_profile:effects_draw_us += Time.get_ticks_usec()-effects_started
 	_draw_damage_sources()
 	draw_set_transform(Vector2.ZERO)
 	_draw_absorbable(size)
@@ -412,7 +413,7 @@ func _draw():
 	if b==1: draw_rect(Rect2(Vector2.ZERO,size),Color(0.15,0.2,0.02,0.025))
 	if menu: draw_rect(Rect2(Vector2.ZERO,size),Color(0.015,0.03,0.05,0.45))
 
-	if mobile_detail:draw_us += Time.get_ticks_usec() - draw_started
+	if mobile_profile:draw_us += Time.get_ticks_usec() - draw_started
 
 func _draw_compact_enemy(enemy: Dictionary, p: Vector2):
 	var data = painter.anatomy(enemy.genome)
@@ -479,7 +480,7 @@ func _draw_player():
 		draw_arc(p,acid_radius,0,TAU,48,Color(0.6,0.85,0.4,0.14),1.0,true)
 	var anatomy = player_anatomy if not player_anatomy.is_empty() else sim.build.organs.merged(sim.build.adaptations,true)
 	var appearance={"body_chambers":maxi(0,sim.build.organ_capacity-preload("res://core/organism_equipment.gd").base_capacity(str(sim.run_loadout.get("form","predator")))),"stock_chambers":maxi(0,sim.stock_capacity-3),"qualities":sim.build.qualities,"specializations":sim.build.specializations,"temporary_mutations":sim.build.temporary_mutations,"evolved":sim.build.stats.evolutions,"active_synergies":sim.build.active_synergies(),"hereditary_traits":sim.inherited_traits,"growth":evolution_growth,"spore_charge":sim.spore_charge,"mantle_flash":0.0,"lashes":{}}
-	if mobile_detail and tracked_sim==sim:appearance["prepared_contour"]=prepared_contour
+	if mobile_profile and tracked_sim==sim:appearance["prepared_contour"]=prepared_contour
 	for effect in sim.effects:
 		if effect.type=="mantle":appearance.mantle_flash=sin(PI*(1-float(effect.life)/float(effect.max)))
 		if effect.type=="lash":

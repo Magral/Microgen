@@ -5,6 +5,7 @@ const WORLD_HEIGHTS = [540.0, 432.0, 336.0, 270.0]
 const DETAIL_LIMITS = [2, 1, 0, 0]
 const FRAME_WINDOW = 2.0
 var target: SubViewport
+var direct_world := false
 var image: TextureRect
 var root_window: Window
 var world_view
@@ -23,6 +24,13 @@ var gpu_samples := 0
 func mount(window: Window, view: Node2D):
 	root_window = window
 	world_view = view
+	world_view.mobile_profile = true
+	if direct_world:
+		root_window.disable_3d = true
+		add_child(view)
+		root_window.size_changed.connect(resize)
+		resize()
+		return
 	target = SubViewport.new()
 	target.disable_3d = true
 	target.world_2d = World2D.new()
@@ -45,6 +53,11 @@ func resize():
 	var extent = root_window.get_visible_rect().size
 	if extent.x < 2.0 or extent.y < 2.0:return
 	var logical = Vector2i(extent.round())
+	if direct_world:
+		world_view.canvas_extent = Vector2(logical)
+		world_view.paused_frame_ready = false
+		world_view.queue_redraw()
+		return
 	var height = minf(WORLD_HEIGHTS[level], float(root_window.size.y))
 	var pixel_size = Vector2i((extent * (height / extent.y)).round()).max(Vector2i(2, 2))
 	target.size_2d_override = logical
@@ -68,7 +81,7 @@ func record_simulation(usec: int):
 func set_engine_metrics(enabled: bool):
 	if engine_metrics == enabled:return
 	engine_metrics = enabled
-	RenderingServer.viewport_set_measure_render_time(target.get_viewport_rid(), enabled)
+	if target != null:RenderingServer.viewport_set_measure_render_time(target.get_viewport_rid(), enabled)
 	RenderingServer.viewport_set_measure_render_time(root_window.get_viewport_rid(), enabled)
 
 func sample_frame(seconds: float, active: bool):
@@ -87,10 +100,13 @@ func sample_frame(seconds: float, active: bool):
 	interval += seconds
 	frame_times.append(seconds)
 	if engine_metrics:
-		var world_rid = target.get_viewport_rid()
 		var root_rid = root_window.get_viewport_rid()
-		engine_time.x += RenderingServer.get_frame_setup_time_cpu() + RenderingServer.viewport_get_measured_render_time_cpu(world_rid) + RenderingServer.viewport_get_measured_render_time_cpu(root_rid)
-		var gpu = RenderingServer.viewport_get_measured_render_time_gpu(world_rid) + RenderingServer.viewport_get_measured_render_time_gpu(root_rid)
+		engine_time.x += RenderingServer.get_frame_setup_time_cpu() + RenderingServer.viewport_get_measured_render_time_cpu(root_rid)
+		var gpu = RenderingServer.viewport_get_measured_render_time_gpu(root_rid)
+		if target != null:
+			var world_rid = target.get_viewport_rid()
+			engine_time.x += RenderingServer.viewport_get_measured_render_time_cpu(world_rid)
+			gpu += RenderingServer.viewport_get_measured_render_time_gpu(world_rid)
 		if gpu > 0.0:
 			engine_time.y += gpu
 			gpu_samples += 1
@@ -102,7 +118,9 @@ func sample_frame(seconds: float, active: bool):
 	var game_ms = float(simulation_us) / maxf(1.0, simulation_samples) / 1000.0
 	var view_ms = (view_us - last_view_us) / (frame_times.size() * 1000.0)
 	last_view_us = view_us
-	frame_summary = "%.0f FPS · 95%% кадров ≤ %.1f мс · Мир %d px · Логика %.1f мс · Отрисовка %.1f мс · Тест 3" % [fps, p95 * 1000.0, target.size.y, game_ms, view_ms.x]
+	var height = root_window.size.y if target == null else target.size.y
+	var backend = "Vulkan" if RenderingServer.get_current_rendering_driver_name()=="vulkan" else "OpenGL"
+	frame_summary = "%.0f FPS · 95%% кадров ≤ %.1f мс · Мир %d px · Логика %.1f мс · Отрисовка %.1f мс · %s" % [fps, p95 * 1000.0, height, game_ms, view_ms.x, backend]
 	if engine_metrics:
 		var gpu_text = "%.1f мс" % (engine_time.y/gpu_samples) if gpu_samples > 0 else "—"
 		frame_summary += "\nТело %.1f · Эффекты %.1f · Подготовка мира %.1f · Рендер CPU %.1f мс · GPU %s" % [view_ms.y, view_ms.z, view_ms.w, engine_time.x/frame_times.size(), gpu_text]
@@ -112,7 +130,7 @@ func sample_frame(seconds: float, active: bool):
 	simulation_samples = 0
 	slow_windows = slow_windows + 1 if fps < 57.0 and p90 > 0.0185 else 0
 	# Sustained misses lower quality. A severe drop skips the second window.
-	if (slow_windows >= 2 or fps < 35.0) and level < WORLD_HEIGHTS.size() - 1:
+	if not direct_world and (slow_windows >= 2 or fps < 35.0) and level < WORLD_HEIGHTS.size() - 1:
 		level += 1
 		slow_windows = 0
 		resize()
