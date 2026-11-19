@@ -3,7 +3,7 @@ title = Microgen Defold Preview
 version = 0.1.0
 
 [bootstrap]
-main_collection = /main/arena.collection
+main_collection = /main/arena.collectionc
 
 [display]
 width = 2460
@@ -16,7 +16,7 @@ variable_dt = 1
 dynamic_orientation = 0
 
 [input]
-game_binding = /main/arena.input_binding
+game_binding = /main/arena.input_bindingc
 
 [android]
 package = org.magral.microgen.defold
