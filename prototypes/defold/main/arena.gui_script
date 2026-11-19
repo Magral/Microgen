@@ -1,11 +1,12 @@
 local ARENA = require "main.arena_data"
+local ART = require "main.arena_art"
 local WIDTH, HEIGHT = ARENA.size[1], ARENA.size[2]
 local SAMPLE_SECONDS, WARMUP_SECONDS = 2, 2
 local WORLD_COLOR = vmath.vector4(1, 1, 1, 1)
 local PALETTE = {
-    enemy_toxin = vmath.vector4(1.0, .39, .52, .85),
-    spore = vmath.vector4(.72, .62, 1.0, .64),
-    poison = vmath.vector4(.63, .95, .49, .56),
+    enemy_toxin = vmath.vector4(1.0, .46, .49, .82),
+    spore = vmath.vector4(.72, .60, .98, .47),
+    poison = vmath.vector4(.65, .90, .51, .42),
 }
 local DIRECTION = {up = true, down = true, left = true, right = true}
 
@@ -40,6 +41,7 @@ function init(self)
     local world = ARENA
     self.world = world
     self.elapsed = 0
+    self.facing = 0
     self.position = screen_point(world.player.pos)
     self.keys = {}
     self.pointer = nil
@@ -48,7 +50,10 @@ function init(self)
     self.window_time = 0
     self.last_tick = socket.gettime()
     self.driver = graphics.get_adapter_info().family or "GPU"
-    sprite("world", "terrain", vmath.vector3(WIDTH / 2, HEIGHT / 2, 0), WIDTH, HEIGHT)
+    local width = WIDTH / 3
+    for i = 0, 2 do
+        sprite("world_" .. i, "terrain_" .. i, vmath.vector3(width*(i+.5), HEIGHT/2, 0), width, HEIGHT)
+    end
     self.fields = {}
     for i, field in ipairs(world.fields) do
         local color = assert(PALETTE[field.kind])
@@ -62,13 +67,14 @@ function init(self)
     end
     self.actors = {}
     for i, actor in ipairs(world.actors) do
-        local diameter = actor.radius * 2.60
-        self.actors[i] = sprite("cells", actor.kind, screen_point(actor.pos), diameter, diameter)
+        local frame = string.format("actor_%02d", i-1)
+        local size = ART[frame]
+        self.actors[i] = sprite("cells", frame, screen_point(actor.pos), size[1], size[2])
     end
     local diameter = world.player.radius * 2.60
-    self.player = sprite("cells", "player", self.position, diameter, diameter)
-    self.surge = sprite("cells", "surge", self.position, diameter * 2.5, diameter * 2.5, vmath.vector4(.66,1,.40,.45))
-    self.shield = sprite("cells", "shield", self.position, diameter * 1.28, diameter * 1.28, vmath.vector4(.57,.94,1,.48))
+    self.player = sprite("cells", "player", self.position, ART.player[1], ART.player[2])
+    self.surge = sprite("cells", "surge", self.position, diameter * 2.1, diameter * 2.1, vmath.vector4(.66,1,.40,.25))
+    self.shield = sprite("cells", "shield", self.position, diameter * 1.19, diameter * 1.19, vmath.vector4(.57,.94,1,.39))
 
     box(405,955,722,166,vmath.vector4(.021,.075,.105,.86))
     box(47,955,5,166,vmath.vector4(.41,.91,.75,1))
@@ -106,7 +112,7 @@ local function measure(self)
     local count = #self.frames
     local p95 = self.frames[math.ceil(count*.95)] * 1000
     local width, height = window.get_size()
-    gui.set_text(self.metric, string.format("%.0f FPS  ·  95%% кадров ≤ %.1f мс  ·  %d×%d  ·  %s",
+    gui.set_text(self.metric, string.format("%.0f FPS  ·  95%% кадров ≤ %.1f мс  ·  %d x %d  ·  %s",
         count / self.window_time, p95, width, height, self.driver))
     if not self.sample_logged then
         print("MICROGEN PREVIEW SAMPLE " .. self.driver)
@@ -126,10 +132,17 @@ function update(self, dt)
     gui.set_position(self.player, self.position)
     gui.set_position(self.surge, self.position)
     gui.set_position(self.shield, self.position)
-    if dx~=0 or dy~=0 then gui.set_rotation(self.player, vmath.vector3(0,0,math.deg(math.atan2(dy,dx)))) end
+    if dx ~= 0 or dy ~= 0 then
+        local heading = math.deg(math.atan2(dy, dx))
+        local delta = (heading - self.facing + 180) % 360 - 180
+        self.facing = self.facing + delta * (1 - math.exp(-dt * 9))
+        gui.set_rotation(self.player, vmath.vector3(0, 0, self.facing))
+    end
     gui.set_scale(self.player, vmath.vector3(1+.045*math.sin(t*2.4), 1-.038*math.sin(t*2.4), 1))
-    gui.set_rotation(self.surge, vmath.vector3(0,0,t*16))
-    local swell = 1+.12*math.sin(t*2.2)
+    local pulse = (t % 3.2) / 3.2
+    gui.set_rotation(self.surge, vmath.vector3(0, 0, t * 5))
+    gui.set_color(self.surge, vmath.vector4(.67, .97, .50, .35 * math.sin(pulse * math.pi)^2))
+    local swell = .65 + pulse * .65
     gui.set_scale(self.surge, vmath.vector3(swell,swell,1))
     gui.set_rotation(self.shield, vmath.vector3(0,0,-t*9))
     for i, actor in ipairs(self.world.actors) do

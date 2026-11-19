@@ -1,6 +1,6 @@
 [project]
 title = Microgen Defold Preview
-version = 0.1.0
+version = 0.1.1
 
 [bootstrap]
 main_collection = /main/arena.collectionc
@@ -20,5 +20,5 @@ game_binding = /main/arena.input_bindingc
 
 [android]
 package = org.magral.microgen.defold
-version_code = 1
+version_code = 2
 minimum_sdk_version = 26
