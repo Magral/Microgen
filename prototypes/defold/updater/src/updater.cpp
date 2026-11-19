@@ -2,7 +2,7 @@
 
 #if defined(DM_PLATFORM_ANDROID)
 #include <dmsdk/dlib/android.h>
-#include <android/native_activity.h>
+#include <dmsdk/graphics/graphics_native.h>
 
 static const char* JAVA_CLASS = "org.magral.microgen.update.Updater";
 
@@ -13,14 +13,14 @@ static int Download(lua_State* L)
     jint size = (jint)luaL_checkinteger(L, 3);
     dmAndroid::ThreadAttacher thread;
     JNIEnv* env = thread.GetEnv();
-    ANativeActivity* activity = dmAndroid::GetActivity();
-    jclass cls = dmAndroid::LoadClass(env, activity->clazz, JAVA_CLASS);
+    jobject activity = dmGraphics::GetNativeAndroidActivity();
+    jclass cls = dmAndroid::LoadClass(env, activity, JAVA_CLASS);
     if (cls) {
         jmethodID method = env->GetStaticMethodID(cls, "download", "(Landroid/app/Activity;Ljava/lang/String;Ljava/lang/String;I)V");
         if (method) {
             jstring file = env->NewStringUTF(path);
             jstring digest = env->NewStringUTF(sha);
-            env->CallStaticVoidMethod(cls, method, activity->clazz, file, digest, size);
+            env->CallStaticVoidMethod(cls, method, activity, file, digest, size);
             env->DeleteLocalRef(digest);
             env->DeleteLocalRef(file);
         }
@@ -36,12 +36,12 @@ static int Invoke(lua_State* L, const char* name)
 {
     dmAndroid::ThreadAttacher thread;
     JNIEnv* env = thread.GetEnv();
-    ANativeActivity* activity = dmAndroid::GetActivity();
-    jclass cls = dmAndroid::LoadClass(env, activity->clazz, JAVA_CLASS);
+    jobject activity = dmGraphics::GetNativeAndroidActivity();
+    jclass cls = dmAndroid::LoadClass(env, activity, JAVA_CLASS);
     jint status = -1;
     if (cls) {
         jmethodID method = env->GetStaticMethodID(cls, name, "(Landroid/app/Activity;)I");
-        if (method) status = env->CallStaticIntMethod(cls, method, activity->clazz);
+        if (method) status = env->CallStaticIntMethod(cls, method, activity);
         env->DeleteLocalRef(cls);
     }
     if (env->ExceptionCheck()) {
