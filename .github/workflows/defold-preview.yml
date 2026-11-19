@@ -84,17 +84,31 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Build and run native Linux smoke test
+      - name: Build a Linux binary for runtime verification
         working-directory: prototypes/defold
         run: |
-          if ! command -v xvfb-run >/dev/null || ! command -v import >/dev/null || ! ldconfig -p | grep "libGLU.so.1" >/dev/null; then
-            sudo apt-get update
-            sudo apt-get install -y xvfb imagemagick libglu1-mesa libopenal1
-          fi
-          mkdir -p "$RUNNER_TEMP/defold-smoke"
           java -jar "$RUNNER_TEMP/bob.jar" --platform x86_64-linux \
             --variant debug --archive --output build/linux \
             --bundle-output "$RUNNER_TEMP/defold-linux" build bundle
+          tar -czf "$RUNNER_TEMP/defold-linux-runtime.tar.gz" -C "$RUNNER_TEMP/defold-linux" .
+
+      - name: Upload Linux runtime fixture
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Microgen-Defold-Linux-Runtime
+          path: ${{ runner.temp }}/defold-linux-runtime.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Build and run native Linux smoke test
+        timeout-minutes: 3
+        working-directory: prototypes/defold
+        run: |
+          if ! command -v xvfb-run >/dev/null || ! command -v import >/dev/null || ! ldconfig -p | grep "libGLU.so.1" >/dev/null; then
+            sudo apt-get -o Acquire::Retries=0 -o Acquire::http::Timeout=10 update
+            sudo apt-get -o Acquire::Retries=0 -o Acquire::http::Timeout=10 install -y xvfb imagemagick libglu1-mesa libopenal1
+          fi
+          mkdir -p "$RUNNER_TEMP/defold-smoke"
           mapfile -t executables < <(find "$RUNNER_TEMP/defold-linux" -type f -executable ! -name '*.so*')
           test "${#executables[@]}" -eq 1
           xvfb-run -a -s '-screen 0 2460x1080x24' bash -euo pipefail -c '
@@ -116,7 +130,7 @@ jobs:
             grep -Fq "MICROGEN PREVIEW SAMPLE" "$2/linux-smoke.log"
             kill -0 "$pid"
             if grep -E "ERROR:SCRIPT|ERROR:RENDER|FATAL" "$2/linux-smoke.log"; then exit 1; fi
-            import -window root "$2/Microgen-Defold-Preview.png"
+            timeout 15s import -window root "$2/Microgen-Defold-Preview.png"
           ' bash "${executables[0]}" "$RUNNER_TEMP/defold-smoke"
 
       - name: Upload native smoke results
