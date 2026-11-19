@@ -118,7 +118,7 @@ function Scene.new(tissue_atlas)
         atlas=tissue_atlas, anatomy=Anatomy.new("anatomy"), ocean=Ocean.new(WIDTH,HEIGHT,CX,CY),
         walls=pool("substrate"), bed=pool("bed"), landmarks=pool("substrate"),
         fields=pool("fields"), organisms=pool("organisms"), objects=pool("objects"),
-        effects=pool("effects"), labels=pool("feedback",true),
+        effects=pool("effects"), labels=pool("world_labels",true),
         motions=setmetatable({},{__mode="k"}), scale=1,
     },Scene)
 end
@@ -216,7 +216,16 @@ function Scene:draw_effect(group, frame, p, radius, color, angle)
     gui.set_rotation(slot.node,vmath.vector3(0,0,angle or 0))
 end
 
+function Scene:set_labels_visible(visible)
+    self.hide_labels = not visible
+    if self.hide_labels then
+        self.labels.count = 0
+        finish(self.labels)
+    end
+end
+
 function Scene:draw_number(p, message, color, scale)
+    if self.hide_labels then return end
     local x,y = self:project(p)
     if not visibly_inside(x,y,50) then return end
     local slot = take(self.labels)

@@ -121,12 +121,16 @@ jobs:
           retention-days: 14
 
       - name: Build and run native Linux smoke test
-        timeout-minutes: 3
+        timeout-minutes: 6
         working-directory: prototypes/defold
         run: |
           if ! command -v xvfb-run >/dev/null || ! command -v import >/dev/null || ! ldconfig -p | grep "libGLU.so.1" >/dev/null; then
-            sudo apt-get -o Acquire::Retries=0 -o Acquire::http::Timeout=10 update
-            sudo apt-get -o Acquire::Retries=0 -o Acquire::http::Timeout=10 install -y xvfb imagemagick libglu1-mesa libopenal1
+            apt_options=(-o Acquire::Retries=1 -o Acquire::http::Timeout=12
+              -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=-)
+            if ! sudo apt-get "${apt_options[@]}" install -y --no-install-recommends xvfb xauth imagemagick libglu1-mesa libopenal1; then
+              sudo apt-get "${apt_options[@]}" update
+              sudo apt-get "${apt_options[@]}" install -y --no-install-recommends xvfb xauth imagemagick libglu1-mesa libopenal1
+            fi
           fi
           mkdir -p "$RUNNER_TEMP/defold-smoke"
           mapfile -t executables < <(find "$RUNNER_TEMP/defold-linux" -type f -executable ! -name '*.so*')
