@@ -135,8 +135,8 @@ function Interface:cards(items,row_y,callback,set_color,preview)
         self:fit_text(left+inset,row_y+177,item.title or "",1.08,PALE,width-56-inset,112)
         if item.meta then self:fit_text(left+inset,row_y+106,item.meta,1.0,MINT,width-56-inset,55) end
         if item.rarity then
-            self:surface(left+76,row_y+42,154,40,"button")
-            self:text(left+76,row_y+42,item.rarity,.73,shade,140,true)
+            self:surface(left+76,row_y+258,154,38,"button")
+            self:text(left+76,row_y+258,item.rarity,.70,shade,140,true)
         end
         if item.detail then self:fit_text(left,row_y+1,item.detail,.98,PALE,width-56,115) end
         if item.extra then

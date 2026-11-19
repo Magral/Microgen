@@ -585,7 +585,7 @@ function App:equipment(organ,location,page,live,target,return_to,tab)
             local cells=Slots.used_cells(state)+organ.cells
             for _,part in ipairs(state.equipped) do
                 if selected[part.id] then cells=cells-part.cells end
-                rows[#rows+1]={title=(selected[part.id] and "✓  " or "")..part_caption(part),icon=part.kind,
+                rows[#rows+1]={title=(selected[part.id] and "ВЫБРАНО · " or "")..part_caption(part),icon=part.kind,
                     label=selected[part.id] and "Оставить" or "Заменить",action=function()
                     selected[part.id]=not selected[part.id]
                     choose(next_page)
@@ -888,9 +888,9 @@ function App:build(page,tab,live)
     local heading
     if tab=="synergies" then
         for _,data in ipairs(Inspector.synergy_rows(sim.build)) do
-            rows[#rows+1] = {title=data.title,meta=data.active and "✓ АКТИВНА" or "НУЖНЫ ОРГАНЫ-ПАРТНЁРЫ",
+            rows[#rows+1] = {title=data.title,meta=data.active and "СИНЕРГИЯ АКТИВНА" or "НУЖНА ПАРА ОРГАНОВ",
                 extra=data.active and "Эффект действует" or "Собери пару органов",extra_color=data.active and ui.colors.mint or ui.colors.dim,
-                detail=data.requirements,badge=data.active and "✓" or "◇",
+                detail=data.requirements,badge=data.active and "+" or "?",
                 color=data.active and ui.colors.mint or ui.colors.pale,action=function()
                     self:overlay("build")
                     local left=ui:panel(data.title,data.requirements,function() self:build(page,tab,live) end)
@@ -1004,7 +1004,7 @@ function App:replacement(id,grade,apply,back)
             local synergy_hint
             for _,synergy_id in ipairs(replacement_build:active_synergies()) do
                 if not was_active[synergy_id] then
-                    synergy_hint="⚡ ВКЛЮЧИТ · "..Catalog.SYNERGIES[synergy_id].name
+                    synergy_hint="СИНЕРГИЯ ВКЛЮЧИТСЯ · "..Catalog.SYNERGIES[synergy_id].name
                     break
                 end
             end
@@ -1142,9 +1142,9 @@ function App:level_up()
                     local partner=id==first and second or first
                     local ready=sim.build:rank(partner)>0
                     local already_active=sim.build:rank(id)>0 and ready
-                    hints[#hints+1]=already_active and ("✓ АКТИВНА · "..synergy.name)
-                        or ready and ("⚡ ВКЛЮЧИТ ЕЁ · "..synergy.name)
-                        or ("○ НЕ АКТИВНА · нужен "..Catalog.item(partner).name)
+                    hints[#hints+1]=already_active and ("УЖЕ АКТИВНА · "..synergy.name)
+                        or ready and ("ВКЛЮЧИТСЯ · "..synergy.name)
+                        or ("НЕ АКТИВНА · нужен "..Catalog.item(partner).name)
                     synergy_ready=synergy_ready or ready
                 end
             end
@@ -1199,8 +1199,8 @@ function App:colony(index)
             if id==first or id==second then
                 local partner=id==first and second or first
                 local ready=sim.build:rank(partner)>0
-                synergy_hints[#synergy_hints+1]=ready and ("⚡ ВКЛЮЧИТ · "..synergy.name)
-                    or ("○ НЕ АКТИВНА · нужен "..Catalog.item(partner).name)
+                synergy_hints[#synergy_hints+1]=ready and ("ВКЛЮЧИТСЯ · "..synergy.name)
+                    or ("НЕ АКТИВНА · нужен "..Catalog.item(partner).name)
                 synergy_ready=synergy_ready or ready
             end
         end
@@ -1550,7 +1550,7 @@ function init(self)
         local sample_rows={
             {title="Орган",icon="tentacle",meta="РАНГ 2 · 3 ЯЧ.",detail="Увеличивает захват",label="Открыть",action=function() end},
             {title="Исследование",meta="Ранг 1 / 5",detail="Усиливает организм",label="Улучшить",action=function() end},
-            {title="Синергия",meta="✓ АКТИВНА",detail="Щупальца + кислота",extra="Эффект действует",label="Подробнее",action=function() end},
+            {title="Синергия",meta="СИНЕРГИЯ АКТИВНА",detail="Щупальца + кислота",extra="Эффект действует",label="Подробнее",action=function() end},
             {title="Потомок",meta="Поколение 2",detail="Наследие сохранено",label="Выбрать",action=function() end},
         }
         Panels.list(app.modal,"Проверка карточек","Карточки меню и кодекса",sample_rows,1,function() end,function() end)
