@@ -59,12 +59,29 @@ jobs:
           test "${#apks[@]}" -eq 1
           cp "${apks[0]}" "$RUNNER_TEMP/defold-preview/Microgen-Defold-Preview.apk"
 
+      - name: Strip native symbols and sign Android APK
+        working-directory: ${{ runner.temp }}/defold-preview
+        run: |
+          sdk_tools=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f -printf '%h\n' | sort -V | tail -n 1)
+          ndk_tools=$(find "$ANDROID_HOME/ndk" -name llvm-strip -printf '%h\n' | sort -V | tail -n 1)
+          test -x "$sdk_tools/zipalign"
+          test -x "$ndk_tools/llvm-readelf"
+          apk=Microgen-Defold-Preview.apk
+          python3 "$GITHUB_WORKSPACE/prototypes/defold/tools/strip_android_apk.py" \
+            "$apk" "$RUNNER_TEMP/defold-stripped.apk" \
+            --strip "$ndk_tools/llvm-strip" --readelf "$ndk_tools/llvm-readelf" | tee APK_SIZE.txt
+          "$sdk_tools/zipalign" -P 16 -f 4 "$RUNNER_TEMP/defold-stripped.apk" "$RUNNER_TEMP/defold-aligned.apk"
+          "$sdk_tools/apksigner" sign --ks "$GITHUB_WORKSPACE/tools/development.keystore" \
+            --ks-key-alias androiddebugkey --ks-pass "file:$RUNNER_TEMP/defold-keystore-password" \
+            --out "$apk" "$RUNNER_TEMP/defold-aligned.apk"
+
       - name: Verify APK signature and identity
         working-directory: ${{ runner.temp }}/defold-preview
         run: |
           sdk_tools=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f -printf '%h\n' | sort -V | tail -n 1)
           apk=Microgen-Defold-Preview.apk
           test -n "$sdk_tools"
+          "$sdk_tools/zipalign" -c -P 16 4 "$apk"
           "$sdk_tools/apksigner" verify --verbose --print-certs "$apk" | tee APK_SIGNATURE.txt
           expected=$(keytool -exportcert -alias androiddebugkey -keystore "$GITHUB_WORKSPACE/tools/development.keystore" -storepass android | sha256sum | cut -d' ' -f1)
           grep -Fq "certificate SHA-256 digest: $expected" APK_SIGNATURE.txt
