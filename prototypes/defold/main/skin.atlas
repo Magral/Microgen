@@ -1,0 +1,8 @@
+images { image: "/main/ui_skin/panel.png" }
+images { image: "/main/ui_skin/card.png" }
+images { image: "/main/ui_skin/button.png" }
+images { image: "/main/ui_skin/primary.png" }
+images { image: "/main/ui_skin/disabled.png" }
+extrude_borders: 2
+inner_padding: 0
+margin: 0

@@ -130,6 +130,10 @@ function M.upgrade_cost(part)
     return math.min(util.MAX_INTEGER, 6 + math.floor(4 * rank^0.72))
 end
 
+function M.upgrade_ingredient(part)
+    return math.min(128, 1 + math.floor((part.rank or 1) / 8))
+end
+
 local function part_location(state, id)
     for _, group in ipairs(GROUPS) do
         local part, index = util.find(state[group], id)
@@ -151,7 +155,7 @@ function M.upgrade(state, id, organium, materials)
     local part, group, index = part_location(state, id)
     if not part then return failed_payment(state, organium, materials, "Орган не найден") end
     local price = M.upgrade_cost(part)
-    local ingredient = math.min(128, 1 + math.floor(part.rank / 8))
+    local ingredient = M.upgrade_ingredient(part)
     if organium < price then return failed_payment(state, organium, materials, ("Нужно органиума: %.0f"):format(price)) end
     if (materials.organelle or 0) < ingredient then
         return failed_payment(state, organium, materials, ("Нужно органелл: %d"):format(ingredient))

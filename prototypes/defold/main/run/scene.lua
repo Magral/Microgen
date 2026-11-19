@@ -4,18 +4,17 @@ local Tissue = require "main.tissue_motion"
 local Anatomy = require "main.anatomy"
 local Fixture = require "main.arena_data"
 local Genome = require "main.run.genome"
+local Ocean = require "main.run.ocean"
+local Effects = require "main.run.effects_view"
 
 local Scene = {}
 Scene.__index = Scene
 local WIDTH, HEIGHT = Fixture.size[1], Fixture.size[2]
 local CX, CY = WIDTH / 2, HEIGHT * .49
-local GREEN = vmath.vector4(.39,.91,.64,1)
 local PINK = vmath.vector4(1,.46,.52,1)
-local ALERT = vmath.vector4(1,.53,.42,.58)
 local WHITE = vmath.vector4(1,1,1,1)
-local GOLD = vmath.vector4(1,.83,.45,1)
-local ICE = vmath.vector4(.63,.92,1,1)
-local FLUID_SIDE = 1024
+local WORLD_GRAIN = 2147483647
+local TAU = 2*math.pi
 
 local FRAMES = {
     prey = {"actor_00", "actor_03", "actor_10"},
@@ -25,13 +24,12 @@ local FRAMES = {
     boss = {"actor_18"},
 }
 
-local EFFECT_COLOR = {
-    enemy_toxin = PINK, spore = vmath.vector4(.70,.51,.98,.7),
-    poison = vmath.vector4(.66,.9,.33,.61), acid = GREEN,
-    electric = ICE, barrier = ICE, assimilate = GREEN, pulse = ICE,
-    enzymes = GOLD, infection = vmath.vector4(.68,1,.37,.8),
-    tentacle = PINK, division = ICE, trail = GREEN,
-}
+local function grain(x,y,seed,salt)
+    local high=math.floor(seed/65536)
+    local seed_term=(seed%65536*83492791+((high*83492791)%WORLD_GRAIN)*65536)%WORLD_GRAIN
+    local n=(x*73856093+y*19349663+seed_term+salt*15485863)%WORLD_GRAIN
+    return ((n*48271+12820163)%WORLD_GRAIN)/WORLD_GRAIN
+end
 
 local function position(node,x,y)
     gui.set_position(node,vmath.vector3(x,y,0))
@@ -117,11 +115,11 @@ end
 
 function Scene.new(tissue_atlas)
     return setmetatable({
-        atlas=tissue_atlas, anatomy=Anatomy.new("anatomy"),
-        fluid=pool("water"), walls=pool("substrate"), landmarks=pool("substrate"),
+        atlas=tissue_atlas, anatomy=Anatomy.new("anatomy"), ocean=Ocean.new(WIDTH,HEIGHT,CX,CY),
+        walls=pool("substrate"), bed=pool("bed"), landmarks=pool("substrate"),
         fields=pool("fields"), organisms=pool("organisms"), objects=pool("objects"),
         effects=pool("effects"), labels=pool("feedback",true),
-        player_pose=0, scale=1,
+        motions=setmetatable({},{__mode="k"}), scale=1,
     },Scene)
 end
 
@@ -129,21 +127,33 @@ function Scene:project(p)
     return CX+(p.x-self.x)*self.scale, CY-(p.y-self.y)*self.scale
 end
 
+function Scene:terrain_frame(world,col,row)
+    if self.terrain_source~=world then
+        self.terrain_source,self.frames=world,{}
+    end
+    local id=row*world.w+col+1
+    local entry=self.frames[id]
+    if entry~=nil then return entry end
+    local solid=world.cells[id]==1
+    local kind
+    if solid then kind="wall"
+    else
+        local growth=grain(math.floor(col/3),math.floor(row/3),world.seed_value,1)<.43
+        local fibril=grain(col,row,world.seed_value,2)<.095
+        kind=growth and (fibril and "bed_fibril" or "bed") or (fibril and "fibril" or false)
+    end
+    if kind then
+        local x,y=(col+.5)*world.tile_size,(row+.5)*world.tile_size
+        local biome=world:biome(x,y)
+        local phase=math.floor(grain(col,row,world.seed_value,0)*4+.5)%4
+        entry={frame=kind.."_"..(biome-1).."_"..phase,x=x,y=y,solid=solid}
+    else entry=false end
+    self.frames[id]=entry
+    return entry
+end
+
 function Scene:render_ground(sim)
     local world, scale = sim.world, self.scale
-    local time = sim.elapsed or 0
-    local side = FLUID_SIDE
-    local scroll_x = self.x*.28 + time*2.4
-    local scroll_y = self.y*.28 + time*1.7
-    local tile_x, tile_y = scroll_x%side, scroll_y%side
-    for row=0,math.ceil(HEIGHT/side) do
-        for col=0,math.ceil(WIDTH/side) do
-            local slot = take(self.fluid)
-            sprite(slot,"terrain","fluid")
-            position(slot.node,side*(col+.5)-tile_x, HEIGHT-side*(row+.5)+tile_y)
-            size(slot.node,side+.4,side+.4)
-        end
-    end
     local tile = world.tile_size
     local x0 = math.max(0, math.floor((self.x-CX/scale-110)/tile))
     local x1 = math.min(world.w-1, math.floor((self.x+(WIDTH-CX)/scale+110)/tile))
@@ -151,13 +161,15 @@ function Scene:render_ground(sim)
     local y1 = math.min(world.h-1, math.floor((self.y+CY/scale+110)/tile))
     for row=y0,y1 do
         for col=x0,x1 do
-            if world.cells[row*world.w+col+1] == 1 then
-                local wx, wy = (col+.5)*tile, (row+.5)*tile
-                local index = (col*37+row*71+col*row*13) % 4
-                local biome = world:biome(wx,wy)
-                local slot = take(self.walls)
-                sprite(slot,"terrain","wall_"..(biome-1).."_"..index)
-                position(slot.node, CX+(wx-self.x)*scale, CY-(wy-self.y)*scale)
+            local entry=self:terrain_frame(world,col,row)
+            if entry then
+                local slot=take(entry.solid and self.walls or self.bed)
+                sprite(slot,"terrain",entry.frame)
+                local x,y=CX+(entry.x-self.x)*scale,CY-(entry.y-self.y)*scale
+                if slot.x~=x or slot.y~=y then
+                    position(slot.node,x,y)
+                    slot.x,slot.y=x,y
+                end
                 if slot.scale~=scale then
                     size(slot.node,208*scale,208*scale)
                     slot.scale=scale
@@ -165,17 +177,29 @@ function Scene:render_ground(sim)
             end
         end
     end
-    for _,group in ipairs({world.nests, world.colonies}) do
-        for _,mark in ipairs(group) do
-            local x,y = self:project(mark.pos)
-            if visibly_inside(x,y,100) then
-                local slot = take(self.landmarks)
-                sprite(slot,"cells","shield")
-                position(slot.node,x,y)
-                size(slot.node,tile*scale,tile*scale)
-                gui.set_color(slot.node, mark.used and vmath.vector4(.42,.52,.56,.32)
-                    or mark.stock and vmath.vector4(.39,1,.86,.70) or vmath.vector4(.94,.56,.32,.65))
+    local time=self.visual_time
+    for _,nest in ipairs(world.nests) do
+        local x,y=self:project(nest.pos)
+        if not nest.used and visibly_inside(x,y,60*scale) then
+            self:draw_combat(self.landmarks,"ring",nest.pos,113,113,vmath.vector4(.70,.49,.91,.35),0)
+            for index=0,4 do
+                local a=index*TAU/5+time*.15
+                local p={x=nest.pos.x+math.cos(a)*22,y=nest.pos.y+math.sin(a)*22}
+                self:draw_combat(self.landmarks,"skin",p,29,29,vmath.vector4(.66,.47,.85,.62),a)
             end
+        end
+    end
+    for _,colony in ipairs(world.colonies) do
+        local x,y=self:project(colony.pos)
+        if visibly_inside(x,y,152*scale) then
+            self:draw_combat(self.landmarks,"ring",colony.pos,339,339,vmath.vector4(.35,.8,.7,.13),0)
+            for index=0,7 do
+                local a=index*TAU/8+math.sin(time*.4)*.05
+                local p={x=colony.pos.x+math.cos(a)*35,y=colony.pos.y+math.sin(a)*35}
+                self:draw_combat(self.landmarks,"skin",p,64,64,vmath.vector4(.27,.55,.52,.56),a)
+            end
+            self:draw_combat(self.landmarks,"skin",colony.pos,72,72,vmath.vector4(.51,.86,.71,.58),time*.24)
+            self:draw_number({x=colony.pos.x,y=colony.pos.y+80},"КОЛОНИЯ",vmath.vector4(.51,.80,.74,.80),.62)
         end
     end
 end
@@ -202,15 +226,41 @@ function Scene:draw_number(p, message, color, scale)
     position(slot.node,x,y)
 end
 
-function Scene:draw_ray(origin,angle,length,color,thickness)
-    local x,y=self:project(origin)
-    local distance=length*self.scale
-    local slot=take(self.effects)
-    sprite(slot,"cells","speck")
-    position(slot.node,x+math.cos(angle)*distance/2,y-math.sin(angle)*distance/2)
-    size(slot.node,distance,thickness)
-    gui.set_rotation(slot.node,vmath.vector3(0,0,-math.deg(angle)))
+function Scene:draw_atlas(group,texture,frame,p,width,height,color,angle)
+    local x,y=self:project(p)
+    width,height=width*self.scale,height*self.scale
+    if not visibly_inside(x,y,(width+height)*.5) then return end
+    local slot=take(group)
+    sprite(slot,texture,frame)
+    position(slot.node,x,y)
+    size(slot.node,width,height)
     gui.set_color(slot.node,color)
+    gui.set_rotation(slot.node,vmath.vector3(0,0,-math.deg(angle or 0)))
+end
+
+function Scene:draw_combat(group,frame,p,width,height,color,angle)
+    self:draw_atlas(group,"combat",frame,p,width,height,color,angle)
+end
+
+local function feeding_contact(sim)
+    local x,y,total=0,0,0
+    for _,group in ipairs({sim.remains,sim.pickups,sim.enemies}) do
+        for _,item in ipairs(group) do
+            if item.captured and item.entry_angle then
+                local progress=item.engulf or item.progress or 0
+                local weight=math.sin(math.pi*math.min(1,progress/.76))
+                local angle=item.entry_angle-sim.facing
+                x,y=x+math.cos(angle)*weight,y-math.sin(angle)*weight
+                total=total+1
+            end
+        end
+    end
+    local bite=sim.bite_flash or 0
+    if bite>0 then x=x+bite;total=total+1 end
+    if total==0 then return 0,0,0 end
+    local length=math.sqrt(x*x+y*y)
+    if length<.0001 then return 0,0,0 end
+    return x/length,y/length,math.min(1,length/total)
 end
 
 function Scene:draw_body(sim, actor, is_player, serial)
@@ -238,22 +288,21 @@ function Scene:draw_body(sim, actor, is_player, serial)
         slot.pose = Tissue.attach(self.atlas,slot.node,frame)
     end
     local stretch = self.scale*radius/source_radius*shrink
-    gui.set_color(slot.node,opacity==1 and WHITE or color_at(opacity,WHITE))
-    local velocity = actor.vel or actor.velocity or {x=0,y=0}
-    local phase = (sim.elapsed or 0)+(actor.phase or 0)
-    local angle = -(actor.facing or 0)
-    local facing_x, facing_y = math.cos(angle), math.sin(angle)
-    local drift_x = (velocity.x*facing_x-velocity.y*facing_y)/145
-    local drift_y = (-velocity.x*facing_y-velocity.y*facing_x)/145
+    local phase = self.visual_time
+    local motion=Tissue.motion(self.motions[actor],self.dt,actor.pos.x,actor.pos.y,genome,is_player and sim.facing or nil)
+    self.motions[actor]=motion
+    self.ocean:track(actor,actor.pos,radius)
+    local angle = is_player and sim.facing or ((genome and genome.rotation or 0)+Tissue.turn(motion))
     local overscan = slot.pose and Tissue.OVERSCAN or 1
     position(slot.node,x,y)
     size(slot.node,dimensions[1]*stretch*overscan,dimensions[2]*stretch*overscan)
-    gui.set_rotation(slot.node,vmath.vector3(0,0,math.deg(angle)))
-    local bite = is_player and math.min(1,sim.bite_flash or 0) or 0
+    gui.set_rotation(slot.node,vmath.vector3(0,0,-math.deg(angle)))
+    local cx,cy,bite=0,0,0
+    if is_player then cx,cy,bite=feeding_contact(sim) end
     local infected = (actor.infection_time or actor.infect or 0)>0
     if is_player then
         local state=sim.tissue_pigment
-        local stamp=state.density[1]
+        local stamp=state.mass
         if self.pigment_state~=state or self.pigment_stamp~=stamp then
             self.pigment_state,self.pigment_stamp=state,stamp
             self.player_pigment="#"..sim:body_color()
@@ -262,9 +311,20 @@ function Scene:draw_body(sim, actor, is_player, serial)
         slot.pigment_genome=genome
         slot.pigment_hex=genome and ("#"..Genome.colors(genome)[1])
     end
+    local hp=is_player and sim.hp or actor.hp
+    local maxhp=is_player and sim.max_hp or actor.max_hp
+    local health=hp and hp/math.max(1,maxhp) or 1
     local pigment=infected and "#bfdb6b" or (is_player and self.player_pigment or slot.pigment_hex)
-    Tissue.update(slot.pose,phase,drift_x,drift_y,(bite>0 or actor.captured) and 1 or 0,0,
-        bite,infected and .56 or (is_player and .67 or .40),pigment)
+    local relative=math.sqrt((actor.pos.x-self.x)^2+(actor.pos.y-self.y)^2)
+    if not is_player and not actor.captured and radius>sim:body_radius()*2
+            and (actor.boss_windup or 0)<=0 and (actor.boss_exposed or 0)<=0 then
+        local threshold=sim:body_radius()*6+radius
+        local haze=smoothstep(threshold*.9,threshold*1.45,relative)
+        gui.set_color(slot.node,vmath.vector4(1-haze*.72,1-haze*.62,1-haze*.53,opacity*(1-haze*.30)))
+    else gui.set_color(slot.node,opacity==1 and WHITE or color_at(opacity,WHITE)) end
+    Tissue.update(slot.pose,motion,phase,angle,dimensions[1]/(2*source_radius),dimensions[2]/(2*source_radius),
+        cx,cy,bite,infected and .55 or (is_player and .67 or .4),pigment,health,is_player and self.reaction or 0,
+        not is_player and radius*self.scale<32)
     if not is_player and not actor.captured and actor.max_hp and actor.hp < actor.max_hp then
         local bar = take(self.effects)
         sprite(bar,"cells","speck")
@@ -274,49 +334,77 @@ function Scene:draw_body(sim, actor, is_player, serial)
         gui.set_color(bar.node,PINK)
         gui.set_rotation(bar.node,vmath.vector3())
     end
-    if not is_player and actor.max_hp and actor.hp>0 and not actor.captured then
-        if actor.kind=="boss" and (actor.boss_windup or 0)>0 then
-            local pattern=sim:boss_attack()
-            for i=1,pattern.count do
-                local angle=(actor.boss_angle or actor.facing or 0)+(i-1-(pattern.count-1)/2)*pattern.spread
-                self:draw_ray(actor.pos,angle,390,ALERT,10)
-            end
-        elseif actor.kind=="boss" and (actor.boss_exposed or 0)>0 then
-            self:draw_effect(self.effects,"shield",actor.pos,radius*1.24,GOLD,phase*77)
-        elseif actor.max_hp and actor.hp and actor.kind~="boss" and not actor.active then
+    if not is_player and not actor.captured then
+        if actor.kind=="boss" then Effects.draw_boss(self,sim,actor,phase) end
+        if infected then Effects.draw_infection(self,actor,phase) end
+        if (actor.enzyme_time or 0)>0 then Effects.draw_infection(self,actor,phase,true) end
+        if actor.max_hp and actor.hp>0 and actor.kind and actor.kind~="boss" then
             local interaction=sim:interaction(actor)
             if interaction.eligible then
                 self:draw_effect(self.effects,"shield",actor.pos,radius*1.25,vmath.vector4(.47,1,.68,.52),phase*22)
             end
         end
     end
+    return slot.pose
 end
 
 function Scene:render(sim, breakup_time)
-    self.x,self.y = sim.player.x,sim.player.y
-    self.scale = math.min(WIDTH/1280, HEIGHT/720) * sim:view_zoom()
+    self.x,self.y=sim.player.x,sim.player.y
+    local target=math.min(WIDTH/1280,HEIGHT/720)*sim:view_zoom()
+    if self.sim~=sim or self.world~=sim.world then
+        self.sim,self.world=sim,sim.world
+        self.scale,self.visual_time,self.elapsed,self.reaction=target,0,sim.elapsed,0
+        self.motions=setmetatable({},{__mode="k"})
+        self.clones={}
+    end
+    local dt=math.min(.1,math.max(0,sim.elapsed-self.elapsed))
+    self.elapsed,self.dt=sim.elapsed,dt
+    self.visual_time=self.visual_time+dt
+    if math.abs(target-self.scale)>0.0001 then
+        self.scale=self.scale+(target-self.scale)*(1-math.exp(-dt*2))
+    end
+    self.ocean:begin(sim,self.x,self.y,self.scale)
     self:render_ground(sim)
-    local time = sim.elapsed or 0
+    local time=self.visual_time
+    self.reaction=math.max(0,self.reaction-dt*1.4)
+    local rich=0
     for _,field in ipairs(sim.fields) do
-        self:draw_effect(self.fields,"field",field.pos,field.r*1.18,
-            EFFECT_COLOR[field.kind] or GREEN,time*8)
+        local x,y=self:project(field.pos)
+        if visibly_inside(x,y,field.r*self.scale*1.2) then
+            local detailed=rich<8 and (field.pos.x-self.x)^2+(field.pos.y-self.y)^2<440^2
+            if detailed then rich=rich+1 end
+            Effects.draw_field(self,field,time,not detailed)
+        end
     end
     for _,pickup in ipairs(sim.pickups) do
         local p,shrink,opacity=pickup.pos,1,1
-        if pickup.captured then p,shrink,opacity=feeding_pose(sim,pickup,pickup.progress) end
-        local tint=pickup.type=="heal" and GREEN or pickup.type=="core" and GOLD or ICE
-        self:draw_effect(pickup.captured and self.effects or self.objects,"speck",p,
-            (pickup.type=="heal" and 13 or 8)*shrink,color_at(opacity,tint),0)
+        if pickup.captured then p,shrink,opacity=feeding_pose(sim,pickup,pickup.progress)
+        else p={x=p.x,y=p.y+math.sin(time*2+pickup.id)*2} end
+        local value=pickup.type
+        local diameter=(value=="core" and 25 or value=="heal" and 20 or value:find("extension") and 29 or 17)*shrink
+        self:draw_atlas(pickup.captured and self.effects or self.objects,"collectibles",value,p,
+            diameter,diameter,opacity==1 and WHITE or color_at(opacity,WHITE),0)
     end
     for _,fragment in ipairs(sim.remains) do
         local p,shrink,opacity=fragment.pos,1,1
         if fragment.captured then p,shrink,opacity=feeding_pose(sim,fragment,fragment.progress) end
-        local tint=(fragment.quality or 0) >= 2 and GOLD or PINK
-        self:draw_effect(fragment.captured and self.effects or self.objects,"speck",p,
-            (fragment.r or 9)*shrink,color_at(opacity,tint),(fragment.progress or 0)*80)
+        local quality=fragment.quality or 0
+        local tint=quality>=3 and vmath.vector4(1,.78,.45,opacity) or quality==2 and vmath.vector4(.84,.56,.99,opacity)
+            or quality==1 and vmath.vector4(.65,.79,1,opacity) or vmath.vector4(.89,.55,.64,opacity)
+        local side=(fragment.r or 9)*2.8*shrink
+        local shard=(fragment.part or fragment.id)%3
+        self:draw_combat(fragment.captured and self.effects or self.objects,"shard_"..shard,p,
+            side,side,tint,time*.24+(fragment.progress or 0)*1.4)
     end
     for _,cyst in ipairs(sim.cysts) do
-        self:draw_effect(self.objects,"surge",cyst.pos,23,GOLD,time*20)
+        if not cyst.used then
+            local tier=math.max(1,math.min(3,cyst.tier or 1))
+            local p,shrink,opacity=cyst.pos,1,1
+            if cyst.captured then p,shrink,opacity=feeding_pose(sim,cyst,cyst.progress or 0) end
+            local radius=(12+tier*3)*(1+math.sin(time*2.3+cyst.id)*.045)
+            self:draw_atlas(cyst.captured and self.effects or self.objects,"collectibles","cyst_"..tier,p,
+                radius*3.1*shrink,radius*3.1*shrink,color_at(opacity,WHITE),math.sin(time*.48+cyst.id)*.20)
+        end
     end
     for index,resident in ipairs(sim.residents) do
         if not resident.dead and not resident.active then
@@ -324,57 +412,36 @@ function Scene:render(sim, breakup_time)
         end
     end
     for index,actor in ipairs(sim.enemies) do self:draw_body(sim,actor,false,index) end
+    if sim.build:rank("division")>0 then
+        for index,p in ipairs(sim:clone_positions()) do
+            local clone=self.clones[index] or {kind="clone",id=-10000-index,r=17}
+            self.clones[index]=clone
+            clone.pos,clone.genome=p,sim.player_genome
+            self:draw_body(sim,clone,false,index)
+        end
+    end
     local player = self.player or {}
     self.player = player
     player.pos, player.vel, player.facing = sim.player,sim.player_velocity,sim.facing
     player.kind = "prey"
-    self:draw_body(sim, player,true)
-    gui.set_enabled(self.anatomy,true)
-    Anatomy.update(self.anatomy,sim,CX,CY,sim:body_radius()*self.scale)
-    for _,shot in ipairs(sim.shots) do
-        self:draw_effect(self.effects,"speck",shot.pos,8,shot.hostile and PINK or ICE,0)
-    end
     for _,fx in ipairs(sim.effects) do
-        if fx.pos then
-            local q = math.max(0,math.min(1,(fx.life or .2)/(fx.max or 1)))
-            if fx.type=="damage" or fx.type=="heal" then
-                local heal = fx.type=="heal"
-                local value = fx.amount or 0
-                local p = {x=fx.pos.x,y=fx.pos.y-(1-q)*44-25}
-                self:draw_number(p,(heal and "+" or "−")..string.format("%.1f",value),heal and GREEN or PINK,.8)
-            else
-            local rgb = EFFECT_COLOR[fx.type] or ICE
-            local radius = fx.r or 22
-            if fx["end"] and (fx.type == "lash" or fx.type == "tentacle" or fx.type == "electric") then
-                local finish_point = fx["end"]
-                for i=1,4 do
-                    local t = i*.20
-                    local point = {x=fx.pos.x+(finish_point.x-fx.pos.x)*t,y=fx.pos.y+(finish_point.y-fx.pos.y)*t}
-                    self:draw_effect(self.effects,"speck",point,5,color_at(q,rgb),0)
-                end
-            end
-            self:draw_effect(self.effects,"surge",fx.pos,radius*(1.13-q*.36),color_at(q*.8,rgb),time*34)
-            end
-        end
+        if fx.type=="mutation" and fx.life>fx.max-.12 then self.reaction=1 end
     end
-    if breakup_time and sim.boss_breakup.pos then
-        local data=sim.boss_breakup
-        local phase=math.min(1,breakup_time/1.55)
-        self:draw_effect(self.effects,"surge",data.pos,data.radius*(.9+phase*2.1),color_at((1-phase)*.95,GOLD),phase*70)
-        for i=1,18 do
-            local angle=i*2.39996
-            local distance=data.radius*(.1+i%4*.12+phase*(.88+i%5*.22))
-            local fragment={x=data.pos.x+math.cos(angle)*distance,y=data.pos.y+math.sin(angle)*distance}
-            self:draw_effect(self.effects,"speck",fragment,math.max(1,(16+i%4*5)*(1-phase)),
-                color_at(1-phase,i%3==0 and ICE or GOLD),phase*155+angle)
-        end
-    end
-    for _,group in ipairs({self.fluid,self.walls,self.landmarks,self.fields,self.organisms,self.objects,self.effects,self.labels}) do finish(group) end
+    local pose=self:draw_body(sim,player,true)
+    Anatomy.update(self.anatomy,sim,CX,CY,sim:body_radius()*self.scale,self.scale,pose,time)
+    for _,shot in ipairs(sim.shots) do Effects.draw_shot(self,shot) end
+    for _,fx in ipairs(sim.effects) do Effects.draw(self,sim,fx) end
+    Effects.draw_player(self,sim,sim.elapsed)
+    Effects.draw_damage_sources(self,sim,sim.elapsed)
+    if breakup_time then Effects.draw_breakup(self,sim.boss_breakup,breakup_time,time) end
+    self.ocean:draw(self.x,self.y,self.scale)
+    for _,group in ipairs({self.bed,self.walls,self.landmarks,self.fields,self.organisms,self.objects,self.effects,self.labels}) do finish(group) end
 end
 
 function Scene:hide()
-    gui.set_enabled(self.anatomy,false)
-    for _,group in ipairs({self.fluid,self.walls,self.landmarks,self.fields,self.organisms,self.objects,self.effects,self.labels}) do finish(group) end
+    Anatomy.hide(self.anatomy)
+    self.ocean:hide()
+    for _,group in ipairs({self.bed,self.walls,self.landmarks,self.fields,self.organisms,self.objects,self.effects,self.labels}) do finish(group) end
 end
 
 return Scene

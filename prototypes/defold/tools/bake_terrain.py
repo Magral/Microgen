@@ -1,36 +1,36 @@
-"""Pack Godot's full-detail wall variants and a seamless water surface."""
+"""Pack the original Godot terrain and fluid optical lookup into Defold atlases."""
 from pathlib import Path
 import argparse
 
 import numpy as np
 from PIL import Image
 
-ART = Path(__file__).resolve().parents[1] / "main" / "art"
-SIDE = 1024
-BLEND = 256
+MAIN = Path(__file__).resolve().parents[1] / "main"
+ART = MAIN / "art"
 
 
 def pack(source):
-    for path in sorted(source.glob("wall_*.png")):
-        rgba = np.asarray(Image.open(path).convert("RGBA")).copy()
-        alpha = rgba[..., 3:]
-        colors = np.zeros_like(rgba[..., :3], dtype=np.float32)
-        np.divide(rgba[..., :3].astype(np.float32) * 255, alpha,
-                  out=colors, where=alpha > 0)
-        rgba[..., :3] = np.clip(colors, 0, 255).astype(np.uint8)
-        Image.fromarray(rgba).save(ART / path.name, optimize=True)
-
-    raw = np.asarray(Image.open(source / "fluid.png").convert("RGB"), dtype=np.float32)
-    # Blend the overlapping 256 pixels into the repeated region in both axes.
-    t = np.linspace(0, 1, BLEND, dtype=np.float32)
-    weight = t*t*(3-2*t)
-    horizontal = raw[:, :SIDE].copy()
-    horizontal[:, :BLEND] = (raw[:, SIDE:]*(1-weight[None, :, None])
-                            +raw[:, :BLEND]*weight[None, :, None])
-    seamless = horizontal[:SIDE].copy()
-    seamless[:BLEND] = (horizontal[SIDE:]*(1-weight[:, None, None])
-                       +horizontal[:BLEND]*weight[:, None, None])
-    Image.fromarray(np.uint8(np.clip(seamless, 0, 255))).save(ART/"fluid.png", optimize=True)
+    names = []
+    for kind in ("bed", "bed_fibril", "fibril", "wall"):
+        for biome in range(2):
+            for variant in range(4):
+                name = f"{kind}_{biome}_{variant}"
+                rgba = np.asarray(Image.open(source / f"{name}.png").convert("RGBA")).copy()
+                alpha = rgba[..., 3:]
+                colors = np.zeros_like(rgba[..., :3], dtype=np.float32)
+                np.divide(rgba[..., :3].astype(np.float32) * 255, alpha,
+                          out=colors, where=alpha > 0)
+                rgba[..., :3] = np.clip(colors, 0, 255).astype(np.uint8)
+                Image.fromarray(rgba).save(ART / f"{name}.png", optimize=True)
+                names.append(name)
+    (MAIN / "terrain.atlas").write_text(
+        "".join(f'images {{ image: "/main/art/{name}.png" }}\n' for name in names)
+        + "margin: 2\nextrude_borders: 2\ninner_padding: 0\n"
+    )
+    # Exactly one 256x256 image with no padding so the GPU can repeat it.
+    flow_path = ART / "liquid_flow.png"
+    Image.open(source / flow_path.name).convert("RGB").save(flow_path, optimize=True)
+    (MAIN / "liquid.atlas").write_text('images { image: "/main/art/liquid_flow.png" }\n')
 
 
 if __name__ == "__main__":

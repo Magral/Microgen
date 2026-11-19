@@ -1,0 +1,18 @@
+images { image: "/main/art/collectibles/dna.png" }
+images { image: "/main/art/collectibles/core.png" }
+images { image: "/main/art/collectibles/bio.png" }
+images { image: "/main/art/collectibles/heal.png" }
+images { image: "/main/art/collectibles/body_extension.png" }
+images { image: "/main/art/collectibles/stock_extension.png" }
+images { image: "/main/art/collectibles/cyst_1.png" }
+images { image: "/main/art/collectibles/cyst_1_left.png" }
+images { image: "/main/art/collectibles/cyst_1_right.png" }
+images { image: "/main/art/collectibles/cyst_2.png" }
+images { image: "/main/art/collectibles/cyst_2_left.png" }
+images { image: "/main/art/collectibles/cyst_2_right.png" }
+images { image: "/main/art/collectibles/cyst_3.png" }
+images { image: "/main/art/collectibles/cyst_3_left.png" }
+images { image: "/main/art/collectibles/cyst_3_right.png" }
+margin: 2
+extrude_borders: 2
+inner_padding: 0

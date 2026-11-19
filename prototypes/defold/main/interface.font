@@ -1,5 +1,5 @@
 font: "/main/interface.ttf"
 material: "/builtins/fonts/font.material"
-size: 34
+size: 36
 antialias: 1
 all_chars: true

@@ -37,7 +37,7 @@ func run():
 			var recipe = Genome.create(71 + family, 0, "player", 0)
 			recipe.family = family
 			base_bodies.append({"name":"body_%d" % family,"recipe":recipe,"organs":{},
-				"radius":108.0,"role":"player","appearance":{}})
+				"radius":108.0,"role":"player","appearance":{"bake_without_mouth":true}})
 		await capture_portraits(base_bodies)
 		return
 	var world = SubViewport.new()

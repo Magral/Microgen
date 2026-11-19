@@ -4,15 +4,24 @@ textures { name: "cells" texture: "/main/cells.atlas" }
 textures { name: "world" texture: "/main/world.atlas" }
 textures { name: "terrain" texture: "/main/terrain.atlas" }
 textures { name: "icons" texture: "/main/icons.atlas" }
+textures { name: "skin" texture: "/main/skin.atlas" }
+textures { name: "liquid" texture: "/main/liquid.atlas" }
+textures { name: "water_details" texture: "/main/water_details.atlas" }
+textures { name: "combat" texture: "/main/combat.atlas" }
+textures { name: "collectibles" texture: "/main/collectibles.atlas" }
 materials { name: "tissue" material: "/main/tissue.material" }
 materials { name: "anatomy" material: "/main/anatomy.material" }
+materials { name: "liquid" material: "/main/liquid.material" }
 layers { name: "water" }
+layers { name: "deepwater" }
+layers { name: "bed" }
 layers { name: "substrate" }
 layers { name: "fields" }
 layers { name: "objects" }
 layers { name: "organisms" }
 layers { name: "anatomy" }
 layers { name: "effects" }
+layers { name: "water_surface" }
 layers { name: "hud" }
 layers { name: "overlay" }
 layers { name: "feedback" }

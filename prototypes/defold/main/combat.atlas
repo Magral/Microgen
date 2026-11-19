@@ -1,0 +1,26 @@
+images { image: "/main/art/combat/ring.png" }
+images { image: "/main/art/combat/membrane.png" }
+images { image: "/main/art/combat/skin.png" }
+images { image: "/main/art/combat/arc.png" }
+images { image: "/main/art/combat/jaw.png" }
+images { image: "/main/art/combat/thorn.png" }
+images { image: "/main/art/combat/corona.png" }
+images { image: "/main/art/combat/plume.png" }
+images { image: "/main/art/combat/petal.png" }
+images { image: "/main/art/combat/vessel.png" }
+images { image: "/main/art/combat/thread_0.png" }
+images { image: "/main/art/combat/bolt_0.png" }
+images { image: "/main/art/combat/shard_0.png" }
+images { image: "/main/art/combat/thread_1.png" }
+images { image: "/main/art/combat/bolt_1.png" }
+images { image: "/main/art/combat/shard_1.png" }
+images { image: "/main/art/combat/thread_2.png" }
+images { image: "/main/art/combat/bolt_2.png" }
+images { image: "/main/art/combat/shard_2.png" }
+images { image: "/main/art/combat/barb.png" }
+images { image: "/main/art/combat/reward.png" }
+images { image: "/main/art/combat/beam.png" }
+images { image: "/main/art/combat/projectile.png" }
+margin: 2
+extrude_borders: 2
+inner_padding: 2

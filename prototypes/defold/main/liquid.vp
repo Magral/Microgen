@@ -1,0 +1,25 @@
+#version 140
+
+in highp vec3 position;
+in highp vec2 texcoord0;
+out highp vec2 var_uv;
+out highp vec2 var_world;
+out highp vec4 var_optical;
+
+uniform vs_uniforms {
+    highp mat4 view_proj;
+};
+
+uniform fs_uniforms {
+    highp vec4 fluid_view;
+    highp vec4 fluid_stage;
+};
+
+void main() {
+    var_uv = vec2(texcoord0.x,1.0-texcoord0.y);
+    var_world = fluid_view.xy + var_uv*fluid_view.zw;
+    vec2 p = var_world*0.00072;
+    float time = fluid_stage.x;
+    var_optical = vec4(p + time*vec2(0.006,-0.003),p*1.73 + time*vec2(-0.004,0.005));
+    gl_Position = view_proj * vec4(position, 1.0);
+}

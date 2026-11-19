@@ -9,3 +9,6 @@ key_trigger { input: KEY_LEFT action: "left" }
 key_trigger { input: KEY_D action: "right" }
 key_trigger { input: KEY_RIGHT action: "right" }
 key_trigger { input: KEY_ESC action: "back" }
+key_trigger { input: KEY_M action: "map" }
+key_trigger { input: KEY_B action: "build" }
+key_trigger { input: KEY_E action: "colony" }

@@ -1,0 +1,6 @@
+images { image: "/main/art/water_haze.png" }
+images { image: "/main/art/water_wake.png" }
+images { image: "/main/art/water_far_body.png" }
+margin: 2
+extrude_borders: 2
+inner_padding: 0

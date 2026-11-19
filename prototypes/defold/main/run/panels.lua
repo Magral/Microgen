@@ -36,40 +36,90 @@ function Panels.list(ui,heading,subtext,rows,page,open_page,leave)
     if page<pages then ui:button(cx+285,184,204,57,"Далее",function() open_page(page+1) end) end
 end
 
-function Panels.catalog(app,section,page)
-    local ui = app.modal
-    local function leave() app:show_home() end
-    ui:clear()
-    if not section then
-        ui:panel("Кодекс","Полевые записи об организме",leave)
-        ui:cards({
-            {title="Органы",detail="Атаки, радиусы, интервалы и усиления",id="organ"},
-            {title="Адаптации",detail="Пассивные изменения ткани",id="adaptation"},
-            {title="Синергии",detail="Условия и эффекты сочетаний",id="synergy"},
-        },547,function(item) Panels.catalog(app,item.id,1) end)
-        return
+local CATEGORIES={
+    {"Органы","organs"},{"Адаптации","adaptations"},{"Временные мутации","temporary"},
+    {"Синергии","synergies"},{"Специализации","specializations"},{"Эволюции","evolutions"},
+}
+
+local function entries(section)
+    local rows={}
+    local ids=({organs=Catalog.ORGAN_IDS,adaptations=Catalog.ADAPTATION_IDS,
+        temporary=Catalog.TEMP_MUTATION_IDS,synergies=Catalog.SYNERGY_IDS,evolutions=Catalog.EVOLUTION_IDS})[section]
+    if section=="specializations" then
+        for _,id in ipairs(Catalog.ORGAN_IDS) do
+            for _,item in ipairs(Catalog.SPECIALIZATIONS[id] or {}) do
+                rows[#rows+1]={id=item.id,organ=id,title=item.name,detail=title(id),desc=item.desc}
+            end
+        end
+        return rows
     end
-    local rows = {}
-    local ids = section=="organ" and Catalog.ORGAN_IDS or section=="adaptation" and Catalog.ADAPTATION_IDS or Catalog.SYNERGY_IDS
-    for _,id in ipairs(ids) do
-        local entry = section=="synergy" and Catalog.SYNERGIES[id] or Catalog.item(id)
-        local detail = section=="synergy" and (title(entry.needs[1]).." + "..title(entry.needs[2])) or Catalog.effect_text(id,1)
-        rows[#rows+1] = {title=entry.name, detail=detail, action=function()
-            ui:clear()
-            local left = ui:panel(entry.name,detail,function() Panels.catalog(app,section,page) end)
-            ui:text(left+64,610,entry.desc or "",1.07,ui.colors.pale,1470)
-        end}
+    for _,id in ipairs(ids or {}) do
+        local data=section=="synergies" and Catalog.SYNERGIES[id]
+            or section=="temporary" and Catalog.TEMP_MUTATIONS[id]
+            or section=="evolutions" and Catalog.EVOLUTIONS[id]
+            or Catalog.item(id)
+        local detail=data.summary or ""
+        if section=="synergies" then detail=title(data.needs[1]).." + "..title(data.needs[2])
+        elseif section=="evolutions" then detail=title(id).." 6/6 + "..title(data.passive).." 3/3"
+        elseif section=="organs" or section=="adaptations" then detail=Catalog.effect_text(id,1) end
+        rows[#rows+1]={id=id,organ=section=="temporary" and data.organ or id,title=data.name,
+            detail=detail,desc=data.desc or data.summary or detail}
     end
-    Panels.list(ui,"Кодекс",nil,rows,page,function(p) Panels.catalog(app,section,p) end,function() Panels.catalog(app) end)
+    return rows
 end
 
-function Panels.legacy(app,section,page)
+function Panels.catalog(app,section,page,leave,selected)
+    local ui=app.modal
+    local back=leave or function() app:show_home() end
+    app:overlay("codex")
+    app.close_current=back
+    if not section then
+        ui:panel("Кодекс","Подробности органов и взаимодействий",back,1275)
+        for i,category in ipairs(CATEGORIES) do
+            local x=1230+((i-1)%2==0 and -303 or 303)
+            local y=764-math.floor((i-1)/2)*139
+            ui:button(x,y,572,114,category[1].." · "..#entries(category[2]),function()
+                Panels.catalog(app,category[2],1,back)
+            end,true,.87)
+        end
+        ui:button(1230,237,1160,75,"Назад",back)
+        return
+    end
+    local rows=entries(section)
+    local function open(entry)
+        app:overlay("codex_entry")
+        local close=selected and back or function() Panels.catalog(app,section,page,back) end
+        app.close_current=close
+        local left=ui:panel(entry.title,entry.detail,close,1545)
+        if Catalog.ORGANS[entry.organ] or Catalog.ADAPTATIONS[entry.organ] then
+            ui:image("icons","icon_"..entry.organ,left+193,600,244,244)
+        end
+        ui:text(left+361,638,entry.desc,1.02,ui.colors.pale,1110)
+        ui:button(1230,206,1480,75,"Назад",close)
+    end
+    local caption="Кодекс"
+    for _,category in ipairs(CATEGORIES) do
+        if category[2]==section then caption=category[1];break end
+    end
+    for _,entry in ipairs(rows) do
+        if entry.id==selected then open(entry);return end
+        entry.action=function() open(entry) end
+    end
+    local function close() Panels.catalog(app,nil,nil,back) end
+    app.close_current=close
+    Panels.list(ui,caption,"Выбери запись для подробного описания",rows,page,
+        function(p) Panels.catalog(app,section,p,back) end,close)
+end
+
+function Panels.legacy(app,section,page,leave)
     local ui, store = app.modal,app.store
     local profile = store.profile
     local legacy = Legacy.normalize(profile)
-    ui:clear()
-    local function root() Panels.legacy(app) end
-    local function open_page(p) Panels.legacy(app,section,p) end
+    app:overlay("legacy")
+    local back=leave or function() app:show_home() end
+    app.close_current=back
+    local function root() Panels.legacy(app,nil,nil,back) end
+    local function open_page(p) Panels.legacy(app,section,p,back) end
     local rows = {}
     local function edit(name,value)
         if store[name](store,value) then open_page(page) else app:notice(store.last_error) end
@@ -77,14 +127,14 @@ function Panels.legacy(app,section,page)
     if not section then
         ui:panel("Наследие генома",
             string.format("Поколение %d  ·  Ядра %d  ·  Органиум %d",legacy.generation,profile.cores or 0,profile.organium or 0),
-            function() app:show_home() end)
+            back)
         local names = {{"Форма","form"},{"Признаки","trait"},{"Отпечатки","imprint"},
             {"Исследования","research"},{"Органы","equipment"},{"Наборы","presets"},{"Улучшения","upgrades"}}
         for i,item in ipairs(names) do
             local x,y = 1230+((i-1)%3-1)*440,675-math.floor((i-1)/3)*148
             if i==7 then x=1230 end
             ui:button(x,y,392,100,item[1],function()
-                if item[2]=="equipment" then app:inventory(1,false) else Panels.legacy(app,item[2],1) end
+                if item[2]=="equipment" then app:inventory(1,false) else Panels.legacy(app,item[2],1,back) end
             end)
         end
         return

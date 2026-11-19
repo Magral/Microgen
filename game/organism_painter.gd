@@ -232,7 +232,8 @@ func paint(canvas: CanvasItem,p: Vector2,radius: float,recipe: Dictionary,organs
 	for entry in feeding:
 		if entry.pose.direction.normalized().dot(Vector2.from_angle(facing))>cos(0.7):
 			front_feeding=maxf(front_feeding,sin(float(entry.pose.progress)*PI))
-	_mouth(canvas,p,contour,radius*breathe,facing,time+phase,body,_organ_color("devour",edge,appearance),shadow,bite_strength,front_feeding,int(organs.get("devour",0)),detail)
+	if not appearance.get("bake_without_mouth", false):
+		_mouth(canvas,p,contour,radius*breathe,facing,time+phase,body,_organ_color("devour",edge,appearance),shadow,bite_strength,front_feeding,int(organs.get("devour",0)),detail)
 	if int(organs.get("pulse",0))>0:
 		var ring = _transform(contour,p,radius*(1.04+sin(time*2+phase)*0.045))
 		ring.append(ring[0])
