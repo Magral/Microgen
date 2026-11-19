@@ -15,10 +15,10 @@ def save(image, name):
     image.save(ART / f"{name}.png", optimize=True)
 
 
-def atlas(name, assets):
+def atlas(name, assets, inner_padding=2):
     (MAIN / f"{name}.atlas").write_text(
         "".join(f'images {{ image: "/main/art/{asset}.png" }}\n' for asset in assets)
-        + "margin: 2\nextrude_borders: 2\ninner_padding: 2\n"
+        + f"margin: 2\nextrude_borders: 2\ninner_padding: {inner_padding}\n"
     )
 
 
@@ -73,11 +73,8 @@ def main():
     background = Image.open(source / "terrain.png").convert("RGB")
     if background.size != (WIDTH,HEIGHT):
         raise ValueError(f"Unexpected reference resolution {background.size}")
-    for i in range(3):
-        name = f"terrain_{i}"
-        start,end = i*WIDTH//3,(i+1)*WIDTH//3
-        save(background.crop((start,0,end,HEIGHT)),name)
-        atlas(f"world_{i}",[name])
+    save(background, "terrain")
+    atlas("world", ["terrain"], inner_padding=0)
     names = sorted(file.stem for file in source.glob("actor_*.png"))+["player"]
     if len(names) != 20:
         raise ValueError("The fixed arena needs 19 enemies and one player.")

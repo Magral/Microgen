@@ -1,4 +1,0 @@
-images { image: "/main/art/terrain_0.png" }
-margin: 2
-extrude_borders: 2
-inner_padding: 2

@@ -50,10 +50,7 @@ function init(self)
     self.window_time = 0
     self.last_tick = socket.gettime()
     self.driver = graphics.get_adapter_info().family or "GPU"
-    local width = WIDTH / 3
-    for i = 0, 2 do
-        sprite("world_" .. i, "terrain_" .. i, vmath.vector3(width*(i+.5), HEIGHT/2, 0), width, HEIGHT)
-    end
+    sprite("world", "terrain", vmath.vector3(WIDTH / 2, HEIGHT / 2, 0), WIDTH, HEIGHT)
     self.fields = {}
     for i, field in ipairs(world.fields) do
         local color = assert(PALETTE[field.kind])
