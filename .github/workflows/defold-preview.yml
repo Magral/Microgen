@@ -116,7 +116,7 @@ jobs:
           test "${#executables[@]}" -eq 1
           xvfb-run -a -s '-screen 0 2460x1080x24' bash -euo pipefail -c '
             cd "$(dirname "$1")"
-            ALSOFT_DRIVERS=null "$1" --graphics-adapter=opengl --config=microgen.smoke_run=1 > "$2/linux-smoke.log" 2>&1 &
+            ALSOFT_DRIVERS=null "$1" --graphics-adapter=opengl --config=microgen.smoke_run=1 --config=microgen.smoke_cards=1 > "$2/linux-smoke.log" 2>&1 &
             pid=$!
             trap "kill $pid 2>/dev/null || true" EXIT
             for attempt in {1..50}; do
@@ -132,6 +132,7 @@ jobs:
             done
             grep -Fq "MICROGEN PREVIEW SAMPLE" "$2/linux-smoke.log"
             grep -Fq "MICROGEN RUN READY" "$2/linux-smoke.log"
+            grep -Fq "MICROGEN MUTATION CARDS READY" "$2/linux-smoke.log"
             kill -0 "$pid"
             if grep -E "ERROR:SCRIPT|ERROR:RENDER|FATAL" "$2/linux-smoke.log"; then exit 1; fi
             timeout 15s import -window root "$2/Microgen-Defold-Preview.png"

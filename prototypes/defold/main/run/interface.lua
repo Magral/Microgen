@@ -96,24 +96,45 @@ function Interface:image(atlas,frame,x,y,w,h)
     return node
 end
 
+local function card_text(self,x,y,message,scale,shade,width,height)
+    self.card_font = self.card_font or gui.get_font_resource("interface")
+    local metrics
+    for _ = 1, 7 do
+        metrics = resource.get_text_metrics(self.card_font,message,{width=width/scale,line_break=true})
+        if metrics.height*scale <= height and metrics.width*scale <= width then break end
+        scale = scale*.90
+    end
+    if sys.get_config_string("microgen.smoke_cards","0")=="1" then
+        assert(metrics.height*scale <= height and metrics.width*scale <= width,
+            "Mutation text exceeds its layout slot: "..message)
+    end
+    return self:text(x,y,message,scale,shade,width)
+end
+
 function Interface:cards(items,row_y,callback,set_color)
     local count = #items
-    local gap = 18
-    local width = math.min(532,math.floor(((self.panel_width or 1545)-66-(count-1)*gap)/math.max(1,count)))
+    local gap = 22
+    local width = math.min(680,math.floor(((self.panel_width or 1545)-72-(count-1)*gap)/math.max(1,count)))
     local first = 1230-((width+gap)*count-gap)/2+width/2
     for i,item in ipairs(items) do
         local index = i
         local x = first+(width+gap)*(i-1)
-        local left = x-width/2+24
+        local left = x-width/2+28
         local shade = set_color and set_color(item) or MINT
-        self:surface(x,row_y,width,380)
-        if item.icon then self:image("icons","icon_"..item.icon,left+46,row_y+118,92,92) end
-        self:text(left+(item.icon and 109 or 0),row_y+118,item.title or "",.92,shade,width-(item.icon and 157 or 48))
-        if item.detail then self:text(left,row_y+24,item.detail,.79,DIM,width-48) end
-        if item.extra then self:text(left,row_y-47,item.extra,.76,MINT,width-48) end
+        self:surface(x,row_y,width,570)
+        self:box(x,row_y+259,width-60,4,shade)
+        if item.icon then self:image("icons","icon_"..item.icon,left+42,row_y+176,84,84) end
+        local inset = item.icon and 108 or 0
+        card_text(self,left+inset,row_y+176,item.title or "",1.10,shade,width-56-inset,105)
+        if item.meta then card_text(self,left,row_y+94,item.meta,.94,DIM,width-56,48) end
+        if item.detail then card_text(self,left,row_y+1,item.detail,.98,PALE,width-56,115) end
+        if item.extra then
+            self:box(x,row_y-69,width-56,2,color("2a4a53"))
+            card_text(self,left,row_y-116,item.extra,.85,MINT,width-56,82)
+        end
         local action
         if not item.sold then action=function() callback(item,index) end end
-        self:button(x,row_y-130,width-48,72,item.action or "Выбрать",action,true,.86)
+        self:button(x,row_y-217,width-56,88,item.action or "Выбрать",action,true,1.04)
     end
 end
 

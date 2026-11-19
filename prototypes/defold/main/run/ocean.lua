@@ -132,6 +132,7 @@ local function show_point(states,n,x,y,w,h,margin)
         state.position.x,state.position.y=x,y
         gui.set_position(n,state.position)
     end
+    return visible
 end
 
 function Ocean:draw(x,y,scale)
@@ -142,9 +143,10 @@ function Ocean:draw(x,y,scale)
         item.y=wrap(item.y,y,h*.85/(scale*.38))
         local tx,ty=self.cx+(item.x-x)*scale*.38,self.cy-(item.y-y)*scale*.38
         local radius=item.r*(.90+math.sin(time*.12+item.phase)*.06)
-        show_point(self.points,item.node,tx,ty,w,h,radius*1.6)
-        gui.set_rotation(item.node,vmath.vector3(0,0,math.deg(item.phase+math.sin(time*.07+item.phase)*.05)))
-        gui.set_size(item.node,vmath.vector3(radius*2,radius*1.4,0))
+        if show_point(self.points,item.node,tx,ty,w,h,radius*1.6) then
+            gui.set_rotation(item.node,vmath.vector3(0,0,math.deg(item.phase+math.sin(time*.07+item.phase)*.05)))
+            gui.set_size(item.node,vmath.vector3(radius*2,radius*1.4,0))
+        end
     end
     for i,item in ipairs(self.particles) do
         if (tick+i)%CURRENT_DIVISOR==0 then item.vx,item.vy=flow(item.x,item.y,time) end
@@ -169,10 +171,11 @@ function Ocean:draw(x,y,scale)
         if not n then n=node("deepwater","water_details","water_wake");self.wake_nodes[i]=n end
         local age=wake.age/WAKE_LIFE
         local radius=wake.r*scale*(.65+age*.50)
-        show_point(self.points,n,self.cx+(wake.x-x)*scale,self.cy-(wake.y-y)*scale,w,h,radius*2.5)
-        gui.set_size(n,vmath.vector3(radius*(.9+age*1.35),radius*(2.7+age*3.1),0))
-        gui.set_rotation(n,vmath.vector3(0,0,wake.angle))
-        gui.set_color(n,vmath.vector4(.45,.8,.76,.22*(1-age)^2))
+        if show_point(self.points,n,self.cx+(wake.x-x)*scale,self.cy-(wake.y-y)*scale,w,h,radius*3) then
+            gui.set_size(n,vmath.vector3(radius*(.9+age*1.35),radius*(2.7+age*3.1),0))
+            gui.set_rotation(n,vmath.vector3(0,0,wake.angle))
+            gui.set_color(n,vmath.vector4(.45,.8,.76,.22*(1-age)^2))
+        end
     end
     for i=#self.wakes+1,#self.wake_nodes do
         local n=self.wake_nodes[i]

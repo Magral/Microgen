@@ -58,6 +58,11 @@ end
 function App:overlay(kind)
     self:clear_pointer()
     self.modal:clear()
+    if kind ~= "run" then
+        self.hud:visible(false)
+        self.toast_time=0
+        gui.set_text(self.toast,"")
+    end
     self.screen=kind
     self.close_current=nil
 end
@@ -867,7 +872,7 @@ function App:level_up()
     self:overlay("level")
     self.deferred_choices=false
     self.close_current=function() self:defer_choices() end
-    ui:panel("Мутация · уровень "..sim.level,"Выбери одно улучшение · Биомасса "..sim.build.biomass,self.close_current)
+    ui:panel("Мутация · уровень "..sim.level,"Выбери одно улучшение · Биомасса "..sim.build.biomass,self.close_current,2070)
     local choices=sim:prepare_offers()
     local shaped={}
     for _,entry in ipairs(choices or {}) do
@@ -880,13 +885,22 @@ function App:level_up()
             local quality=({ "Обычная", "Редкая", "Эпическая", "Легендарная" })[grade+1]
             local baseline=Catalog.effect_text(id,Catalog.effective_rank(rank))
             local rank_text=current==0 and "Ранг 1" or ("Ранг %d → %d"):format(current,rank)
-            local hint=Inspector.synergy_summary(sim.build,id)
-            local first_hint=hint:match("^[^\n]+")
-            shaped[#shaped+1]={id=id,rank=rank,grade=grade,detail=rank_text.."  ·  "..quality.."\n"..baseline,
-                extra=first_hint,action=current>0 and "Усилить" or "Выбрать"}
+            local hint
+            for _, synergy_id in ipairs(Catalog.SYNERGY_IDS) do
+                local synergy=Catalog.SYNERGIES[synergy_id]
+                local first,second=synergy.needs[1],synergy.needs[2]
+                if id==first or id==second then
+                    local partner=id==first and second or first
+                    local ready=sim.build:rank(partner)>0
+                    hint=ready and ("✓ "..synergy.name) or ("◇ Нужен: "..Catalog.item(partner).name)
+                    if ready then break end
+                end
+            end
+            shaped[#shaped+1]={id=id,rank=rank,grade=grade,meta=rank_text.." · "..quality,detail=baseline,
+                extra=hint,action=current>0 and "Усилить" or "Выбрать"}
         end
     end
-    Panels.offer_cards(ui,shaped,553,function(item)
+    Panels.offer_cards(ui,shaped,554,function(item)
         local before=Copy(sim.build:active_synergies())
         local function apply(old)
             return sim:choose_mutation(item.id,old,function(...) return self:award(...) end)
@@ -906,8 +920,8 @@ function App:level_up()
             if sim:reroll_offers(focused) then self:save_run();self:level_up()
             else self:notice("Недостаточно биомассы или новых вариантов") end
         end
-        ui:button(966,218,450,67,"Переброс · "..price,function() reroll(false) end)
-        ui:button(1494,218,450,67,"Ветвь · "..(price+5),function() reroll(true) end)
+        ui:button(966,182,450,76,"Переброс · "..price,function() reroll(false) end)
+        ui:button(1494,182,450,76,"Ветвь · "..(price+5),function() reroll(true) end)
     end
 end
 
@@ -915,7 +929,7 @@ function App:colony(index)
     local ui,sim=self.modal,self.sim
     local site=sim.world.colonies[index]
     self:overlay("colony")
-    ui:panel("Колония",string.format("Биомасса · %d",sim.build.biomass),function() self:show_run() end)
+    ui:panel("Колония",string.format("Биомасса · %d",sim.build.biomass),function() self:show_run() end,2070)
     local items={}
     for stock_index,entry in ipairs(site.stock or {}) do
         items[#items+1]={title=entry.id=="heal" and "Восстановление" or name(entry.id),id=entry.id,
@@ -964,7 +978,7 @@ function App:reward(skip_animation)
     self.reveal=nil
     self:overlay("reward")
     self.close_current=function() self:defer_choices() end
-    ui:panel(caption,"Выбери одну награду",self.close_current)
+    ui:panel(caption,"Выбери одну награду",self.close_current,2070)
     Panels.offer_cards(ui,reward or {},550,function(item,index)
         local before=Copy(sim.build:active_synergies())
         local function apply(old)
@@ -1178,6 +1192,15 @@ function init(self)
         end
     end)
     if smoke then app:start(47) end
+    if smoke and sys.get_config_string("microgen.smoke_cards","0")=="1" then
+        local sim=app.sim
+        sim.level,sim.pending_levels=10,1
+        sim.build.biomass=108
+        sim.current_offers={"enzymes","barrier","armor"}
+        sim.offer_quality={enzymes=2}
+        app:level_up()
+        print("MICROGEN MUTATION CARDS READY")
+    end
 end
 
 function update(self,dt)
@@ -1240,7 +1263,7 @@ function update(self,dt)
     end
     local sim=app.sim
     if not sim then
-        if app.home_world then
+        if app.home_world and app.screen=="home" and app.focused then
             app.home_delta=(app.home_delta or 0)+dt
             if app.home_delta>=1/30 then
                 app.home_world.elapsed=app.home_world.elapsed+math.min(.1,app.home_delta)

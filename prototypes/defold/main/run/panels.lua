@@ -202,7 +202,7 @@ function Panels.offer_cards(ui,choices,y,choose)
             elseif choice.kind=="evolution" then display="Эволюция · "..display
             elseif choice.kind=="temporary" then display="Временная мутация · "..display end
             items[#items+1] = {id=id,grade=choice.grade or choice.quality or 0,
-                title=display, icon=(Catalog.ORGANS[id] or Catalog.ADAPTATIONS[id]) and id or nil, detail=detail, extra=choice.extra, action=choice.action, data=choice}
+                title=display, icon=(Catalog.ORGANS[id] or Catalog.ADAPTATIONS[id]) and id or nil, detail=detail, meta=choice.meta, extra=choice.extra, action=choice.action, data=choice}
         end
     end
     ui:cards(items,y,choose,quality_color)
