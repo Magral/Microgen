@@ -22,6 +22,3 @@ game_binding = /main/arena.input_bindingc
 package = org.magral.microgen.defold
 version_code = 1
 minimum_sdk_version = 26
-
-[resource]
-custom_resources = main/arena.json

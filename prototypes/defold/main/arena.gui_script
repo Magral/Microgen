@@ -1,4 +1,5 @@
-local WIDTH, HEIGHT = 2460, 1080
+local ARENA = require "main.arena_data"
+local WIDTH, HEIGHT = ARENA.size[1], ARENA.size[2]
 local SAMPLE_SECONDS, WARMUP_SECONDS = 2, 2
 local WORLD_COLOR = vmath.vector4(1, 1, 1, 1)
 local PALETTE = {
@@ -36,7 +37,7 @@ end
 
 function init(self)
     msg.post(".", "acquire_input_focus")
-    local world = json.decode(assert(sys.load_resource("/main/arena.json"), "Missing shared arena fixture"))
+    local world = ARENA
     self.world = world
     self.elapsed = 0
     self.position = screen_point(world.player.pos)
