@@ -55,7 +55,7 @@ static func describe(sim) -> Dictionary:
 	for item in sim.pickups:
 		if bounds.has_point(item.pos):
 			pickups.append({"pos":_point((item.pos-origin)*ZOOM),"kind":item.type,"phase":float(item.id)})
-	return {"seed":SEED,"size":_point(SIZE),"stage":4,"walls":walls,"actors":actors,"fields":fields,"pickups":pickups,"player":{"pos":_point((sim.player-origin)*ZOOM),"radius":sim.body_radius()*ZOOM}}
+	return {"seed":SEED,"size":_point(SIZE),"stage":4,"stage_name":sim.stage_name(),"walls":walls,"actors":actors,"fields":fields,"pickups":pickups,"player":{"pos":_point((sim.player-origin)*ZOOM),"radius":sim.body_radius()*ZOOM}}
 
 static func _point(p: Vector2) -> Array:
 	return [p.x, p.y]

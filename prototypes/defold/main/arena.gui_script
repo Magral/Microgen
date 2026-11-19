@@ -72,7 +72,7 @@ function init(self)
     box(405,955,722,166,vmath.vector4(.021,.075,.105,.86))
     box(47,955,5,166,vmath.vector4(.41,.91,.75,1))
     text(74, 1000, "МИКРОГЕН  ·  DEFOLD", vmath.vector4(.63,1,.86,1), 1.08)
-    text(74, 952, "Кристаллический жёлоб  ·  Ступень 4", vmath.vector4(.92,.98,.94,1), .91)
+    text(74, 952, world.stage_name .. "  ·  Ступень 4", vmath.vector4(.92,.98,.94,1), .91)
     text(74, 905, string.format("%d организмов  ·  %d полей  ·  Зерно %d", #world.actors + 1, #world.fields, world.seed),
         vmath.vector4(.65,.82,.81,1), .76)
     box(WIDTH/2,44,WIDTH-90,64,vmath.vector4(.021,.075,.105,.91))
@@ -107,6 +107,10 @@ local function measure(self)
     local width, height = window.get_size()
     gui.set_text(self.metric, string.format("%.0f FPS  ·  95%% кадров ≤ %.1f мс  ·  %d×%d  ·  %s",
         count / self.window_time, p95, width, height, self.driver))
+    if not self.sample_logged then
+        print("MICROGEN PREVIEW SAMPLE " .. self.driver)
+        self.sample_logged = true
+    end
     self.window_time = 0
     self.frames = {}
 end

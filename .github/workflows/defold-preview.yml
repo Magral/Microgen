@@ -87,9 +87,9 @@ jobs:
       - name: Build and run native Linux smoke test
         working-directory: prototypes/defold
         run: |
-          if ! command -v xvfb-run >/dev/null || ! command -v import >/dev/null; then
+          if ! command -v xvfb-run >/dev/null || ! command -v import >/dev/null || ! ldconfig -p | grep "libGLU.so.1" >/dev/null; then
             sudo apt-get update
-            sudo apt-get install -y xvfb imagemagick
+            sudo apt-get install -y xvfb imagemagick libglu1-mesa libopenal1
           fi
           mkdir -p "$RUNNER_TEMP/defold-smoke"
           java -jar "$RUNNER_TEMP/bob.jar" --platform x86_64-linux \
@@ -108,7 +108,12 @@ jobs:
               sleep 0.2
             done
             grep -Fq "MICROGEN PREVIEW READY" "$2/linux-smoke.log"
-            sleep 1
+            for attempt in {1..50}; do
+              if grep -Fq "MICROGEN PREVIEW SAMPLE" "$2/linux-smoke.log"; then break; fi
+              kill -0 "$pid"
+              sleep 0.2
+            done
+            grep -Fq "MICROGEN PREVIEW SAMPLE" "$2/linux-smoke.log"
             kill -0 "$pid"
             if grep -E "ERROR:SCRIPT|ERROR:RENDER|FATAL" "$2/linux-smoke.log"; then exit 1; fi
             import -window root "$2/Microgen-Defold-Preview.png"
