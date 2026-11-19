@@ -1,0 +1,35 @@
+name: Audit Defold APK size
+on:
+  push:
+    branches: [audit/defold-apk-size]
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Compare published APK contents
+        run: |
+          for version in 0.3.0 0.4.0; do
+            curl --fail --silent --show-error --location --retry 3 \
+              "https://github.com/Magral/Microgen/releases/download/defold-$version/Microgen-Defold-$version.apk" \
+              --output "$version.apk"
+          done
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          from collections import Counter
+          for path in sorted(Path(".").glob("*.apk")):
+              print(path.name, path.stat().st_size)
+              with ZipFile(path) as apk:
+                  totals = Counter()
+                  for item in apk.infolist():
+                      totals[item.filename.split("/")[0]] += item.compress_size
+                  print(dict(totals))
+                  for item in sorted(apk.infolist(), key=lambda x: x.compress_size, reverse=True)[:12]:
+                      print(item.filename, item.file_size, item.compress_size)
+                  for item in apk.infolist():
+                      if item.filename.startswith("lib/") and item.filename.endswith(".so"):
+                          data = apk.read(item)
+                          print(item.filename, "debug_info", b".debug_info" in data, "symtab", b".symtab" in data)
+          PY
