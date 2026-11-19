@@ -83,10 +83,10 @@ function Interface:panel(title,subtitle,close,size)
 end
 
 function Interface:meter(left,y,w,h,fill)
-    self:box(left+w/2,y,w,h,color("193540"))
+    local track = self:box(left+w/2,y,w,h,color("193540"))
     local node = self:box(left,y,w,h,fill)
     gui.set_pivot(node,gui.PIVOT_W)
-    return node
+    return node,track
 end
 
 function Interface:image(atlas,frame,x,y,w,h)

@@ -726,31 +726,32 @@ function App:show_run()
     local left,right,top,bottom=safe_edges()
     local control_x=right-144
     local color=Interface.color
-    self.stage=ui:text(left,top-12,"",.90,color("9bbfbb"))
-    self.area=ui:text(left,top-52,"",.84,color("9bbfbb"))
-    self.goal=ui:text(left,top-88,"",.84,ui.colors.gold)
-    self.health=ui:meter(left,top-128,360,21,color("78d9bd"))
-    self.xp=ui:meter(left,top-149,360,9,color("ba99e4"))
-    self.shield_metric=ui:text(left,top-181,"",.82,color("b5d5ff"))
-    local shield_base=ui:box(left+180,top-207,360,7,color("193540"))
-    local shield=ui:box(left,top-207,360,7,color("8ebcf4"))
-    gui.set_pivot(shield,gui.PIVOT_W)
-    self.shield,self.shield_base=shield,shield_base
-    self.level=ui:text(left,top-246,"",.96,ui.colors.pale)
-    self.biomass=ui:text(left,top-290,"",.91,ui.colors.pale)
-    self.last_damage=ui:text(left,top-333,"",.79,ui.colors.red)
+    local width=500
+    self.hud_left,self.hud_top=left,top
+    self.vitals=ui:surface(left+280,top-153,560,306,"panel")
+    self.stage=ui:text(left+23,top-32,"",.90,ui.colors.pale,width)
+    self.level=ui:text(left+23,top-76,"",.82,ui.colors.pale,width)
+    self.health=ui:meter(left+23,top-105,width,12,color("78d9bd"))
+    self.shield_metric=ui:text(left+23,top-136,"",.80,color("b5d5ff"),width)
+    self.shield,self.shield_base=ui:meter(left+23,top-163,width,10,color("8ebcf4"))
+    self.area=ui:text(left+23,top-192,"",.81,ui.colors.pale,width)
+    self.xp,self.xp_base=ui:meter(left+23,top-220,width,10,color("ba99e4"))
+    self.biomass=ui:text(left+23,top-250,"",.77,ui.colors.dim,width)
+    self.goal=ui:text(left+23,top-279,"",.77,ui.colors.gold,width)
+    self.last_damage=ui:text(left+23,top-326,"",.77,ui.colors.red,width)
     self.metrics=ui:text(left,bottom+11,"",.73,color("a5d6ce"))
+    self.hud_has_barrier=nil
     if not self.minimap then self.minimap=Minimap.new(self.sim.world) end
-    ui:surface(control_x,top-105,288,210,"panel")
-    local mini=ui:box(control_x,top-105,266,188,vmath.vector4(1,1,1,1))
+    ui:surface(right-442,top-97,204,194,"panel")
+    local mini=ui:box(right-442,top-97,182,176,vmath.vector4(1,1,1,1))
     self.minimap:attach(mini)
-    ui:button(control_x,top-251,288,66,"Карта",function() self:map() end)
-    ui:button(control_x,top-350,288,81,"Организм",function()
+    ui:button(control_x,top-46,288,80,"Карта",function() self:map() end)
+    ui:button(control_x,top-144,288,80,"Организм",function()
         self.development_origin=nil
         self:body(true)
     end)
     ui:button(control_x,bottom+47,288,75,"Ⅱ  Пауза",function() self:pause() end)
-    self.reward_x,self.reward_y=control_x,top-446
+    self.reward_x,self.reward_y=control_x,top-250
     self.reward_button=false
     self.colony_label=ui:button(1230,bottom+83,420,81,"Войти в колонию",function()
         local index=self.sim:nearby_colony()
@@ -763,29 +764,43 @@ function App:draw_hud()
     local sim=self.sim
     local health=math.min(1,math.max(0,sim.hp/math.max(1,sim.max_hp)))
     local xp=math.min(1,math.max(0,sim.xp/sim:xp_needed()))
-    gui.set_size(self.health,vmath.vector3(math.max(.01,360*health),21,0))
-    gui.set_size(self.xp,vmath.vector3(math.max(.01,360*xp),9,0))
-    gui.set_text(self.stage,string.format("СТУПЕНЬ %d · %s",sim.stage_index,sim:stage_name()))
-    local biome=sim.world:biome(sim.player.x,sim.player.y)
-    gui.set_text(self.area,(biome==1 and "ПИТАТЕЛЬНАЯ СРЕДА" or "ТОКСИЧНАЯ ЗОНА").." · "..sim.world:condition_name(biome))
+    gui.set_size(self.health,vmath.vector3(math.max(.01,500*health),12,0))
+    gui.set_size(self.xp,vmath.vector3(math.max(.01,500*xp),10,0))
+    gui.set_text(self.stage,("Ступень %d · %s"):format(sim.stage_index,sim:stage_name()))
+    gui.set_text(self.level,("Здоровье  %.0f / %.0f"):format(sim.hp,sim.max_hp))
+    gui.set_text(self.area,("Уровень %d · ДНК %.0f%%"):format(sim.level,xp*100))
     local elapsed=sim.elapsed
-    gui.set_text(self.level,string.format("Размер ×%.1f · Ур. %d · %.0f/%.0f HP",sim:body_radius()/22,sim.level,sim.hp,sim.max_hp))
-    gui.set_text(self.biomass,string.format("Биомасса %d · %d:%02d",sim.build.biomass,math.floor(elapsed/60),math.floor(elapsed)%60))
+    gui.set_text(self.biomass,("Биомасса %d · ×%.1f · %d:%02d"):format(
+        sim.build.biomass,sim:body_radius()/22,math.floor(elapsed/60),math.floor(elapsed)%60))
     local nests=0
     for _,nest in ipairs(sim.world.nests) do if nest.used then nests=nests+1 end end
     local miniboss_target=sim:stage_miniboss_target()
-    local goal=sim.boss_spawned and ("ГЛАВНАЯ УГРОЗА: "..sim:boss_title())
-        or string.format("ЦЕЛЬ: гнёзда %d/%d · минибоссы %d/%d",nests,math.min(4,miniboss_target*2),sim.minibosses_defeated or 0,miniboss_target)
-    gui.set_text(self.goal,goal)
+    local goal=sim.boss_spawned and sim:boss_title()
+        or ("Гнёзда %d/%d · минибоссы %d/%d"):format(nests,math.min(4,miniboss_target*2),sim.minibosses_defeated or 0,miniboss_target)
+    gui.set_text(self.goal,sim.stage_transition and "" or goal)
     local barrier=sim.build:rank("barrier")>0
-    gui.set_enabled(self.shield,barrier)
-    gui.set_enabled(self.shield_base,barrier)
+    if self.hud_has_barrier~=barrier then
+        self.hud_has_barrier=barrier
+        gui.set_enabled(self.shield,barrier)
+        gui.set_enabled(self.shield_base,barrier)
+        gui.set_enabled(self.shield_metric,barrier)
+        local lift=barrier and 0 or 60
+        local left,top=self.hud_left,self.hud_top
+        gui.set_position(self.area,vmath.vector3(left+23,top-192+lift,0))
+        gui.set_position(self.xp,vmath.vector3(left+23,top-220+lift,0))
+        gui.set_position(self.xp_base,vmath.vector3(left+273,top-220+lift,0))
+        gui.set_position(self.biomass,vmath.vector3(left+23,top-250+lift,0))
+        gui.set_position(self.goal,vmath.vector3(left+23,top-279+lift,0))
+        gui.set_position(self.last_damage,vmath.vector3(left+23,top-326+lift,0))
+        gui.set_position(self.vitals,vmath.vector3(left+280,top-153+lift/2,0))
+        gui.set_size(self.vitals,vmath.vector3(560,306-lift,0))
+    end
     if barrier then
         local cooldown=sim.cooldowns.barrier or 0
-        gui.set_text(self.shield_metric,cooldown<=0 and string.format("Щит готов · до %.0f урона",sim:barrier_capacity())
-            or string.format("Щит восстанавливается · %.1f с",cooldown))
-        gui.set_size(self.shield,vmath.vector3(math.max(.01,360*(1-math.min(1,cooldown/8))),7,0))
-    else gui.set_text(self.shield_metric,"") end
+        gui.set_text(self.shield_metric,cooldown<=0 and ("Щит готов · до %.0f урона"):format(sim:barrier_capacity())
+            or ("Щит · восстановление %.1f с"):format(cooldown))
+        gui.set_size(self.shield,vmath.vector3(math.max(.01,500*(1-math.min(1,cooldown/8))),10,0))
+    end
     self.minimap:update(sim)
     Interface.button_enabled(self.colony_label,sim:nearby_colony()>0)
     local damage=sim.last_damage or {}
@@ -1366,6 +1381,19 @@ function init(self)
         assert(app.screen=="preparation")
         app:show_run()
         print("MICROGEN ORGANISM PANEL READY")
+        local prior_barrier,prior_cooldown=sim.build.organs.barrier,sim.cooldowns.barrier
+        sim.build.organs.barrier=1
+        sim.cooldowns.barrier=0
+        app:draw_hud()
+        assert(app.hud_has_barrier and gui.get_text(app.shield_metric):find("Щит готов",1,true))
+        sim.cooldowns.barrier=4
+        app:draw_hud()
+        assert(gui.get_size(app.shield).x==250 and gui.get_text(app.shield_metric):find("4.0",1,true))
+        sim.build.organs.barrier=nil
+        app:draw_hud()
+        assert(not app.hud_has_barrier and gui.get_size(app.vitals).y==246)
+        sim.build.organs.barrier,sim.cooldowns.barrier=prior_barrier,prior_cooldown
+        app:draw_hud()
         app.scene:render(sim)
         local labels=app.scene.labels
         local tint=vmath.vector4(1,.5,.5,1)
