@@ -108,16 +108,18 @@ function App:show_home()
     local ui=self.modal
     ui:box(1230,540,2460,1080,vmath.vector4(.015,.035,.05,.55))
     local families=self.store:family_summaries()
-    local total=math.max(HOME_SLOTS,#families)
-    local page=self.home_slot
-    if not page then
-        for i,family in ipairs(families) do
-            if family.id==self.store:family_id() then page=i;break end
-        end
+    local total,by_slot=HOME_SLOTS,{}
+    local active_slot
+    for i,family in ipairs(families) do
+        local slot=family.slot or i
+        by_slot[slot]=family
+        total=math.max(total,slot)
+        if family.id==self.store:family_id() then active_slot=slot end
     end
+    local page=self.home_slot or active_slot
     page=math.min(total,page or 1)
     self.home_slot=page
-    local family=families[page]
+    local family=by_slot[page]
     ui:text(1230,977,"МИКРОГЕН",1.92,ui.colors.pale,nil,true)
     ui:surface(1230,590,1770,596,"panel")
     ui:button(216,590,132,230,"‹",page>1 and function()
@@ -131,7 +133,7 @@ function App:show_home()
     ui:text(1230,242,("%d / %d"):format(page,total),1,ui.colors.dim,nil,true)
 
     local function new()
-        if #families<HOME_SLOTS then self:new_family() else self:show_families() end
+        if #families<HOME_SLOTS then self:new_family(not family and page<=HOME_SLOTS and page or nil) else self:show_families() end
     end
     if family then
         local profile=family_profile(self.store,family.id)
@@ -245,7 +247,7 @@ function App:show_families()
     ui:text(1230,lower-79,"Версия "..sys.get_config_string("project.version","0.3.0").." · игра без интернета",.83,ui.colors.pale,nil,true)
 end
 
-function App:new_family()
+function App:new_family(slot)
     if #self.store.profile.families.items>=HOME_SLOTS then return self:show_families() end
     self:overlay("new_family")
     local ui=self.modal
@@ -260,7 +262,7 @@ function App:new_family()
         ui:text(x-228,390,data.desc,.83,ui.colors.dim,456)
         ui:button(x,287,455,75,"Выбрать",function()
             local generated_name="Семейство "..self.store.profile.families.next_id
-            if not self.store:create_family(generated_name,id) then return self:notice(self.store.last_error) end
+            if not self.store:create_family(generated_name,id,slot) then return self:notice(self.store.last_error) end
             self.home_slot=nil
             self.equipment_state=nil
             self.body_page,self.stock_page=1,1
@@ -1345,10 +1347,10 @@ function init(self)
             app:show_home()
             assert(app.home_slot==3 and app.screen=="home")
             assert(app.store:create_family("Первый забег","predator"))
-            assert(app.store:create_family("Второй забег","predator"))
+            assert(app.store:create_family("Второй забег","predator",3))
             app.home_slot=nil
             app:show_home()
-            assert(app.home_slot==2 and app.screen=="home")
+            assert(app.home_slot==3 and app.screen=="home")
         end
         app:start(47)
     end

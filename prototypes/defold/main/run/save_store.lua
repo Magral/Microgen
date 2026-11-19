@@ -81,14 +81,22 @@ function M.normalize_profile(profile)
     if raw == nil then
         clean.families = {
             version = 1, active = "family-1", next_id = 2,
-            items = {{id = "family-1", name = "Семья 1", form = clean.legacy.selected_form, state = {}}},
+            items = {{id = "family-1", name = "Семья 1", form = clean.legacy.selected_form, slot = 1, state = {}}},
         }
         return clean
     end
     if type(raw) ~= "table" or raw.version ~= 1 or type(raw.active) ~= "string"
         or not util.count(raw.next_id, 1) or not util.array(raw.items) then return nil end
     local families = {version = 1, active = raw.active, next_id = raw.next_id, items = {}}
-    local ids = {}
+    local ids, slots = {}, {}
+    for _,entry in ipairs(raw.items) do
+        if type(entry)~="table" then return nil end
+        if entry.slot~=nil then
+            if not util.count(entry.slot,1) or slots[entry.slot] then return nil end
+            slots[entry.slot]=true
+        end
+    end
+    local free=1
     for index, entry in ipairs(raw.items) do
         if type(entry) ~= "table" then return nil end
         local id = entry.id
@@ -106,7 +114,13 @@ function M.normalize_profile(profile)
             checkpoint = archived.checkpoint
         end
         if checkpoint.family_id ~= nil and checkpoint.family_id ~= id then return nil end
-        families.items[index] = {id = id, name = entry.name, form = entry.form, state = archived}
+        local slot=entry.slot
+        if not slot then
+            while slots[free] do free=free+1 end
+            slot=free
+            slots[slot]=true
+        end
+        families.items[index] = {id = id, name = entry.name, form = entry.form, slot = slot, state = archived}
         ids[id] = true
     end
     if (#families.items == 0 and families.active ~= "") or (#families.items > 0 and not ids[families.active]) then return nil end
@@ -324,7 +338,7 @@ function Store:family_summaries()
         local data = family.id == self:family_id() and self.profile or family.state
         local ended = util.string(data.checkpoint.outcome) ~= ""
         summaries[index] = {
-            id = family.id, name = family.name, form = family.form,
+            id = family.id, name = family.name, form = family.form, slot = family.slot,
             alive = next(data.checkpoint) ~= nil and not ended, ended = ended, generation = data.legacy.generation,
             runs = data.runs, cores = data.cores, best = data.best, best_stage = data.best_stage,
         }
@@ -346,7 +360,7 @@ function Store:select_family(id)
     return self:write_profile(projected)
 end
 
-function Store:create_family(name, form)
+function Store:create_family(name, form, preferred_slot)
     name = clean_name(name)
     if name == "" or not legacy.FORMS[form] or self.profile.families.next_id >= util.MAX_INTEGER then return false end
     local profile = util.copy(self.profile)
@@ -356,7 +370,11 @@ function Store:create_family(name, form)
     if current then current.state = active_projection(profile) end
     local id = ("family-%.0f"):format(families.next_id)
     families.next_id = families.next_id + 1
-    families.items[#families.items + 1] = {id = id, name = name, form = form, state = {}}
+    local occupied={}
+    for index,family in ipairs(families.items) do occupied[family.slot or index]=true end
+    local slot=util.count(preferred_slot,1) and not occupied[preferred_slot] and preferred_slot or 1
+    while occupied[slot] do slot=slot+1 end
+    families.items[#families.items + 1] = {id = id, name = name, form = form, slot = slot, state = {}}
     families.active = id
     local research = legacy.FORMS[form].research
     if research ~= "" and not util.index(projected.legacy.research, research) then
