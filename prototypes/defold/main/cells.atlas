@@ -1,0 +1,12 @@
+images { image: "/main/art/player.png" }
+images { image: "/main/art/hunter.png" }
+images { image: "/main/art/prey.png" }
+images { image: "/main/art/spitter.png" }
+images { image: "/main/art/boss.png" }
+images { image: "/main/art/field.png" }
+images { image: "/main/art/shield.png" }
+images { image: "/main/art/surge.png" }
+images { image: "/main/art/speck.png" }
+margin: 2
+extrude_borders: 2
+inner_padding: 2

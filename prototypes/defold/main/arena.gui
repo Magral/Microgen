@@ -1,0 +1,6 @@
+script: "/main/arena.gui_script"
+fonts { name: "interface" font: "/main/interface.font" }
+textures { name: "cells" texture: "/main/cells.atlas" }
+textures { name: "world" texture: "/main/world.atlas" }
+material: "/builtins/materials/gui.material"
+max_nodes: 256

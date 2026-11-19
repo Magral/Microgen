@@ -1,0 +1,27 @@
+[project]
+title = Microgen Defold Preview
+version = 0.1.0
+
+[bootstrap]
+main_collection = /main/arena.collection
+
+[display]
+width = 2460
+height = 1080
+window_width = 1230
+window_height = 540
+vsync = 1
+swap_interval = 1
+variable_dt = 1
+dynamic_orientation = 0
+
+[input]
+game_binding = /main/arena.input_binding
+
+[android]
+package = org.magral.microgen.defold
+version_code = 1
+minimum_sdk_version = 26
+
+[resource]
+custom_resources = main/arena.json

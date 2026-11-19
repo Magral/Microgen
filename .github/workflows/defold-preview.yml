@@ -1,0 +1,124 @@
+name: Defold preview
+
+on:
+  push:
+    branches: [preview/defold]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: defold-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      BOB_VERSION: '1.14.1'
+      BOB_SHA256: f47e0d21fee84c3c1f56adfe5feb1c328f83df9e4fe26f2616a5392b9b710b45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Java 25
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Download and verify Defold Bob
+        run: |
+          curl --fail --silent --show-error --location --retry 3 \
+            "https://github.com/defold/defold/releases/download/$BOB_VERSION/bob.jar" \
+            --output "$RUNNER_TEMP/bob.jar"
+          printf '%s  %s\n' "$BOB_SHA256" "$RUNNER_TEMP/bob.jar" | sha256sum --check
+          java -jar "$RUNNER_TEMP/bob.jar" --version
+
+      - name: Build signed Android ARM64 preview
+        working-directory: prototypes/defold
+        run: |
+          mkdir -p "$RUNNER_TEMP/defold-preview"
+          printf 'android\n' > "$RUNNER_TEMP/defold-keystore-password"
+          # Defold defaults to Vulkan on Android. Use the release engine for timing.
+          java -jar "$RUNNER_TEMP/bob.jar" \
+            --platform arm64-android --architectures arm64-android \
+            --variant release --archive --bundle-format apk \
+            --bundle-output "$RUNNER_TEMP/defold-android" \
+            --keystore "$GITHUB_WORKSPACE/tools/development.keystore" \
+            --keystore-alias androiddebugkey --keystore-pass "$RUNNER_TEMP/defold-keystore-password" \
+            build bundle 2>&1 | tee "$RUNNER_TEMP/defold-preview/android-build.log"
+          mapfile -t apks < <(find "$RUNNER_TEMP/defold-android" -name '*.apk' -type f)
+          test "${#apks[@]}" -eq 1
+          cp "${apks[0]}" "$RUNNER_TEMP/defold-preview/Microgen-Defold-Preview.apk"
+
+      - name: Verify APK signature and identity
+        working-directory: ${{ runner.temp }}/defold-preview
+        run: |
+          sdk_tools=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f -printf '%h\n' | sort -V | tail -n 1)
+          apk=Microgen-Defold-Preview.apk
+          test -n "$sdk_tools"
+          "$sdk_tools/apksigner" verify --verbose --print-certs "$apk" | tee APK_SIGNATURE.txt
+          expected=$(keytool -exportcert -alias androiddebugkey -keystore "$GITHUB_WORKSPACE/tools/development.keystore" -storepass android | sha256sum | cut -d' ' -f1)
+          grep -Fq "certificate SHA-256 digest: $expected" APK_SIGNATURE.txt
+          "$sdk_tools/aapt" dump xmltree "$apk" AndroidManifest.xml > APK_MANIFEST.txt
+          grep -Fq 'A: package="org.magral.microgen.defold"' APK_MANIFEST.txt
+          if grep -E 'android:debuggable.*0xffffffff' APK_MANIFEST.txt; then exit 1; fi
+          unzip -Z1 "$apk" > APK_CONTENTS.txt
+          grep -Eq '^lib/arm64-v8a/[^/]+\.so$' APK_CONTENTS.txt
+          if grep -Eq '^lib/(armeabi-v7a|x86|x86_64)/' APK_CONTENTS.txt; then exit 1; fi
+          sha256sum "$apk" > SHA256SUMS.txt
+          printf '%s\n' "$GITHUB_SHA" > SOURCE_COMMIT.txt
+
+      - name: Upload Android preview
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Microgen-Defold-Android
+          path: ${{ runner.temp }}/defold-preview/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Build and run native Linux smoke test
+        working-directory: prototypes/defold
+        run: |
+          if ! command -v xvfb-run >/dev/null || ! command -v import >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y xvfb imagemagick
+          fi
+          mkdir -p "$RUNNER_TEMP/defold-smoke"
+          java -jar "$RUNNER_TEMP/bob.jar" --platform x86_64-linux \
+            --variant debug --archive --output build/linux \
+            --bundle-output "$RUNNER_TEMP/defold-linux" build bundle
+          mapfile -t executables < <(find "$RUNNER_TEMP/defold-linux" -type f -executable ! -name '*.so*')
+          test "${#executables[@]}" -eq 1
+          xvfb-run -a -s '-screen 0 2460x1080x24' bash -euo pipefail -c '
+            cd "$(dirname "$1")"
+            "$1" > "$2/linux-smoke.log" 2>&1 &
+            pid=$!
+            trap "kill $pid 2>/dev/null || true" EXIT
+            for attempt in {1..50}; do
+              if grep -Fq "MICROGEN PREVIEW READY" "$2/linux-smoke.log"; then break; fi
+              kill -0 "$pid"
+              sleep 0.2
+            done
+            grep -Fq "MICROGEN PREVIEW READY" "$2/linux-smoke.log"
+            sleep 1
+            kill -0 "$pid"
+            if grep -E "ERROR:SCRIPT|ERROR:RENDER|FATAL" "$2/linux-smoke.log"; then exit 1; fi
+            import -window root "$2/Microgen-Defold-Preview.png"
+          ' bash "${executables[0]}" "$RUNNER_TEMP/defold-smoke"
+
+      - name: Upload native smoke results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Microgen-Defold-Native-Smoke
+          path: ${{ runner.temp }}/defold-smoke/*
+          if-no-files-found: ignore
+          retention-days: 14

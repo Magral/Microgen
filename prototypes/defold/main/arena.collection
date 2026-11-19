@@ -1,0 +1,12 @@
+name: "arena"
+embedded_instances {
+  id: "preview"
+  data: "components {\n"
+        "  id: \"arena\"\n"
+        "  component: \"/main/arena.gui\"\n"
+        "  position { x: 0.0 y: 0.0 z: 0.0 }\n"
+        "  rotation { x: 0.0 y: 0.0 z: 0.0 w: 1.0 }\n"
+        "}\n"
+  position { x: 0.0 y: 0.0 z: 0.0 }
+  rotation { x: 0.0 y: 0.0 z: 0.0 w: 1.0 }
+}
