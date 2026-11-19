@@ -113,7 +113,7 @@ jobs:
           test "${#executables[@]}" -eq 1
           xvfb-run -a -s '-screen 0 2460x1080x24' bash -euo pipefail -c '
             cd "$(dirname "$1")"
-            ALSOFT_DRIVERS=null "$1" --config=microgen.smoke_run=1 > "$2/linux-smoke.log" 2>&1 &
+            ALSOFT_DRIVERS=null "$1" --graphics-adapter=opengl --config=microgen.smoke_run=1 > "$2/linux-smoke.log" 2>&1 &
             pid=$!
             trap "kill $pid 2>/dev/null || true" EXIT
             for attempt in {1..50}; do
