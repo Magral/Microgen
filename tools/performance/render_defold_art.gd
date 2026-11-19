@@ -39,7 +39,7 @@ func run():
 	world.add_child(fluid)
 	fluid.update(0.0, sim, Fixture.SIZE, Fixture.ZOOM)
 	var terrain = Terrain.new()
-	terrain.raster_enabled = false
+	if "raster_enabled" in terrain:terrain.raster_enabled = false
 	world.add_child(terrain)
 	terrain.update_world(sim.world, sim.player, Fixture.SIZE, Fixture.ZOOM)
 	var surface = Fluid.Surface.new()
