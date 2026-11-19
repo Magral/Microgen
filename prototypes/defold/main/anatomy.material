@@ -1,0 +1,55 @@
+name: "anatomy"
+tags: "gui"
+vertex_program: "/main/tissue.vp"
+fragment_program: "/main/anatomy.fp"
+vertex_space: VERTEX_SPACE_WORLD
+vertex_constants {
+  name: "view_proj"
+  type: CONSTANT_TYPE_VIEWPROJ
+}
+fragment_constants {
+  name: "anatomy_ranks"
+  type: CONSTANT_TYPE_USER
+  value { x: 0.0 y: 0.0 z: 0.0 w: 0.0 }
+}
+fragment_constants {
+  name: "anatomy_glands"
+  type: CONSTANT_TYPE_USER
+  value { x: 0.0 y: 0.0 z: 0.0 w: 0.0 }
+}
+fragment_constants {
+  name: "anatomy_action"
+  type: CONSTANT_TYPE_USER
+  value { x: 0.0 y: 0.0 z: 0.0 w: 0.0 }
+}
+fragment_constants {
+  name: "anatomy_barrier"
+  type: CONSTANT_TYPE_USER
+  value { x: 0.0 y: 0.0 z: 0.0 w: 0.0 }
+}
+fragment_constants {
+  name: "anatomy_shape_12"
+  type: CONSTANT_TYPE_USER
+  value { x: 0.0 y: 0.0 z: 0.0 w: 0.0 }
+}
+fragment_constants {
+  name: "anatomy_shape_34"
+  type: CONSTANT_TYPE_USER
+  value { x: 0.0 y: 0.0 z: 0.0 w: 0.0 }
+}
+fragment_constants {
+  name: "anatomy_shape_56"
+  type: CONSTANT_TYPE_USER
+  value { x: 0.0 y: 0.0 z: 0.0 w: 0.0 }
+}
+fragment_constants {
+  name: "anatomy_shape_78"
+  type: CONSTANT_TYPE_USER
+  value { x: 0.0 y: 0.0 z: 0.0 w: 0.0 }
+}
+fragment_constants {
+  name: "anatomy_shape_rest"
+  type: CONSTANT_TYPE_USER
+  value { x: 0.0 y: 0.0 z: 0.0 w: 0.0 }
+}
+max_page_count: 0

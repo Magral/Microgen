@@ -5,6 +5,7 @@ const View = preload("res://game/world_view.gd")
 const Terrain = preload("res://game/terrain_view.gd")
 const Fluid = preload("res://game/fluid_view.gd")
 const Painter = preload("res://game/organism_painter.gd")
+const Genome = preload("res://core/genome.gd")
 
 class Portrait extends Node2D:
 	var painter = Painter.new()
@@ -30,6 +31,15 @@ func run():
 		return
 	DirAccess.make_dir_recursive_absolute(destination)
 	var sim = Fixture.make()
+	if OS.has_environment("MICROGEN_EXPORT_BASE_BODIES"):
+		var base_bodies = []
+		for family in range(Genome.FAMILIES.size()):
+			var recipe = Genome.create(71 + family, 0, "player", 0)
+			recipe.family = family
+			base_bodies.append({"name":"body_%d" % family,"recipe":recipe,"organs":{},
+				"radius":108.0,"role":"player","appearance":{}})
+		await capture_portraits(base_bodies)
+		return
 	var world = SubViewport.new()
 	world.size = Fixture.SIZE
 	world.disable_3d = true
@@ -69,6 +79,9 @@ func run():
 		"radius":sim.body_radius() * Fixture.ZOOM,"role":"player","tint":sim.body_color(),
 		"appearance":{"active_synergies":sim.build.active_synergies(),"evolved":sim.build.stats.evolutions,"growth":{"acid":1.0,"tentacle":1.0,"infection":1.0}}})
 
+	await capture_portraits(portraits)
+
+func capture_portraits(portraits: Array):
 	var capture = SubViewport.new()
 	capture.disable_3d = true
 	capture.transparent_bg = true
@@ -92,7 +105,7 @@ func run():
 			return
 		portrait.free()
 	capture.free()
-	print("Rendered ", portraits.size(), " full-detail organisms and terrain.")
+	print("Rendered ", portraits.size(), " full-detail organisms.")
 	quit()
 
 func save(viewport: SubViewport, asset: String) -> bool:

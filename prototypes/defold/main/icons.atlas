@@ -1,0 +1,21 @@
+images { image: "/main/art/icon_acid.png" }
+images { image: "/main/art/icon_armor.png" }
+images { image: "/main/art/icon_barrier.png" }
+images { image: "/main/art/icon_catalysis.png" }
+images { image: "/main/art/icon_cilia.png" }
+images { image: "/main/art/icon_devour.png" }
+images { image: "/main/art/icon_division.png" }
+images { image: "/main/art/icon_electric.png" }
+images { image: "/main/art/icon_enzymes.png" }
+images { image: "/main/art/icon_infection.png" }
+images { image: "/main/art/icon_magnet.png" }
+images { image: "/main/art/icon_metabolism.png" }
+images { image: "/main/art/icon_pulse.png" }
+images { image: "/main/art/icon_regen.png" }
+images { image: "/main/art/icon_speed.png" }
+images { image: "/main/art/icon_spikes.png" }
+images { image: "/main/art/icon_tentacle.png" }
+images { image: "/main/art/icon_trail.png" }
+margin: 2
+extrude_borders: 2
+inner_padding: 0

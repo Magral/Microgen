@@ -1,9 +1,9 @@
 [project]
 title = Microgen Defold Preview
-version = 0.1.1
+version = 0.2.0
 
 [bootstrap]
-main_collection = /main/arena.collectionc
+main_collection = /main/gameplay.collectionc
 
 [display]
 width = 2460
@@ -19,6 +19,7 @@ dynamic_orientation = 0
 game_binding = /main/arena.input_bindingc
 
 [android]
+immersive_mode = 1
 package = org.magral.microgen.defold
-version_code = 2
+version_code = 3
 minimum_sdk_version = 26

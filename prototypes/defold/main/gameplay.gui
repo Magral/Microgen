@@ -1,0 +1,20 @@
+script: "/main/gameplay.gui_script"
+fonts { name: "interface" font: "/main/interface.font" }
+textures { name: "cells" texture: "/main/cells.atlas" }
+textures { name: "world" texture: "/main/world.atlas" }
+textures { name: "terrain" texture: "/main/terrain.atlas" }
+textures { name: "icons" texture: "/main/icons.atlas" }
+materials { name: "tissue" material: "/main/tissue.material" }
+materials { name: "anatomy" material: "/main/anatomy.material" }
+layers { name: "water" }
+layers { name: "substrate" }
+layers { name: "fields" }
+layers { name: "objects" }
+layers { name: "organisms" }
+layers { name: "anatomy" }
+layers { name: "effects" }
+layers { name: "hud" }
+layers { name: "overlay" }
+layers { name: "feedback" }
+material: "/builtins/materials/gui.material"
+max_nodes: 2304

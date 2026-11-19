@@ -1,0 +1,21 @@
+local MOVEMENT_SOUND = hash("movement_sound")
+
+function on_message(self, message_id, message)
+    if message_id ~= MOVEMENT_SOUND then return end
+    if message.gain == 0 then
+        if self.playing then sound.stop("#movement") end
+        self.playing = false
+        return
+    end
+    -- Sound properties are only writable from a game object script.
+    go.set("#movement", "gain", message.gain)
+    go.set("#movement", "speed", message.rate)
+    if not self.playing then
+        sound.play("#movement")
+        self.playing = true
+    end
+end
+
+function final(self)
+    if self.playing then sound.stop("#movement") end
+end

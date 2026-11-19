@@ -1,0 +1,12 @@
+images { image: "/main/art/fluid.png" }
+images { image: "/main/art/wall_0_0.png" }
+images { image: "/main/art/wall_0_1.png" }
+images { image: "/main/art/wall_0_2.png" }
+images { image: "/main/art/wall_0_3.png" }
+images { image: "/main/art/wall_1_0.png" }
+images { image: "/main/art/wall_1_1.png" }
+images { image: "/main/art/wall_1_2.png" }
+images { image: "/main/art/wall_1_3.png" }
+margin: 2
+extrude_borders: 2
+inner_padding: 0

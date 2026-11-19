@@ -1,0 +1,859 @@
+local Audio = require "main.run.audio"
+local Inspector = require "main.run.build_inspector"
+local CombatStats = require "main.run.combat_stats"
+local Catalog = require "main.run.catalog"
+local Diagnostics = require "main.run.diagnostics"
+local Equipment = require "main.run.organism_equipment"
+local Interface = require "main.run.interface"
+local Legacy = require "main.run.genome_legacy"
+local Minimap = require "main.run.minimap"
+local StageRewards = require "main.run.stage_rewards"
+local World = require "main.run.world"
+local Copy = require("main.run.meta_util").copy
+local Panels = require "main.run.panels"
+local Save = require "main.run.save_store"
+local Scene = require "main.run.scene"
+local Simulation = require "main.run.simulation"
+local Tissue = require "main.tissue_motion"
+
+local WIDTH, HEIGHT = Interface.width, Interface.height
+local App = {}
+App.__index = App
+local DIRECTIONS = {[hash("up")]="up",[hash("down")]="down",[hash("left")]="left",[hash("right")]="right"}
+
+local function bounded_direction(dx,dy,r)
+    local length = math.sqrt(dx*dx+dy*dy)
+    if length<=.0001 then return 0,0 end
+    local strength = math.min(1,length/r)
+    return dx*strength/length,dy*strength/length
+end
+
+local function has_checkpoint(profile)
+    return type(profile.checkpoint)=="table" and next(profile.checkpoint)~=nil
+end
+
+local function name(id)
+    local entry = Catalog.item(id)
+    return entry and entry.name or tostring(id)
+end
+
+function App:notice(message)
+    if type(message)=="string" and #message>0 then
+        gui.set_text(self.toast,message)
+        self.toast_time=4.2
+    end
+end
+
+function App:clear_pointer()
+    self.touch_id,self.stick,self.press_action = nil,nil,nil
+    self.keys={}
+    gui.set_enabled(self.stick_base,false)
+    gui.set_enabled(self.stick_tip,false)
+end
+
+function App:overlay(kind)
+    self:clear_pointer()
+    self.modal:clear()
+    self.screen=kind
+end
+
+function App:show_home()
+    self:overlay("home")
+    self.audio:stop()
+    self.scene:hide()
+    self.hud:clear()
+    self.metrics=nil
+    gui.set_enabled(self.cover,true)
+    local ui = self.modal
+    ui:box(WIDTH/2,HEIGHT/2,WIDTH,HEIGHT,vmath.vector4(.02,.055,.075,.45))
+    ui:box(1230,530,910,918,vmath.vector4(.018,.074,.091,.89))
+    ui:box(1230,986,910,5,ui.colors.mint)
+    ui:text(860,866,"МИКРОГЕН",2.65,ui.colors.mint)
+    ui:text(862,777,"ПРОЦЕДУРНАЯ ЭВОЛЮЦИЯ",.93,ui.colors.dim)
+    local start_text = has_checkpoint(self.store.profile) and "Продолжить забег" or "Новый организм"
+    ui:button(1230,640,728,105,start_text,function() self:start() end,true)
+    ui:button(1230,518,728,92,"Наследие генома",function() Panels.legacy(self) end)
+    ui:button(1230,407,728,92,"Кодекс",function() Panels.catalog(self) end)
+    ui:button(1230,296,728,92,"Настройки",function() self:settings() end)
+    ui:button(1230,185,728,92,"Выход",function() sys.exit(0) end)
+end
+
+function App:settings()
+    local ui = self.modal
+    self:overlay("settings")
+    ui:panel("Настройки","Микроген  ·  Defold "..sys.get_config_string("project.version","0.2.0"),
+        function() self:show_home() end)
+    ui:button(1230,635,620,105,self.audio_enabled and "Звук включён" or "Звук выключен",function()
+        local changed=Copy(self.store.profile)
+        changed.audio_enabled=not self.audio_enabled
+        if self.store:write_profile(changed) then self.audio_enabled=changed.audio_enabled
+        else self:notice(self.store.last_error) end
+        self:settings()
+    end)
+    ui:button(1230,501,620,105,self.show_metrics and "FPS на экране" or "Скрыть FPS",function()
+        local changed=Copy(self.store.profile)
+        changed.show_metrics=not self.show_metrics
+        if self.store:write_profile(changed) then self.show_metrics=changed.show_metrics
+        else self:notice(self.store.last_error) end
+        self:settings()
+    end)
+end
+
+function App:inventory(page, live)
+    self:overlay("inventory")
+    local ui=self.modal
+    local state=Equipment.from_profile(self.store.profile)
+    local rows={}
+    local location={equipped="В теле",stock="В запасе",reserve="В архиве"}
+    for _,group in ipairs({"equipped","stock","reserve"}) do
+        for _,part in ipairs(state[group]) do
+            rows[#rows+1]={title=name(part.kind),detail=location[group].."  ·  Ранг "..part.rank.."  ·  Ячейки "..part.cells,
+                label="Управление",action=function() self:equipment(part,group,page,live) end}
+        end
+    end
+    local leave=live and function() self:build() end or function() Panels.legacy(self) end
+    Panels.list(ui,"Органы",string.format("Органиум %d  ·  Запас %d/%d",self.store.profile.organium,#state.stock,state.stock_capacity),
+        rows,page,function(next_page) self:inventory(next_page,live) end,leave)
+end
+
+function App:equipment(organ,location,page,live)
+    local ui = self.modal
+    local leave = function() self:inventory(page,live) end
+    ui:clear()
+    ui:panel(name(organ.kind),"Ранг "..organ.rank.."  ·  Ячейки "..organ.cells,leave)
+    local function change(action,...)
+        local profile = self.store.profile
+        local state = Equipment.from_profile(profile)
+        local result
+        if action=="move" then result=Equipment.move(state,organ.id,...)
+        elseif action=="upgrade" then result=Equipment.upgrade(state,organ.id,profile.organium,profile.organ_materials)
+        elseif action=="dismantle" then result=Equipment.dismantle(state,organ.id,profile.organium,profile.organ_materials)
+        else result=Equipment.specialize(state,organ.id,...)
+        end
+        if not result or not result.ok then
+            self:notice(result and result.error or "Изменение не удалось")
+            return false
+        end
+        local next_profile = Copy(profile)
+        next_profile.organism = result.state
+        next_profile.organium = result.organium or profile.organium
+        next_profile.organ_materials = result.materials or profile.organ_materials
+        if live or has_checkpoint(profile) then
+            local snapshot=live and self.sim:snapshot() or Copy(profile.checkpoint)
+            local Build=require "main.run.build_model"
+            local candidate=Build.new()
+            candidate:from_dict(snapshot.build)
+            StageRewards.apply_equipment(result.state,candidate)
+            snapshot.build=candidate:to_dict()
+            snapshot.stock_capacity=result.state.stock_capacity
+            next_profile.checkpoint=snapshot
+        end
+        if not self.store:write_profile(next_profile) then self:notice(self.store.last_error);return false end
+        if live then
+            StageRewards.apply_equipment(result.state,self.sim.build)
+            self.sim.stock_capacity=result.state.stock_capacity
+        end
+        leave()
+        return true
+    end
+    ui:button(1230,635,830,96,location=="equipped" and "В запас" or "Встроить",function()
+        if location=="equipped" then change("move","stock");return end
+        if change("move","body") then return end
+        local state=Equipment.from_profile(self.store.profile)
+        local selected={}
+        local function choose(next_page)
+            ui:clear()
+            local rows={}
+            for _,part in ipairs(state.equipped) do
+                rows[#rows+1]={title=(selected[part.id] and "✓  " or "")..name(part.kind),detail="Ячейки "..part.cells,
+                    label=selected[part.id] and "Оставить" or "Заменить",action=function()
+                        selected[part.id]=not selected[part.id]
+                        choose(next_page)
+                    end}
+            end
+            Panels.list(ui,"Замена органов","Отметь органы, которые нужно вынуть",rows,next_page,choose,leave)
+            ui:button(1230,184,285,57,"Встроить",function()
+                local ids={}
+                for _,part in ipairs(state.equipped) do if selected[part.id] then ids[#ids+1]=part.id end end
+                change("move","body",ids)
+            end,true)
+        end
+        choose(1)
+    end)
+    ui:button(1230,510,830,96,"Усилить · "..Equipment.upgrade_cost(organ).." органиума",function() change("upgrade") end)
+    ui:button(1230,385,830,96,"Расщепить",function()
+        ui:clear()
+        ui:panel("Расщепить орган?","Материалы перейдут в хранилище",leave)
+        ui:button(1230,490,640,100,"Подтвердить",function() change("dismantle") end,true)
+    end)
+    ui:button(1230,260,830,96,"Специализация",function()
+        ui:clear()
+        ui:panel("Специализация",name(organ.kind),leave)
+        local choices = Catalog.SPECIALIZATIONS[organ.kind] or {}
+        for i,specialization in ipairs(choices) do
+            ui:text(552,699-i*105,specialization.name,1.03)
+            ui:button(1690,699-i*105,300,74,"Встроить",function()
+                local profile=self.store.profile
+                change("specialize",specialization.id,profile.organium,profile.organ_materials)
+            end,true)
+        end
+    end)
+end
+
+function App:save_run()
+    local sim = self.sim
+    if not sim then return true end
+    local profile = Copy(self.store.profile)
+    local snapshot = sim:snapshot()
+    local source = self.equipment_state
+    if source then profile.organism=source end
+    local state,err = StageRewards.capture_equipment(profile,snapshot.build)
+    if not state then self:notice(err);return false end
+    profile.organism,profile.checkpoint=state,snapshot
+    local discovered={}
+    for _,id in ipairs(profile.discovered) do discovered[id]=true end
+    for _,ids in ipairs({Catalog.ORGAN_IDS,Catalog.ADAPTATION_IDS}) do
+        for _,id in ipairs(ids) do
+            if sim.build:rank(id)>0 and not discovered[id] then profile.discovered[#profile.discovered+1]=id end
+        end
+    end
+    local synergy_known={}
+    for _,id in ipairs(profile.synergies) do synergy_known[id]=true end
+    for _,id in ipairs(sim.build:active_synergies()) do
+        if not synergy_known[id] then profile.synergies[#profile.synergies+1]=id end
+    end
+    local result=self.store:write_profile(profile)
+    if result then self.equipment_state=nil else self:notice(self.store.last_error) end
+    return result
+end
+
+function App:start(seed)
+    if self.store:family_id()=="" then
+        if not self.store:create_family("Организм","predator") then return self:notice(self.store.last_error) end
+    end
+    local profile = self.store.profile
+    if has_checkpoint(profile) then
+        self.sim = Simulation.restore(profile.checkpoint)
+        if not self.sim then return self:notice("Не удалось открыть сохранение") end
+    else
+        if not Legacy.can_start(profile) then
+            Panels.legacy(self,"imprint",1)
+            return self:notice("Выбери отпечаток, чтобы открыть новое поколение")
+        end
+        seed = seed or math.floor(socket.gettime()*1000)%2147483647
+        local loadout = Legacy.loadout(profile)
+        self.sim = Simulation.new(seed,profile.unlocked,profile.upgrades,loadout.branch,loadout)
+        self.sim.family_id = self.store:family_id()
+        self.sim.best_stage = profile.best_stage or 0
+        local equipment = Equipment.from_profile(profile)
+        StageRewards.apply_equipment(equipment,self.sim.build)
+        self.sim.stock_capacity = equipment.stock_capacity
+    end
+    self.save_time=0
+    self.equipment_state=nil
+    self:show_run()
+    self:save_run()
+    self:notice("Веди палец по свободной части экрана")
+    print("MICROGEN RUN READY " .. tostring(self.sim.world.seed_value))
+end
+
+function App:show_run()
+    self:overlay("run")
+    gui.set_enabled(self.cover,false)
+    local ui = self.hud
+    ui:clear()
+    self.stage = ui:text(76,1024,"",.90,ui.colors.mint)
+    self.level = ui:text(76,955,"",.91)
+    self.last_damage = ui:text(76,800,"",.68,ui.colors.red)
+    ui:box(274,901,396,17,vmath.vector4(.025,.11,.13,.94))
+    self.health = ui:box(76,901,396,17,vmath.vector4(.34,.90,.67,1))
+    gui.set_pivot(self.health,gui.PIVOT_W)
+    ui:box(274,872,396,9,vmath.vector4(.033,.12,.14,.92))
+    self.xp = ui:box(76,872,396,9,vmath.vector4(.66,.53,.98,.96))
+    gui.set_pivot(self.xp,gui.PIVOT_W)
+    self.goal = ui:text(76,836,"",.74,ui.colors.gold)
+    self.shield_metric = ui:text(76,770,"",.68,ui.colors.mint)
+    self.metrics = ui:text(72,40,"",.62,ui.colors.dim)
+    if not self.minimap then self.minimap=Minimap.new(self.sim.world) end
+    local mini=ui:box(2244,950,244,164,vmath.vector4(1,1,1,1))
+    self.minimap:attach(mini)
+    self.minimap:update(self.sim)
+    ui:button(2244,805,260,69,"Карта",function() self:map() end)
+    ui:button(2244,722,260,69,"Организм",function() self:build() end)
+    ui:button(2244,71,260,69,"Ⅱ  Пауза",function() self:pause() end)
+    self.reward_button=false
+    self.colony_label=ui:button(2244,534,260,69,"Колония",function()
+        local index=self.sim:nearby_colony()
+        if index>0 then self:colony(index) end
+    end,true)
+    self:draw_hud()
+end
+
+function App:draw_hud()
+    local sim = self.sim
+    local sx = math.min(1,math.max(0,sim.hp/math.max(1,sim.max_hp)))
+    local xp = math.min(1,math.max(0,sim.xp/sim:xp_needed()))
+    gui.set_size(self.health,vmath.vector3(math.max(.01,396*sx),17,0))
+    gui.set_size(self.xp,vmath.vector3(math.max(.01,396*xp),9,0))
+    gui.set_text(self.stage,string.format("СТУПЕНЬ %d · %s",sim.stage_index,sim:stage_name()))
+    local elapsed = sim.elapsed
+    gui.set_text(self.level,string.format("Ур. %d   ·   %.0f/%.0f HP   ·   %d:%02d",sim.level,sim.hp,sim.max_hp,
+        math.floor(elapsed/60),math.floor(elapsed)%60))
+    local goal = sim.boss_spawned and ("Главная угроза · "..sim:boss_title())
+        or string.format("Минибоссы %d/%d",sim.minibosses_defeated or 0,sim:stage_miniboss_target())
+    gui.set_text(self.goal,goal)
+    if sim.build:rank("barrier")>0 then
+        local time=sim.cooldowns.barrier or 0
+        gui.set_text(self.shield_metric,time<=0 and string.format("Щит готов · %.0f HP",sim:barrier_capacity())
+            or string.format("Щит восстанавливается · %.1f с",time))
+    else gui.set_text(self.shield_metric,"") end
+    self.minimap:update(sim)
+    Interface.button_enabled(self.colony_label,sim:nearby_colony()>0)
+    local damage = sim.last_damage or {}
+    gui.set_text(self.last_damage,damage.name and string.format("Последний урон · −%.1f HP · %s",damage.amount or 0,damage.name) or "")
+end
+
+function App:pause()
+    self:overlay("pause")
+    self:save_run()
+    local ui = self.modal
+    ui:panel("Пауза",nil,function() self:show_run() end)
+    ui:button(1230,646,690,104,"Продолжить",function() self:show_run() end,true)
+    ui:button(1230,508,690,96,"Организм",function() self:build() end)
+    ui:button(1230,376,690,96,"В главное меню",function()
+        if self:save_run() then self.sim=nil;self:show_home() end
+    end)
+end
+
+function App:map()
+    self:overlay("map")
+    local ui,sim = self.modal,self.sim
+    local world = sim.world
+    local tile = 17
+    local top,left = 777,1230-world.w*tile/2
+    ui:panel("Карта", sim:stage_name(),function() self:show_run() end)
+    for row=0,world.h-1 do
+        local col=0
+        while col<world.w do
+            local start=col
+            local function terrain(x)
+                local i=row*world.w+x+1
+                return not sim.explored[i] and 0 or world.cells[i]==1 and 1 or 2
+            end
+            local ground=terrain(col)
+            repeat col=col+1 until col==world.w or terrain(col)~=ground
+            local color=ground==2 and vmath.vector4(.20,.44,.42,1)
+                or ground==1 and vmath.vector4(.065,.16,.19,1) or vmath.vector4(.02,.065,.08,1)
+            ui:box(left+tile*(start+col)/2,top-tile*(row+.5),(col-start)*tile,tile,color)
+        end
+    end
+    local function mark(p,color,r)
+        ui:box(left+p.x*tile/world.tile_size,top-p.y*tile/world.tile_size,r,r,color)
+    end
+    for _,colony in ipairs(world.colonies) do if colony.visited then mark(colony.pos,ui.colors.mint,10) end end
+    for _,nest in ipairs(world.nests) do
+        local i=math.floor(nest.pos.y/world.tile_size)*world.w+math.floor(nest.pos.x/world.tile_size)+1
+        if sim.explored[i] and not nest.used then mark(nest.pos,ui.colors.gold,10) end
+    end
+    if sim.boss_spawned then mark(sim.boss_marker or world.boss_pos,ui.colors.red,15) end
+    mark(sim.player,ui.colors.pale,16)
+end
+
+function App:build(page,tab)
+    local ui,sim=self.modal,self.sim
+    tab = tab or "organs"
+    self:overlay("build")
+    local rows = {}
+    local heading
+    if tab=="synergies" then
+        for _,data in ipairs(Inspector.synergy_rows(sim.build)) do
+            rows[#rows+1] = {title=data.title,detail=data.requirements,
+                color=data.active and ui.colors.mint or ui.colors.pale,action=function()
+                    self:overlay("build")
+                    local left=ui:panel(data.title,data.requirements,function() self:build(page,tab) end)
+                    ui:text(left+64,580,data.description,1.02,ui.colors.pale,1430)
+                end}
+        end
+    elseif tab=="journal" then
+        local journal=CombatStats.journal(sim.combat_stats,sim.elapsed)
+        heading=journal.summary
+        for _,row in ipairs(journal.sources) do rows[#rows+1]=row end
+        for _,row in ipairs(journal.history) do rows[#rows+1]=row end
+    else
+        local ids = tab=="organs" and Catalog.ORGAN_IDS or Catalog.ADAPTATION_IDS
+        for _,id in ipairs(ids) do
+            local rank=sim.build:rank(id)
+            if rank>0 then rows[#rows+1]={title=name(id).."  ·  "..rank,detail=Inspector.effect_text(sim.build,id,sim:ability_scale(),sim:cooldown_factor())} end
+        end
+    end
+    Panels.list(ui,"Организм",heading or sim:stage_name(),rows,page,function(p) self:build(p,tab) end,function() self:show_run() end)
+    ui:button(1100,822,195,46,"Ячейки",function() self:inventory(1,true) end)
+    ui:button(1305,822,172,46,"Органы",function() self:build(1,"organs") end)
+    ui:button(1512,822,223,46,"Адаптации",function() self:build(1,"passives") end)
+    ui:button(1733,822,205,46,"Синергии",function() self:build(1,"synergies") end)
+    ui:button(1946,822,198,46,"Журнал",function() self:build(1,"journal") end)
+end
+
+function App:award(id,replace_id,grade)
+    local state = self.equipment_state
+    if not state then
+        state=StageRewards.capture_equipment(self.store.profile,self.sim.build:to_dict())
+    end
+    if not state then return false end
+    local result
+    if replace_id and replace_id~="" then
+        local draft=Equipment.draft_exchange(state,id,grade)
+        if not draft.ok then return false end
+        local replacements={}
+        for _,organ in ipairs(state.equipped) do
+            if organ.kind==replace_id then replacements[1]=organ.id;break end
+        end
+        if #replacements==0 then return false end
+        result=Equipment.move(draft.state,draft.id,"body",replacements)
+    else
+        result=Equipment.award(state,id,grade)
+    end
+    if not result.ok then self:notice(result.error);return false end
+    self.equipment_state=result.state
+    StageRewards.apply_equipment(result.state,self.sim.build)
+    self.sim.stock_capacity=result.state.stock_capacity
+    if result.location=="stock" or result.location=="reserve" then
+        self:notice(name(id)..(result.location=="stock" and " · в запасе" or " · в архиве"))
+    end
+    return true
+end
+
+function App:accepted(before)
+    if not self:save_run() then return self:show_run() end
+    local known={}
+    for _,id in ipairs(before) do known[id]=true end
+    local activated={}
+    for _,id in ipairs(self.sim.build:active_synergies()) do
+        if not known[id] then activated[#activated+1]=id end
+    end
+    if #activated==0 then return self:show_run() end
+    for _,id in ipairs(activated) do self.sim:_effect(id,self.sim.player,self.sim:body_radius()*1.9,2.1) end
+    local ui=self.modal
+    self:overlay("synergy")
+    local first=Catalog.SYNERGIES[activated[1]]
+    ui:panel("Синергия пробудилась",first.name)
+    ui:text(521,624,first.desc,1.13,ui.colors.pale,1430)
+    ui:button(1230,343,630,103,"Продолжить",function() self:show_run() end,true)
+end
+
+function App:replacement(id,apply,back)
+    local ui = self.modal
+    self:overlay("replace")
+    local rows = {}
+    local ids=Catalog.ORGANS[id] and Catalog.ORGAN_IDS or Catalog.ADAPTATION_IDS
+    for _,old in ipairs(ids) do
+        if self.sim.build:rank(old)>0 and old~=id then
+            rows[#rows+1]={title=name(old),detail="Освободить место",label="Заменить",action=function()
+                local result=apply(old)
+                if result then self:save_run();self:show_run() else self:notice("В теле недостаточно свободных ячеек") end
+            end}
+        end
+    end
+    local function page(p)
+        ui:clear()
+        Panels.list(ui,"Освободи ячейку",name(id),rows,p,page,back)
+    end
+    page(1)
+end
+
+function App:level_up()
+    local ui,sim=self.modal,self.sim
+    self:overlay("level")
+    ui:panel("Новая мутация","Уровень "..sim.level.."  ·  Биомасса "..sim.build.biomass,nil)
+    local choices=sim:prepare_offers()
+    local shaped={}
+    for _,entry in ipairs(choices or {}) do
+        local id=type(entry)=="string" and entry or entry.id
+        if id then
+            local current=sim.build:stored_rank(id)
+            local grade=(sim.offer_quality or {})[id] or 0
+            local gain=Catalog.ORGANS[id] and Catalog.duplicate_rank_gain(grade) or 1
+            local rank=current==0 and 1 or math.min(Catalog.max_rank(id),current+gain)
+            local quality=({ "Обычная", "Редкая", "Эпическая", "Легендарная" })[grade+1]
+            local baseline=Catalog.effect_text(id,Catalog.effective_rank(rank))
+            local rank_text=current==0 and "Ранг 1" or ("Ранг %d → %d"):format(current,rank)
+            local hint=Inspector.synergy_summary(sim.build,id)
+            local first_hint=hint:match("^[^\n]+")
+            shaped[#shaped+1]={id=id,rank=rank,grade=grade,detail=rank_text.."  ·  "..quality.."\n"..baseline,
+                extra=first_hint,action=current>0 and "Усилить" or "Выбрать"}
+        end
+    end
+    Panels.offer_cards(ui,shaped,553,function(item)
+        local before=Copy(sim.build:active_synergies())
+        local function apply(old)
+            return sim:choose_mutation(item.id,old,function(...) return self:award(...) end)
+        end
+        if not apply() then self:replacement(item.id,apply,function() self:level_up() end)
+        else self:accepted(before) end
+    end)
+    if #shaped==0 then
+        ui:button(1230,530,650,97,"Получить 15 биомассы",function()
+            if sim:take_level_biomass() then self:save_run();self:show_run() end
+        end,true)
+    end
+    local used=sim.rerolls or 0
+    if used<3 then
+        local price=5+5*used
+        local function reroll(focused)
+            if sim:reroll_offers(focused) then self:save_run();self:level_up()
+            else self:notice("Недостаточно биомассы или новых вариантов") end
+        end
+        ui:button(966,218,450,67,"Переброс · "..price,function() reroll(false) end)
+        ui:button(1494,218,450,67,"Ветвь · "..(price+5),function() reroll(true) end)
+    end
+end
+
+function App:colony(index)
+    local ui,sim=self.modal,self.sim
+    local site=sim.world.colonies[index]
+    self:overlay("colony")
+    ui:panel("Колония",string.format("Биомасса · %d",sim.build.biomass),function() self:show_run() end)
+    local items={}
+    for stock_index,entry in ipairs(site.stock or {}) do
+        items[#items+1]={title=entry.id=="heal" and "Восстановление" or name(entry.id),id=entry.id,
+            index=stock_index,grade=entry.quality or 0,action=entry.sold and "Куплено" or "Купить",
+            detail=entry.id=="heal" and "Восстанавливает здоровье" or Catalog.effect_text(entry.id,sim.build:rank(entry.id)+1),
+            extra="Цена "..entry.price,sold=entry.sold}
+    end
+    ui:cards(items,552,function(item)
+        if item.sold then return end
+        local ok=sim:buy_colony(index,item.index,nil,function(...) return self:award(...) end)
+        if ok then self:save_run();self:colony(index)
+        else self:notice("Покупка недоступна") end
+    end)
+end
+
+function App:reward(skip_animation)
+    local ui,sim=self.modal,self.sim
+    local reward=sim:prepare_reward()
+    if #reward==0 then return self:show_run() end
+    local tier=sim.reward_queue[1].tier or 1
+    local caption=({"Редкая циста","Эпическая циста","Легендарная циста"})[math.min(3,tier)] or "Циста"
+    if not skip_animation and self.last_reveal~=sim.reward_queue[1].token then
+        self.last_reveal=sim.reward_queue[1].token
+        self:overlay("reveal")
+        ui:panel(caption,"Раскрывается мембрана")
+        local palette=({vmath.vector4(.46,.78,1,1),vmath.vector4(.76,.53,.97,1),ui.colors.gold})[math.min(3,tier)]
+        local core=ui:image("cells","surge",1230,589,406,406)
+        gui.set_color(core,palette)
+        local inner=ui:image("cells","speck",1230,589,185,185)
+        gui.set_color(inner,palette)
+        local labels={}
+        for i=1,5 do
+            local x=1230+(i-3)*247
+            labels[i]=ui:text(x-101,341,"",.69,i==3 and palette or ui.colors.dim,210)
+        end
+        ui:button(1230,208,440,70,"Раскрыть сразу",function() self:reward(true) end,true)
+        self.reveal={time=0,core=core,inner=inner,labels=labels}
+        return
+    end
+    self.reveal=nil
+    self:overlay("reward")
+    ui:panel(caption,"Выбери одну награду",function() self:show_run() end)
+    Panels.offer_cards(ui,reward or {},550,function(item,index)
+        local before=Copy(sim.build:active_synergies())
+        local function apply(old)
+            return sim:claim_reward(index,old,function(...) return self:award(...) end)
+        end
+        if not apply() then self:notice("Награда недоступна")
+        else self:accepted(before) end
+    end)
+end
+
+function App:stage_transition()
+    local ui,sim=self.modal,self.sim
+    self:overlay("stage")
+    local boss = sim.boss_reward or {}
+    if boss.organ and not boss.claimed then
+        ui:panel("Главная угроза повержена",boss.name or sim:boss_title())
+        local parts=sim:boss_reward_materials()
+        ui:text(556,693,"Легендарный орган · "..name(boss.organ),1.15,ui.colors.gold)
+        local function claim(take_organ)
+            local ok,err=StageRewards.claim_boss_reward(self.store,sim,take_organ)
+            if ok then self:stage_transition() else self:notice(err or self.store.last_error) end
+        end
+        ui:button(1230,565,805,93,"Забрать орган",function() claim(true) end,true)
+        ui:button(1230,458,805,93,"Расщепить ткани",function() claim(false) end)
+        ui:text(828,367,string.format("Органеллы +%d  ·  Мембрана +%d  ·  Плазма +%d",parts.organelle,parts.membrane,parts.plasma),.87,ui.colors.dim)
+        ui:button(1230,258,805,83,boss.rerolled and "Переброс использован" or ("Переброс · "..StageRewards.BOSS_REROLL_COST.." органиума"),function()
+            local ok,err=StageRewards.reroll_boss_reward(self.store,sim)
+            if ok then self:stage_transition() else self:notice(err or self.store.last_error) end
+        end)
+    else
+        local seed=math.max(1,sim.pending_stage_seed)
+        local stage=sim.stage_index+1
+        if self.briefed_seed~=seed then
+            self.briefed_seed=seed
+            self.screen="briefing_roll"
+            ui:panel("Формируется следующая область","Ступень "..stage)
+            local dial=ui:image("cells","surge",1230,569,335,335)
+            local caption=ui:text(826,340,"Сканирование среды",1.13,ui.colors.mint)
+            ui:button(1230,214,390,65,"Показать",function() self.briefing=nil;self:stage_transition() end)
+            self.briefing={time=0,dial=dial,caption=caption,seed=seed,stage=stage}
+            return
+        end
+        local next_world=World.generate(seed)
+        local attack=sim:boss_attack(stage,seed)
+        ui:panel("Переход на ступень "..stage,sim:stage_name(stage,seed))
+        ui:text(550,696,"Среда · "..next_world:condition_name(1).." / "..next_world:condition_name(2),.95)
+        ui:text(550,620,"Главная угроза · "..sim:boss_title(stage,seed),1.09,ui.colors.gold)
+        ui:text(550,549,attack.name.." · "..attack.hint,.86,ui.colors.dim)
+        ui:text(550,485,"Минибоссы · "..sim:stage_miniboss_target(stage),.89,ui.colors.dim)
+        ui:button(893,294,660,101,"Продолжить эволюцию",function()
+            local ok,err=StageRewards.enter_next_stage(self.store,sim,next_world)
+            if ok then self:show_run() else self:notice(err or self.store.last_error) end
+        end,true)
+        local cost=StageRewards.stage_reroll_cost(sim.stage_index)
+        ui:button(1566,294,640,101,"Переброс · "..cost.." органиума",function()
+            local ok,err=StageRewards.reroll_stage_area(self.store,sim)
+            if ok then self:stage_transition() else self:notice(err or self.store.last_error) end
+        end)
+    end
+end
+
+function App:finish()
+    self.sim:flush_family_materials()
+    self:process_events()
+    self:save_run()
+    self:overlay("finish")
+    local ui,sim=self.modal,self.sim
+    ui:panel("Поколение завершено",string.format("Уровень %d  ·  Ступень %d",sim.level,sim.stage_index))
+    ui:button(1230,545,760,106,"Сохранить наследие",function()
+        if self.store:finish_run(sim) then
+            self.sim=nil
+            self:show_home()
+        else self:notice(self.store.last_error) end
+    end,true)
+end
+
+function App:process_events()
+    local sim = self.sim
+    if #sim.events==0 then return end
+    local profile = self.store.profile
+    local next_profile = {}
+    for key,value in pairs(profile) do next_profile[key]=value end
+    local changed=false
+    next_profile.credited={}
+    for i,token in ipairs(profile.credited or {}) do next_profile.credited[i]=token end
+    local credited={}
+    for _,token in ipairs(next_profile.credited) do credited[token]=true end
+    local materials={}
+    for key,value in pairs(profile.organ_materials or {}) do materials[key]=value end
+    next_profile.organ_materials=materials
+    for _,event in ipairs(sim.events) do
+        if event.type=="message" then self:notice(event.text) end
+        if event.token and not credited[event.token] then
+            if event.type=="core" then
+                next_profile.cores=(next_profile.cores or 0)+event.amount
+                self:notice("Ядра наследия +"..event.amount)
+            elseif event.type=="organium" then
+                next_profile.organium=(next_profile.organium or 0)+event.amount
+            elseif event.type=="family_material" then
+                for key,value in pairs(event.materials) do materials[key]=(materials[key] or 0)+value end
+            elseif event.type=="stage_clear" then
+                next_profile.best_stage=math.max(next_profile.best_stage or 0,event.stage)
+                sim.best_stage=next_profile.best_stage
+                next_profile.organium=(next_profile.organium or 0)+StageRewards.stage_reroll_cost(event.stage)
+            elseif event.type=="expansion" then
+                local state=Equipment.from_profile(next_profile)
+                local key=event.target=="stock" and "stock_capacity" or "body_capacity"
+                state[key]=state[key]+(event.amount or 1)
+                next_profile.organism=state
+                sim.stock_capacity=state.stock_capacity
+                sim.build.organ_capacity=state.body_capacity
+            end
+            next_profile.credited[#next_profile.credited+1]=event.token
+            credited[event.token]=true
+            changed=true
+        end
+    end
+    if changed then
+        local events=sim.events
+        sim.events={}
+        next_profile.checkpoint=sim:snapshot()
+        if not self.store:write_profile(next_profile) then
+            sim.events=events
+            return self:notice(self.store.last_error)
+        end
+    else sim.events={} end
+end
+
+function App:drive()
+    local keys = self.keys
+    local dx=(keys.right and 1 or 0)-(keys.left and 1 or 0)
+    local dy=(keys.down and 1 or 0)-(keys.up and 1 or 0)
+    local stick = self.stick
+    if stick then return bounded_direction(stick.x-stick.ox,stick.oy-stick.y,94) end
+    return bounded_direction(dx,dy,1)
+end
+
+function init(self)
+    msg.post(".","acquire_input_focus")
+    local app=setmetatable({},App)
+    self.app=app
+    local smoke=sys.get_config_string("microgen.smoke_run","0")=="1"
+    app.store=Save.new(smoke and "native_smoke" or nil)
+    app.store:load_profile()
+    app.audio=Audio.new()
+    app.audio_enabled=app.store.profile.audio_enabled~=false
+    app.show_metrics=app.store.profile.show_metrics~=false
+    app.diag=Diagnostics.new()
+    app.driver=graphics.get_adapter_info().family or "GPU"
+    app.scene=Scene.new(Tissue.load_atlas())
+    app.hud=Interface.new()
+    app.hud.group="hud"
+    app.modal=Interface.new()
+    app.fixed=Interface.new()
+    app.fixed.group="feedback"
+    app.toast=app.fixed:text(82,145,"",.81,app.fixed.colors.pale,1510)
+    app.toast_time=0
+    app.stick_base=app.fixed:box(0,0,172,172,vmath.vector4(.16,.56,.58,.35))
+    app.stick_tip=app.fixed:box(0,0,64,64,vmath.vector4(.55,1,.87,.68))
+    for _,node in ipairs({app.stick_base,app.stick_tip}) do
+        gui.set_texture(node,"cells")
+        gui.play_flipbook(node,"shield")
+    end
+    app.cover=gui.new_box_node(vmath.vector3(1230,540,0),vmath.vector3(WIDTH,HEIGHT,0))
+    gui.set_layer(app.cover,"water")
+    gui.set_texture(app.cover,"world")
+    gui.play_flipbook(app.cover,"terrain")
+    app:show_home()
+    print("MICROGEN PREVIEW READY "..app.driver)
+    window.set_listener(function(_,event)
+        if event==window.WINDOW_EVENT_FOCUS_LOST then
+            app:clear_pointer()
+            if app.sim and app.screen=="run" then app:pause() end
+        end
+    end)
+    if smoke then app:start(47) end
+end
+
+function update(self,dt)
+    local app=self.app
+    local fps,p95=app.diag:step()
+    if fps then
+        if not app.sampled then print("MICROGEN PREVIEW SAMPLE "..app.driver);app.sampled=true end
+        if app.metrics and app.sim and app.show_metrics then
+            gui.set_text(app.metrics,string.format("%.0f FPS  ·  95%% кадров ≤ %.1f мс  ·  %s",fps,p95,app.driver))
+        end
+    end
+    if app.screen=="briefing_roll" then
+        local state=app.briefing
+        state.time=state.time+dt
+        local fraction=math.min(1,state.time/1.42)
+        local step=math.floor(16*(1-(1-fraction)^2))
+        if step~=state.step then
+            state.step=step
+            gui.set_text(state.caption,app.sim:stage_name(state.stage,state.seed+step))
+        end
+        local zoom=.75+.24*fraction+.05*math.sin(state.time*18)
+        gui.set_scale(state.dial,vmath.vector3(zoom,zoom,1))
+        gui.set_rotation(state.dial,vmath.vector3(0,0,fraction*245))
+        if fraction>=1 then app.briefing=nil;app:stage_transition() end
+    end
+    if app.screen=="reveal" then
+        local state=app.reveal
+        state.time=state.time+dt
+        local fraction=math.min(1,state.time/2.6)
+        local step=math.floor(24*(1-(1-fraction)^2.4))
+        if step~=state.step then
+            state.step=step
+            for i,label in ipairs(state.labels) do
+                local ids=Catalog.ORGAN_IDS
+                gui.set_text(label,name(ids[(step*7+i*3)%#ids+1]))
+            end
+        end
+        local scale=.72+fraction*.52+.04*math.sin(state.time*18)
+        gui.set_scale(state.core,vmath.vector3(scale,scale,1))
+        gui.set_rotation(state.core,vmath.vector3(0,0,fraction*145))
+        gui.set_scale(state.inner,vmath.vector3(scale,scale,1))
+        if fraction>=1 then app:reward(true) end
+    end
+    if app.toast_time>0 then
+        app.toast_time=app.toast_time-dt
+        if app.toast_time<=0 then gui.set_text(app.toast,"") end
+    end
+    local sim=app.sim
+    if not sim then return end
+    if app.screen=="run" then
+        local dx,dy=app:drive()
+        sim:step(math.min(.1,dt),dx,dy)
+        app:process_events()
+        if sim.stage_transition then app.breakup_time=(app.breakup_time or 0)+dt end
+        app.scene:render(sim,app.breakup_time)
+        app.hud_timer=(app.hud_timer or 0)+dt
+        if app.hud_timer>.10 then app.hud_timer=0;app:draw_hud() end
+        app.save_time=app.save_time+dt
+        if app.save_time>=12 then app.save_time=0;app:save_run() end
+        if sim.outcome and sim.outcome~="" then app:finish()
+        elseif sim.stage_transition then
+            if app.breakup_time>1.55 then app.breakup_time=nil;app:stage_transition() end
+        elseif (sim.pending_levels or 0)>0 then app:level_up() end
+        if #sim.reward_queue>0 and app.screen=="run" and not app.reward_button then
+            app.reward_button=true
+            app.hud:button(2244,628,260,69,"Награда",function() app:reward() end,true)
+        end
+    end
+    app.audio:consume(sim,app.audio_enabled,app.screen~="run")
+    sim.feedback={}
+end
+
+local function pointer(app,id,x,y,pressed,released)
+    if pressed and app.touch_id==nil then
+        app.touch_id=id
+        app.press_action=app.modal:hit(x,y) or (app.screen=="run" and app.hud:hit(x,y))
+        if not app.press_action and app.screen=="run" then app.stick={ox=x,oy=y,x=x,y=y} end
+    end
+    if app.touch_id~=id then return end
+    if released then
+        local chosen=app.press_action
+        local over=app.modal:hit(x,y) or (app.screen=="run" and app.hud:hit(x,y))
+        app:clear_pointer()
+        if chosen and over==chosen then chosen() end
+    elseif app.stick then
+        local stick=app.stick
+        stick.x,stick.y=x,y
+        local dx,dy=bounded_direction(x-stick.ox,y-stick.oy,94)
+        gui.set_position(app.stick_base,vmath.vector3(stick.ox,stick.oy,0))
+        gui.set_position(app.stick_tip,vmath.vector3(stick.ox+dx*57,stick.oy+dy*57,0))
+        gui.set_enabled(app.stick_base,true)
+        gui.set_enabled(app.stick_tip,true)
+    end
+end
+
+function on_input(self,id,action)
+    local app=self.app
+    local direction=DIRECTIONS[id]
+    if direction then
+        if action.pressed then app.keys[direction]=true end
+        if action.released then app.keys[direction]=nil end
+        return true
+    end
+    if id==hash("back") and action.pressed then
+        if app.screen=="run" then app:pause()
+        elseif app.screen=="pause" then app:show_run()
+        elseif not app.sim then app:show_home() end
+        return true
+    end
+    if id==hash("touch") and action.touch then
+        for _,point in ipairs(action.touch) do
+            pointer(app,point.id,point.x,point.y,point.pressed,point.released)
+        end
+        return true
+    end
+    if id==hash("pointer") then
+        pointer(app,"mouse",action.x,action.y,action.pressed,action.released)
+        return true
+    end
+end
+
+function final(self)
+    local app=self.app
+    if app and app.sim and app.screen~="home" then app:save_run() end
+    if app then app.audio:stop() end
+end

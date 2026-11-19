@@ -1,0 +1,18 @@
+name: "microgen"
+embedded_instances {
+  id: "game"
+  data: "components {\n"
+        "  id: \"gameplay\"\n"
+        "  component: \"/main/gameplay.gui\"\n"
+        "  position { x: 0.0 y: 0.0 z: 0.0 }\n"
+        "  rotation { x: 0.0 y: 0.0 z: 0.0 w: 1.0 }\n"
+        "}\n"
+  position { x: 0.0 y: 0.0 z: 0.0 }
+  rotation { x: 0.0 y: 0.0 z: 0.0 w: 1.0 }
+}
+instances {
+  id: "audio"
+  prototype: "/main/audio/mixer.go"
+  position { x: 0.0 y: 0.0 z: 0.0 }
+  rotation { x: 0.0 y: 0.0 z: 0.0 w: 1.0 }
+}
