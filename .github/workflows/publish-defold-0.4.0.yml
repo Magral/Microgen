@@ -1,0 +1,40 @@
+name: Publish Defold 0.4.0
+on:
+  push:
+    branches: [release/defold-0.4.0]
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 5d6f13cd554198e99414ab048f3eb7e444443ba6
+          persist-credentials: false
+      - name: Publish the verified Android build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          run_id=44507507929
+          source=5d6f13cd554198e99414ab048f3eb7e444443ba6
+          tag=defold-0.4.0
+          apk=Microgen-Defold-0.4.0.apk
+          gh run view "$run_id" --json headSha,conclusion --jq '[.headSha,.conclusion]|@tsv' |
+            grep -Fx "$(printf '%s\tsuccess' "$source")"
+          gh run download "$run_id" --name Microgen-Defold-Android --dir "$RUNNER_TEMP/microgen"
+          cd "$RUNNER_TEMP/microgen"
+          test "$(cat SOURCE_COMMIT.txt)" = "$source"
+          sha256sum --check SHA256SUMS.txt
+          mv Microgen-Defold-Preview.apk "$apk"
+          sha256sum "$apk" > SHA256SUMS.txt
+          gh release create "$tag" "$apk" SHA256SUMS.txt --draft --target "$source" \
+            --title "Микроген 0.4.0 · Defold" --notes-file "$GITHUB_WORKSPACE/prototypes/defold/RELEASE_NOTES.md"
+          gh release edit "$tag" --draft=false --prerelease=false --latest
+          expected=$(cut -d' ' -f1 SHA256SUMS.txt)
+          gh api "repos/$GH_REPO/releases/tags/$tag" --jq \
+            ". | select(.draft == false and .prerelease == false) | .assets[] | select(.name == \"$apk\") | .digest" |
+            grep -Fx "sha256:$expected"
