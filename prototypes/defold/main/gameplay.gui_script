@@ -94,8 +94,83 @@ local function portrait(ui,x,y,radius,recipe)
     return body
 end
 
+local HOME_SLOTS = 3
+
 function App:show_home()
     self:overlay("home")
+    self.audio:stop()
+    self.sim=nil
+    self.hud:clear()
+    self.metrics=nil
+    if not self.home_world then self.home_world=Simulation.new(14481) end
+    self.scene:render(self.home_world)
+    gui.set_enabled(self.cover,false)
+    local ui=self.modal
+    ui:box(1230,540,2460,1080,vmath.vector4(.015,.035,.05,.55))
+    local families=self.store:family_summaries()
+    local total=math.max(HOME_SLOTS,#families)
+    local page=self.home_slot
+    if not page then
+        for i,family in ipairs(families) do
+            if family.id==self.store:family_id() then page=i;break end
+        end
+    end
+    page=math.min(total,page or 1)
+    self.home_slot=page
+    local family=families[page]
+    ui:text(1230,977,"МИКРОГЕН",1.92,ui.colors.pale,nil,true)
+    ui:surface(1230,590,1770,596,"panel")
+    ui:button(216,590,132,230,"‹",page>1 and function()
+        self.home_slot=page-1
+        self:show_home()
+    end or nil,false,1.6)
+    ui:button(2244,590,132,230,"›",page<total and function()
+        self.home_slot=page+1
+        self:show_home()
+    end or nil,false,1.6)
+    ui:text(1230,242,("%d / %d"):format(page,total),1,ui.colors.dim,nil,true)
+
+    local function new()
+        if #families<HOME_SLOTS then self:new_family() else self:show_families() end
+    end
+    if family then
+        local profile=family_profile(self.store,family.id)
+        local form=Legacy.FORMS[profile.legacy.selected_form] or Legacy.FORMS[family.form]
+        portrait(ui,735,590,172,family_recipe(profile,family.form))
+        ui:fit_text(1110,795,form.name.." амёба",1.50,ui.colors.pale,870,75)
+        ui:fit_text(1110,700,form.desc,1,ui.colors.pale,850,75)
+        local stage=profile.checkpoint.stage_index or 1
+        ui:text(1110,620,("%s · Поколение %d · Ступень %d"):format(family.name,family.generation,stage),.91,ui.colors.dim,850)
+        ui:button(1550,508,880,106,family.alive and "Продолжить" or "Подготовить",function()
+            if not self.store:select_family(family.id) then return self:notice(self.store.last_error) end
+            self.equipment_state=nil
+            self.body_page,self.stock_page=1,1
+            if family.alive then self:start() else self:body(false) end
+        end,true,1.26)
+        ui:button(1550,389,880,84,#families<HOME_SLOTS and "Новый организм" or "Управление слотами",new,false,1)
+    else
+        ui:surface(735,590,300,300,"card")
+        ui:text(735,590,"+",2.0,ui.colors.dim,nil,true)
+        ui:text(1110,705,"Свободный слот",1.5,ui.colors.pale)
+        ui:text(1110,619,"Выбери форму для нового забега.",1,ui.colors.dim)
+        ui:button(1550,490,880,106,"Новый организм",new,true,1.20)
+    end
+    local buttons={
+        {"Семьи",function() self:show_families() end},
+        {"Геном",function() Panels.legacy(self) end},
+        {"Кодекс",function() Panels.catalog(self) end},
+        {"Помощь",function() self:help() end},
+        {self.updater.state=="ready" and "Обновить игру" or "Обновления",function() self:updates() end},
+        {"Выход",function() sys.exit(0) end},
+    }
+    for i,button in ipairs(buttons) do
+        ui:button(1230+(i-3.5)*358,129,342,86,button[1],button[2],false,.94)
+    end
+end
+
+function App:show_families()
+    self:overlay("families")
+    self.close_current=function() self:show_home() end
     self.audio:stop()
     self.sim=nil
     self.hud:clear()
@@ -148,7 +223,7 @@ function App:show_home()
         local function move(delta)
             return function()
                 self.family_pages[group]=index+delta
-                self:show_home()
+                self:show_families()
             end
         end
         local pager=y-card_height/2+58
@@ -158,7 +233,7 @@ function App:show_home()
     end
     family_group("alive",804,"Живые организмы","Нет живых организмов.\nСоздайте новую семью.")
     family_group("ancestral",1656,"Семьи · подготовка","Здесь появятся семьи\nдля следующего поколения.")
-    ui:button(1230,lower+76,1680,75,"Новый организм",function() self:new_family() end,true,.83)
+    ui:button(1230,lower+76,1680,75,"Главное меню",function() self:show_home() end,true,.83)
     local buttons={
         {"Геном",function() Panels.legacy(self) end},
         {"Кодекс",function() Panels.catalog(self) end},
@@ -171,6 +246,7 @@ function App:show_home()
 end
 
 function App:new_family()
+    if #self.store.profile.families.items>=HOME_SLOTS then return self:show_families() end
     self:overlay("new_family")
     local ui=self.modal
     local left=ui:panel("Новое семейство","Выбери базовую форму. Прежние семейства и их жизни сохранятся.",function() self:show_home() end,1650)
@@ -185,6 +261,7 @@ function App:new_family()
         ui:button(x,287,455,75,"Выбрать",function()
             local generated_name="Семейство "..self.store.profile.families.next_id
             if not self.store:create_family(generated_name,id) then return self:notice(self.store.last_error) end
+            self.home_slot=nil
             self.equipment_state=nil
             self.body_page,self.stock_page=1,1
             self:body(false)
@@ -202,6 +279,7 @@ function App:delete_family(family)
     ui:button(923,696,570,84,"Оставить",function() self:show_home() end,true)
     ui:button(1537,696,570,84,"Удалить семейство",function()
         if not self.store:delete_family(family.id) then return self:notice(self.store.last_error) end
+        self.home_slot=nil
         self:show_home()
     end)
 end
@@ -1261,7 +1339,19 @@ function init(self)
             if app.sim and app.screen=="run" then app:pause() end
         end
     end)
-    if smoke then app:start(47) end
+    if smoke then
+        if #app.store:family_summaries()==0 then
+            app.home_slot=3
+            app:show_home()
+            assert(app.home_slot==3 and app.screen=="home")
+            assert(app.store:create_family("Первый забег","predator"))
+            assert(app.store:create_family("Второй забег","predator"))
+            app.home_slot=nil
+            app:show_home()
+            assert(app.home_slot==2 and app.screen=="home")
+        end
+        app:start(47)
+    end
     if smoke and sys.get_config_string("microgen.smoke_cards","0")=="1" then
         local sim=app.sim
         sim.level,sim.pending_levels=10,1
