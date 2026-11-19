@@ -2,7 +2,7 @@ name: Defold preview
 
 on:
   push:
-    branches: [preview/defold]
+    branches: [preview/defold, 'release/defold-*']
     tags: ['defold-*']
   workflow_dispatch:
 
@@ -148,7 +148,7 @@ jobs:
           retention-days: 14
 
   publish:
-    if: startsWith(github.ref, 'refs/tags/defold-')
+    if: startsWith(github.ref, 'refs/tags/defold-') || startsWith(github.ref, 'refs/heads/release/defold-')
     needs: build
     runs-on: ubuntu-24.04
     permissions:
@@ -169,12 +169,27 @@ jobs:
         run: |
           version=$(sed -n 's/^version = //p' prototypes/defold/game.project)
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          test "$GITHUB_REF_NAME" = "defold-$version"
+          tag="defold-$version"
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            test "$GITHUB_REF_NAME" = "$tag"
+          else
+            test "$GITHUB_REF_NAME" = "release/$tag"
+          fi
           cd dist
           sha256sum --check SHA256SUMS.txt
           asset="Microgen-Defold-$version.apk"
           mv Microgen-Defold-Preview.apk "$asset"
           sha256sum "$asset" > SHA256SUMS.txt
-          gh release create "$GITHUB_REF_NAME" "$asset" SHA256SUMS.txt \
-            --verify-tag --title "Микроген $version · Defold" \
-            --latest --notes-file ../prototypes/defold/RELEASE_NOTES.md
+          if ! gh release view "$tag" --json isDraft > release-state.json; then
+            gh release create "$tag" "$asset" SHA256SUMS.txt --draft --target "$GITHUB_SHA" \
+              --title "Микроген $version · Defold" --notes-file ../prototypes/defold/RELEASE_NOTES.md
+          elif [ "$(jq -r .isDraft release-state.json)" = true ]; then
+            gh release upload "$tag" "$asset" SHA256SUMS.txt --clobber
+          fi
+          expected=$(cut -d' ' -f1 SHA256SUMS.txt)
+          if [ "$(gh release view "$tag" --json isDraft --jq .isDraft)" = true ]; then
+            gh release edit "$tag" --draft=false --prerelease=false --latest
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq \
+            "select(.draft == false and .prerelease == false) | .assets[] | select(.name == \"$asset\") | .digest" |
+            grep -Fx "sha256:$expected"
