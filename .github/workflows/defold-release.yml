@@ -1,0 +1,176 @@
+name: Defold 0.3.0 release
+
+on:
+  push:
+    branches: [release/defold-0.3.0]
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: defold-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      BOB_VERSION: '1.14.1'
+      BOB_SHA256: f47e0d21fee84c3c1f56adfe5feb1c328f83df9e4fe26f2616a5392b9b710b45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Java 25
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Download and verify Defold Bob
+        run: |
+          curl --fail --silent --show-error --location --retry 3 \
+            "https://github.com/defold/defold/releases/download/$BOB_VERSION/bob.jar" \
+            --output "$RUNNER_TEMP/bob.jar"
+          printf '%s  %s\n' "$BOB_SHA256" "$RUNNER_TEMP/bob.jar" | sha256sum --check
+          java -jar "$RUNNER_TEMP/bob.jar" --version
+
+      - name: Build signed Android ARM64 preview
+        working-directory: prototypes/defold
+        run: |
+          mkdir -p "$RUNNER_TEMP/defold-preview"
+          printf 'android\n' > "$RUNNER_TEMP/defold-keystore-password"
+          # Defold defaults to Vulkan on Android. Use the release engine for timing.
+          java -jar "$RUNNER_TEMP/bob.jar" \
+            --platform arm64-android --architectures arm64-android \
+            --variant release --archive --bundle-format apk \
+            --bundle-output "$RUNNER_TEMP/defold-android" \
+            --keystore "$GITHUB_WORKSPACE/tools/development.keystore" \
+            --keystore-alias androiddebugkey --keystore-pass "$RUNNER_TEMP/defold-keystore-password" \
+            build bundle 2>&1 | tee "$RUNNER_TEMP/defold-preview/android-build.log"
+          mapfile -t apks < <(find "$RUNNER_TEMP/defold-android" -name '*.apk' -type f)
+          test "${#apks[@]}" -eq 1
+          cp "${apks[0]}" "$RUNNER_TEMP/defold-preview/Microgen-Defold-0.3.0.apk"
+
+      - name: Verify APK signature and identity
+        working-directory: ${{ runner.temp }}/defold-preview
+        run: |
+          sdk_tools=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f -printf '%h\n' | sort -V | tail -n 1)
+          apk=Microgen-Defold-0.3.0.apk
+          test -n "$sdk_tools"
+          "$sdk_tools/apksigner" verify --verbose --print-certs "$apk" | tee APK_SIGNATURE.txt
+          expected=$(keytool -exportcert -alias androiddebugkey -keystore "$GITHUB_WORKSPACE/tools/development.keystore" -storepass android | sha256sum | cut -d' ' -f1)
+          grep -Fq "certificate SHA-256 digest: $expected" APK_SIGNATURE.txt
+          "$sdk_tools/aapt" dump xmltree "$apk" AndroidManifest.xml > APK_MANIFEST.txt
+          grep -Fq 'A: package="org.magral.microgen.defold"' APK_MANIFEST.txt
+          if grep -E 'android:debuggable.*0xffffffff' APK_MANIFEST.txt; then exit 1; fi
+          unzip -Z1 "$apk" > APK_CONTENTS.txt
+          grep -Eq '^lib/arm64-v8a/[^/]+\.so$' APK_CONTENTS.txt
+          if grep -Eq '^lib/(armeabi-v7a|x86|x86_64)/' APK_CONTENTS.txt; then exit 1; fi
+          sha256sum "$apk" > SHA256SUMS.txt
+          printf '%s\n' "$GITHUB_SHA" > SOURCE_COMMIT.txt
+
+      - name: Upload Android preview
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Microgen-Defold-Android
+          path: ${{ runner.temp }}/defold-preview/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Build a Linux binary for runtime verification
+        working-directory: prototypes/defold
+        run: |
+          java -jar "$RUNNER_TEMP/bob.jar" --platform x86_64-linux \
+            --variant debug --archive --output build/linux \
+            --bundle-output "$RUNNER_TEMP/defold-linux" build bundle
+          tar -czf "$RUNNER_TEMP/defold-linux-runtime.tar.gz" -C "$RUNNER_TEMP/defold-linux" .
+
+      - name: Upload Linux runtime fixture
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Microgen-Defold-Linux-Runtime
+          path: ${{ runner.temp }}/defold-linux-runtime.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Build and run native Linux smoke test
+        timeout-minutes: 3
+        working-directory: prototypes/defold
+        run: |
+          if ! command -v xvfb-run >/dev/null || ! command -v import >/dev/null || ! ldconfig -p | grep "libGLU.so.1" >/dev/null; then
+            sudo apt-get -o Acquire::Retries=0 -o Acquire::http::Timeout=10 update
+            sudo apt-get -o Acquire::Retries=0 -o Acquire::http::Timeout=10 install -y xvfb imagemagick libglu1-mesa libopenal1
+          fi
+          mkdir -p "$RUNNER_TEMP/defold-smoke"
+          mapfile -t executables < <(find "$RUNNER_TEMP/defold-linux" -type f -executable ! -name '*.so*')
+          test "${#executables[@]}" -eq 1
+          xvfb-run -a -s '-screen 0 2460x1080x24' bash -euo pipefail -c '
+            cd "$(dirname "$1")"
+            ALSOFT_DRIVERS=null "$1" --graphics-adapter=opengl --config=microgen.smoke_run=1 > "$2/linux-smoke.log" 2>&1 &
+            pid=$!
+            trap "kill $pid 2>/dev/null || true" EXIT
+            for attempt in {1..50}; do
+              if grep -Fq "MICROGEN PREVIEW READY" "$2/linux-smoke.log"; then break; fi
+              kill -0 "$pid"
+              sleep 0.2
+            done
+            grep -Fq "MICROGEN PREVIEW READY" "$2/linux-smoke.log"
+            for attempt in {1..50}; do
+              if grep -Fq "MICROGEN PREVIEW SAMPLE" "$2/linux-smoke.log"; then break; fi
+              kill -0 "$pid"
+              sleep 0.2
+            done
+            grep -Fq "MICROGEN PREVIEW SAMPLE" "$2/linux-smoke.log"
+            grep -Fq "MICROGEN RUN READY" "$2/linux-smoke.log"
+            kill -0 "$pid"
+            if grep -E "ERROR:SCRIPT|ERROR:RENDER|FATAL" "$2/linux-smoke.log"; then exit 1; fi
+            timeout 15s import -window root "$2/Microgen-Defold-Preview.png"
+          ' bash "${executables[0]}" "$RUNNER_TEMP/defold-smoke"
+
+      - name: Upload native smoke results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Microgen-Defold-Native-Smoke
+          path: ${{ runner.temp }}/defold-smoke/*
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Publish Defold prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        working-directory: ${{ runner.temp }}/defold-preview
+        run: |
+          test "$GITHUB_REF" = refs/heads/release/defold-0.3.0
+          tag=defold-0.3.0
+          test "$(sed -n 's/^version = //p' "$GITHUB_WORKSPACE/prototypes/defold/game.project")" = 0.3.0
+          sha256sum --check SHA256SUMS.txt
+          cat > "$RUNNER_TEMP/defold-release-notes.md" <<'NOTES'
+          **Предварительный выпуск для Android на другом движке — Defold 1.14.1.**
+
+          - Восстановлены желейная мембрана, раскрытие пасти, изгиб щупалец, рост органов и анимации поглощения.
+          - Возвращены слои воды, следы движения, эффекты атак и открытие цист. Интерфейс приближен к Godot 1.4.1.
+          - Отрисовка использует общие шейдеры и упрощённый путь для мелких противников. В одной тяжёлой сцене при 2460×1080 программный рендерер ПК показал 34,5 FPS против 47,1 у Defold 0.2.0. Стабильные 60 FPS на Tecno POVA 5 пока не подтверждены.
+
+          Скачайте **Microgen-Defold-0.3.0.apk**. Подпись совместима с Defold 0.2.0. У ветки Defold отдельный Android-пакет и собственные сохранения. Стабильная версия на Godot доступна отдельно.
+          NOTES
+          if gh release view "$tag" --json isDraft --jq .isDraft > "$RUNNER_TEMP/release-state"; then
+            if [ "$(cat "$RUNNER_TEMP/release-state")" != true ]; then
+              gh release view "$tag" --json isPrerelease,assets --jq 'select(.isPrerelease) | .assets[].name' | grep -Fx 'Microgen-Defold-0.3.0.apk'
+              exit 0
+            fi
+            gh release upload "$tag" Microgen-Defold-0.3.0.apk SHA256SUMS.txt --clobber
+          else
+            gh release create "$tag" Microgen-Defold-0.3.0.apk SHA256SUMS.txt \
+              --target "$GITHUB_SHA" --title "Микроген 0.3.0 · движок Defold" \
+              --draft --prerelease --latest=false --notes-file "$RUNNER_TEMP/defold-release-notes.md"
+          fi
+          gh release edit "$tag" --draft=false --prerelease --latest=false
+          gh release view "$tag" --json isDraft,isPrerelease,assets,url
