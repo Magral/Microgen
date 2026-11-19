@@ -3,6 +3,7 @@ name: Defold preview
 on:
   push:
     branches: [preview/defold]
+    tags: ['defold-*']
   workflow_dispatch:
 
 permissions:
@@ -19,7 +20,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     env:
       BOB_VERSION: '1.14.1'
       BOB_SHA256: f47e0d21fee84c3c1f56adfe5feb1c328f83df9e4fe26f2616a5392b9b710b45
@@ -69,6 +70,8 @@ jobs:
           grep -Fq "certificate SHA-256 digest: $expected" APK_SIGNATURE.txt
           "$sdk_tools/aapt" dump xmltree "$apk" AndroidManifest.xml > APK_MANIFEST.txt
           grep -Fq 'A: package="org.magral.microgen.defold"' APK_MANIFEST.txt
+          grep -Fq android.permission.REQUEST_INSTALL_PACKAGES APK_MANIFEST.txt
+          grep -Fq org.magral.microgen.update.ApkProvider APK_MANIFEST.txt
           if grep -E 'android:debuggable.*0xffffffff' APK_MANIFEST.txt; then exit 1; fi
           unzip -Z1 "$apk" > APK_CONTENTS.txt
           grep -Eq '^lib/arm64-v8a/[^/]+\.so$' APK_CONTENTS.txt
@@ -142,3 +145,35 @@ jobs:
           path: ${{ runner.temp }}/defold-smoke/*
           if-no-files-found: ignore
           retention-days: 14
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/defold-')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Read release version
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Retrieve verified APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --name Microgen-Defold-Android --dir dist
+      - name: Publish stable Defold release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(sed -n 's/^version = //p' prototypes/defold/game.project)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$GITHUB_REF_NAME" = "defold-$version"
+          cd dist
+          sha256sum --check SHA256SUMS.txt
+          asset="Microgen-Defold-$version.apk"
+          mv Microgen-Defold-Preview.apk "$asset"
+          sha256sum "$asset" > SHA256SUMS.txt
+          gh release create "$GITHUB_REF_NAME" "$asset" SHA256SUMS.txt \
+            --verify-tag --title "Микроген $version · Defold" \
+            --latest --notes-file ../prototypes/defold/RELEASE_NOTES.md

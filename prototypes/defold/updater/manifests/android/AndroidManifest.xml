@@ -1,0 +1,9 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="org.magral.microgen.update">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <application>
+        <provider android:name="org.magral.microgen.update.ApkProvider"
+            android:authorities="org.magral.microgen.defold.updates"
+            android:exported="false" android:grantUriPermissions="true" />
+    </application>
+</manifest>

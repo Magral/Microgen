@@ -1,3 +1,4 @@
+local Updater = require "main.run.updater"
 local Audio = require "main.run.audio"
 local BodyArt = require "main.body_art"
 local Genome = require "main.run.genome"
@@ -154,7 +155,7 @@ function App:show_home()
         {"Геном",function() Panels.legacy(self) end},
         {"Кодекс",function() Panels.catalog(self) end},
         {"Помощь",function() self:help() end},
-        {"Обновления",function() self:updates() end},
+        {self.updater.state=="ready" and "Обновить игру" or "Обновления",function() self:updates() end},
         {"Выход",function() sys.exit(0) end},
     }
     for i,button in ipairs(buttons) do ui:button(1230+(i-3)*340,lower-14,319,75,button[1],button[2],false,.83) end
@@ -215,41 +216,37 @@ function App:help()
     ui:button(1230,135,1209,84,"Понятно",function() self:show_home() end,true)
 end
 
-function App:updates(state)
+function App:updates()
     self:overlay("updates")
-    local ui=self.modal
-    local function back()
-        self.update_token=nil
-        self:show_home()
+    local ui, updater = self.modal, self.updater
+    local function back() self:show_home() end
+    local left = ui:panel("Обновления Микрогена", "Загрузка идёт в фоне. Установку подтверждает Android.", back)
+    local label = updater.asset and updater.asset.label or ""
+    local captions = {
+        idle = "Игра проверяет новые версии Defold автоматически.",
+        checking = "Проверяем выпуски на GitHub…",
+        downloading = "Загружаем и проверяем версию " .. label .. "…",
+        ready = updater.needs_permission and "Разреши установку из этого приложения в настройках Android."
+            or "Версия " .. label .. " готова к установке.",
+        current = "У тебя актуальная стабильная версия Defold.",
+        error = "Обновиться не удалось. Можно повторить проверку.",
+        desktop = "Для Android доступна версия " .. label .. ".",
+    }
+    ui:text(left+33,828,"Установлена версия "..updater.installed,1)
+    ui:text(left+33,754,captions[updater.state],.96,ui.colors.dim)
+    if updater.state == "ready" then
+        ui:button(1230,646,1479,84,"Открыть установщик",function() updater:install() end,true)
+        if updater.needs_permission then
+            ui:button(1230,545,1479,84,"Разрешение Android",function() updater.native.allow() end)
+        end
+    elseif updater.state ~= "checking" and updater.state ~= "downloading" then
+        ui:button(1230,646,1479,84,"Проверить обновления",function() updater:check() end,true)
     end
-    local left=ui:panel("Обновления Микрогена","Проверка выполняется только по кнопке. Игре интернет не нужен.",back)
-    ui:text(left+33,828,"Установлена версия "..sys.get_config_string("project.version","0.3.0"),1)
-    ui:text(left+33,754,state or "Можно проверить наличие стабильного выпуска Микрогена.",.96,ui.colors.dim)
-    if self.update_token then
-        ui:button(1230,646,1479,84,"Отменить проверку",function()
-            self.update_token=nil
-            self:updates()
+    if not updater.needs_permission then
+        ui:button(1230,545,1479,84,"Открыть выпуски на GitHub",function()
+            sys.open_url("https://github.com/Magral/Microgen/releases")
         end)
-    else
-        ui:button(1230,646,1479,84,"Проверить обновления",function()
-            local token={}
-            self.update_token=token
-            self:updates("Проверяем стабильный выпуск на GitHub…")
-            http.request("https://api.github.com/repos/Magral/Microgen/releases/latest","GET",function(_,_,result)
-                if self.update_token~=token or self.screen~="updates" then return end
-                self.update_token=nil
-                local valid,release=pcall(json.decode,result.response or "")
-                if result.status==200 and valid and type(release)=="table" and type(release.tag_name)=="string" then
-                    self:updates("Последний стабильный выпуск оригинального Микрогена: "..release.tag_name)
-                else
-                    self:updates("Не удалось проверить обновления. Попробуй ещё раз.")
-                end
-            end,{["Accept"]="application/vnd.github+json"})
-        end,true)
     end
-    ui:button(1230,545,1479,84,"Открыть выпуски на GitHub",function()
-        sys.open_url("https://github.com/Magral/Microgen/releases")
-    end)
     ui:button(1230,447,1479,84,"Назад",back)
 end
 
@@ -1164,10 +1161,18 @@ function init(self)
     gui.set_layer(app.cover,"water")
     gui.set_texture(app.cover,"world")
     gui.play_flipbook(app.cover,"terrain")
+    app.focused=true
+    app.updater=Updater.new(sys.get_config_string("project.version","0.4.0"), microgen_updater,
+        not smoke and microgen_updater~=nil, function()
+            if app.screen=="updates" then app:updates()
+            elseif app.screen=="home" and app.updater.state=="ready" then app:show_home() end
+        end)
     app:show_home()
     print("MICROGEN PREVIEW READY "..app.driver)
     window.set_listener(function(_,event)
+        if event==window.WINDOW_EVENT_FOCUS_GAINED then app.focused=true end
         if event==window.WINDOW_EVENT_FOCUS_LOST then
+            app.focused=false
             app:clear_pointer()
             if app.sim and app.screen=="run" then app:pause() end
         end
@@ -1177,6 +1182,7 @@ end
 
 function update(self,dt)
     local app=self.app
+    app.updater:step(dt, app.focused and (app.screen=="home" or app.screen=="updates"))
     local fps,p95=app.diag:step()
     if fps then
         if not app.sampled then print("MICROGEN PREVIEW SAMPLE "..app.driver);app.sampled=true end

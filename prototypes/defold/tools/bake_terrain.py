@@ -9,26 +9,6 @@ MAIN = Path(__file__).resolve().parents[1] / "main"
 ART = MAIN / "art"
 
 
-def texture_water(source):
-    """Add softly scattered micro-debris to the blue channel of the flow map."""
-    rgb = np.asarray(source.convert("RGB")).copy()
-    height, width = rgb.shape[:2]
-    rng = np.random.default_rng(414)
-    sediment = np.zeros((height, width), dtype=np.float32)
-    offsets = np.arange(-4, 5)
-    x, y = np.meshgrid(offsets, offsets)
-    for _ in range(460):
-        cx, cy = rng.integers(0, (width, height))
-        angle = rng.uniform(0, np.pi)
-        u = x * np.cos(angle) + y * np.sin(angle)
-        v = -x * np.sin(angle) + y * np.cos(angle)
-        grain = rng.uniform(.20, .82) * np.exp(-(u / rng.uniform(1, 2.8))**2 - (v / .65)**2)
-        patch = np.ix_((cy + offsets) % height, (cx + offsets) % width)
-        sediment[patch] = np.maximum(sediment[patch], grain)
-    rgb[..., 2] = np.rint(np.clip(rgb[..., 2] * .43 + sediment * 255 * .67, 0, 255)).astype(np.uint8)
-    return Image.fromarray(rgb)
-
-
 def pack(source):
     names = []
     for kind in ("bed", "bed_fibril", "fibril", "wall"):
@@ -49,7 +29,7 @@ def pack(source):
     )
     # Exactly one 256x256 image with no padding so the GPU can repeat it.
     flow_path = ART / "liquid_flow.png"
-    texture_water(Image.open(source / flow_path.name)).save(flow_path, optimize=True)
+    Image.open(source / flow_path.name).convert("RGB").save(flow_path, optimize=True)
     (MAIN / "liquid.atlas").write_text('images { image: "/main/art/liquid_flow.png" }\n')
 
 
