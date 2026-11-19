@@ -2,6 +2,7 @@ extends Node2D
 # Native canvas commands are recorded once per six-tile patch. Everything here is
 # substrate: no physics nodes, gameplay RNG calls, or changes to the map cells.
 const World=preload("res://game/world.gd")
+const RasterCache=preload("res://game/terrain_raster_cache.gd")
 const CHUNK=6
 const OVERHANG=114.0
 var chunks: Array=[]
@@ -9,6 +10,8 @@ var source
 var source_seed=-1
 var rebuilds=0
 var mobile_detail := false
+var raster_enabled := OS.has_environment("MICROGEN_TERRAIN_RASTER") or "--terrain-raster-cache" in OS.get_cmdline_user_args()
+var raster_cache: Node
 
 # Integer coordinate hashing keeps neighboring patches and new runs repeatable.
 static func grain(x: int,y: int,seed_value: int,salt: int=0) -> float:
@@ -24,11 +27,31 @@ class Patch:
 	var commands: Array=[]
 	var draw_builds=0
 	var mobile_detail := false
-	func _draw():
-		if commands.is_empty():
+	var raster_texture: Texture2D
+	var raster_bounds := Rect2()
+	var geometry_bounds := Rect2()
+	func prepare_geometry():
+		if draw_builds==0:
 			_build()
 			mesh.bake(commands)
+			if not mesh.points.is_empty():
+				geometry_bounds=Rect2(mesh.points[0],Vector2.ZERO)
+				for point in mesh.points:geometry_bounds=geometry_bounds.expand(point)
 			draw_builds+=1
+	func intersects(area: Rect2, fallback: Rect2) -> bool:
+		if draw_builds==0:return fallback.intersects(area,true)
+		return geometry_bounds.has_area() and geometry_bounds.intersects(area,true)
+	func show_raster(texture: Texture2D, bounds: Rect2, blend: ShaderMaterial):
+		if raster_texture==texture:return
+		raster_texture=texture
+		raster_bounds=bounds
+		material=blend
+		queue_redraw()
+	func _draw():
+		if raster_texture!=null:
+			draw_texture_rect(raster_texture,raster_bounds,false)
+			return
+		prepare_geometry()
 		mesh.paint(self)
 	func _polygon(points: PackedVector2Array,color: Color):
 		commands.append({"kind":0,"points":points,"color":color})
@@ -132,6 +155,7 @@ class Patch:
 
 func update_world(world,camera: Vector2,viewport: Vector2,zoom: float):
 	if source!=world or source_seed!=world.seed_value:
+		if raster_cache!=null:raster_cache.clear()
 		for chunk in chunks:chunk.node.queue_free()
 		chunks.clear()
 		source=world
@@ -149,5 +173,17 @@ func update_world(world,camera: Vector2,viewport: Vector2,zoom: float):
 				chunks.append({"node":patch,"bounds":Rect2(Vector2(cx,cy)*World.TILE,Vector2.ONE*CHUNK*World.TILE).grow(OVERHANG)})
 	position=viewport*Vector2(0.5,0.51)-camera*zoom
 	scale=Vector2.ONE*zoom
-	var visible_area=Rect2(camera-viewport/(2*zoom),viewport/zoom).grow(100)
-	for chunk in chunks:chunk.node.visible=chunk.bounds.intersects(visible_area)
+	# The screen rectangle uses the same upward camera bias as the transform.
+	# Patch bounds already include their wall overhang and antialias geometry.
+	var visible_area=Rect2(-position/zoom,viewport/zoom)
+	for chunk in chunks:
+		var patch=chunk.node
+		patch.visible=patch.intersects(visible_area,chunk.bounds)
+	if raster_enabled and DisplayServer.get_name()!="headless":
+		if raster_cache==null:
+			raster_cache=RasterCache.new()
+			add_child(raster_cache)
+		var physical_scale := get_viewport().get_final_transform().get_scale().abs()
+		raster_cache.update(chunks,camera,zoom*maxf(physical_scale.x,physical_scale.y))
+	elif raster_cache!=null:
+		raster_cache.clear()

@@ -12,11 +12,14 @@ parser.add_argument('--native', action='store_true', help='Also benchmark actual
 parser.add_argument('--pova-size', action='store_true', help='Render on a 2460×1080 window with identical expanded canvas on both revisions')
 parser.add_argument('--mobile-profile', action='store_true', help='Use the Android world render buffer on a desktop')
 parser.add_argument('--stress-only', action='store_true', help='Render only the fixed stress scene')
+parser.add_argument('--terrain-raster', action='store_true', help='Compare vector and raster terrain only on the same wide native scene')
 parser.add_argument('--display', help='Existing X11 display; otherwise start local Xorg dummy over TCP')
 parser.add_argument('--godot', default='godot')
 args = parser.parse_args()
 if args.render_only and not (args.native and args.snapshots):
     parser.error('--render-only requires --native and --snapshots')
+if args.terrain_raster and not args.native:
+    parser.error('--terrain-raster requires --native')
 args.output = args.output.resolve()
 args.output.mkdir(parents=True, exist_ok=True)
 work = pathlib.Path(tempfile.mkdtemp(prefix='microgen-profile-'))
@@ -49,7 +52,7 @@ def run(script, log, native=False):
         subprocess.run(command, env=env, stdout=stream, stderr=subprocess.STDOUT, check=True)
     if re.search(r"(?m)^(?:SCRIPT ERROR:|ERROR:)", (args.output/log).read_text()):
         raise RuntimeError("Godot reported an error: " + str(args.output/log))
-if not args.render_only:
+if not args.render_only and not args.terrain_raster:
     run('profile_long.gd', 'simulation.log')
 xorg = None
 try:
@@ -70,9 +73,12 @@ try:
                 except OSError: time.sleep(.1)
             else: raise RuntimeError('Xorg failed to become ready; inspect xorg.log or supply --display')
             env['DISPLAY'] = '127.0.0.1:'+str(display)
-        if not args.stress_only:
-            run('profile_render.gd', 'native.log', True)
-        run('profile_worst.gd', 'worst.log', True)
+        if args.terrain_raster:
+            run('profile_terrain_raster.gd', 'terrain.log', True)
+        else:
+            if not args.stress_only:
+                run('profile_render.gd', 'native.log', True)
+            run('profile_worst.gd', 'worst.log', True)
 finally:
     if xorg:
         xorg.terminate()
