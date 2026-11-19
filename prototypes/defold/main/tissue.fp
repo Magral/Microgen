@@ -16,6 +16,7 @@ uniform fs_uniforms
     mediump vec4 tissue_contact; // Feeding direction, strength, and chewing wave.
     mediump vec4 tissue_wounds;  // Wound phase, severity, and circulation.
     mediump vec4 tissue_pigment; // Absorbed color and its concentration.
+    mediump vec4 tissue_fragment; // Enabled, sector angle, half-angle, and quality grade.
 };
 
 #include "/main/tissue_deform.glsl"
@@ -49,6 +50,21 @@ void main()
     sample_point = clamp(sample_point, vec2(-1.0), vec2(1.0));
     highp vec2 warped = rotated ? vec2(sample_point.y, -sample_point.x) : sample_point;
     mediump vec4 rgba = texture(texture_sampler, tissue_atlas.xy + atlas_extent * warped);
+
+    if (tissue_fragment.x > 0.5) {
+        mediump float theta = atan(sample_point.y, sample_point.x);
+        mediump float delta = abs(mod(theta - tissue_fragment.y + TISSUE_TAU * 0.5, TISSUE_TAU) - TISSUE_TAU * 0.5);
+        mediump float tear = tissue_fragment.z
+            + sin(theta * 13.0 + tissue_wounds.x * 1.7) * 0.022
+            + sin(theta * 27.0 - tissue_wounds.x * 0.8) * 0.010;
+        mediump float seam = 1.0 - smoothstep(0.012, 0.052, abs(delta - tear));
+        mediump vec3 seam_color = tissue_fragment.w >= 2.5 ? vec3(1.0, 0.76, 0.38)
+            : tissue_fragment.w >= 1.5 ? vec3(0.86, 0.63, 1.0)
+            : tissue_fragment.w >= 0.5 ? vec3(0.66, 0.83, 1.0)
+            : vec3(0.82, 0.97, 0.89);
+        rgba.rgb = mix(rgba.rgb, seam_color * max(max(rgba.r, rgba.g), rgba.b), seam * 0.72);
+        rgba.a *= 1.0 - smoothstep(tear - 0.012, tear + 0.012, delta);
+    }
 
     // Circulation carries accumulated pigment through the folds of the moving membrane.
     mediump float radius2 = dot(source, source);

@@ -639,15 +639,29 @@ function Simulation:_leave_remains(enemy)
     local dna, bio = prey and 4 or floor(9 * scale), prey and 1 or floor(4 * scale)
     if elite then dna, bio = max(45, dna * 2), max(24, bio * 2) end
     local grade = elite and 3 or (enemy.r >= 60 and 2 or (enemy.r >= 40 and 1 or 0))
-    local first_dna, second_dna, first_bio, second_bio = ceil(dna * 0.5), floor(dna * 0.3), ceil(bio * 0.5), floor(bio * 0.25)
-    local dna_split, bio_split = { first_dna, second_dna, dna - first_dna - second_dna }, { first_bio, second_bio, bio - first_bio - second_bio }
-    local radius = max(7, enemy.r * 0.36)
-    for i, material in ipairs({"organelle", "membrane", "plasma"}) do
-        local angle = self.rng:randf() * TAU
+    local count = clamp(floor(enemy.r / 18) + 1, 2, 8)
+    local angle_step = TAU / count
+    local radius = max(5, enemy.r * 0.36 / sqrt(count / 3))
+    local visual_scale = clamp(0.95 / sqrt(count / 3), 0.52, 1.2)
+    local materials = {"organelle", "membrane", "plasma"}
+    local body_angle = enemy.genome.rotation or 0
+    for i = 1, count do
+        local sector = i - 1
+        local angle = body_angle + sector * angle_step
+        local dna_share = floor(dna / count) + (sector < dna % count and 1 or 0)
+        local bio_share = floor(bio / count) + (sector < bio % count and 1 or 0)
+        local piece_angle = sector * angle_step
+        local radial_angle = angle + self.rng:randf_range(-angle_step * 0.10, angle_step * 0.10)
+        local piece_grade = i == 1 and max(1, grade) or max(0, grade - 1)
         self:_store_fragment({
-            id = self:_id(), pos = offset(enemy.pos, angle, enemy.r * 0.45), vel = offset(point(), angle, self.rng:randf_range(6, 15)),
-            r = radius, genome = copy(enemy.genome), part = i - 1, quality = i == 1 and max(1, grade) or max(0, grade - 1),
-            material = material, dna = dna_split[i], bio = bio_split[i], progress = 0, duration = self.rng:randf_range(1.2, 2),
+            id = self:_id(), pos = offset(enemy.pos, radial_angle, enemy.r * 0.30),
+            vel = offset(point(), radial_angle, self.rng:randf_range(9, 19)), r = radius,
+            genome = copy(enemy.genome), part = sector % #materials, quality = piece_grade,
+            piece_count = count, piece_index = sector, cut_angle = piece_angle, cut_half_angle = angle_step * 0.43,
+            body_radius = enemy.r, visual_scale = visual_scale,
+            rotation = body_angle + self.rng:randf_range(-0.18, 0.18), spin = self.rng:randf_range(-0.65, 0.65),
+            material = materials[sector % #materials + 1], dna = dna_share, bio = bio_share,
+            progress = 0, duration = self.rng:randf_range(1.2, 2),
             internal = false, infected = enemy.infect > 0 and i == 1,
             pigment = V.pigment(Genome.colors(enemy.genome)[1], max(0.5, radius * 0.12)),
         })
@@ -719,6 +733,7 @@ function Simulation:_update_remains(dt)
             part.pos = point(self.world:move_body(part.pos.x, part.pos.y, part.vel.x * dt, part.vel.y * dt, part.r * 0.5))
             local decay = exp(-dt / 0.8)
             part.vel = point(part.vel.x * decay, part.vel.y * decay)
+            if part.spin then part.rotation = (part.rotation or 0) + part.spin * dt end
             if self:_touches(part.pos, part.r) then self:_capture(part)
             elseif pulling and distance_squared(self.player, part.pos) < attraction^2 then approach(part, self.player, dt * (70 + rank * 25)) end
         end

@@ -3,7 +3,7 @@ local Legacy = require "main.run.genome_legacy"
 local Rewards = require "main.run.rewards"
 
 local Panels = {}
-local PER_PAGE = 5
+local PER_PAGE = 4
 local cx = 1230
 
 local function title(id)
@@ -18,22 +18,39 @@ local function quality_color(item)
 end
 
 function Panels.list(ui,heading,subtext,rows,page,open_page,leave)
-    local left = ui:panel(heading,subtext,leave)
+    ui:panel(heading,subtext,leave)
     local pages = math.max(1,math.ceil(#rows/PER_PAGE))
     page = math.min(page or 1,pages)
-    if #rows == 0 then ui:text(left+54,545,"Пока пусто",1.13,ui.colors.dim) end
+    if #rows == 0 then
+        ui:surface(cx,550,790,245,"card")
+        ui:text(cx,550,"Пока пусто",1.13,ui.colors.dim,nil,true)
+    end
     for i=1,PER_PAGE do
         local row = rows[(page-1)*PER_PAGE+i]
         if not row then break end
-        local y = 730-(i-1)*99
-        ui:box(cx,y,1556,90,vmath.vector4(.042,.145,.17,.98))
-        ui:text(left+74,y+15,row.title,.98,row.color or ui.colors.pale)
-        if row.detail then ui:text(left+74,y-18,row.detail,.68,ui.colors.dim,1070) end
-        if row.action then ui:button(left+1380,y,250,63,row.label or "Открыть",row.action,true) end
+        local column=(i-1)%2
+        local line=math.floor((i-1)/2)
+        local x=cx+(column==0 and -367 or 367)
+        local y=line==0 and 680 or 374
+        local accent=row.color or ui.colors.mint
+        ui:surface(x,y,710,278,"card")
+        ui:box(x,y+123,646,5,accent)
+        ui:surface(x-288,y+71,92,92,"button")
+        if row.icon then
+            ui:image("icons","icon_"..row.icon,x-288,y+71,72,72)
+        else
+            ui:text(x-288,y+71,row.badge or tostring((page-1)*PER_PAGE+i),.78,accent,nil,true)
+        end
+        local title_x=x-225
+        ui:fit_text(title_x,y+77,row.title or "",.98,ui.colors.pale,445,63)
+        if row.meta then ui:fit_text(title_x,y+28,row.meta,.73,accent,445,40) end
+        if row.detail then ui:fit_text(x-320,y-35,row.detail,.76,ui.colors.dim,610,78) end
+        if row.extra then ui:fit_text(x-320,y-83,row.extra,.72,row.extra_color or ui.colors.mint,420,45) end
+        if row.action then ui:button(x+225,y-101,210,58,row.label or "Открыть",row.action,true,.82) end
     end
-    if page>1 then ui:button(cx-285,184,204,57,"Назад",function() open_page(page-1) end) end
-    if pages>1 then ui:text(cx-42,184,page.." / "..pages,.83,ui.colors.dim) end
-    if page<pages then ui:button(cx+285,184,204,57,"Далее",function() open_page(page+1) end) end
+    if page>1 then ui:button(cx-285,173,230,62,"‹ Назад",function() open_page(page-1) end) end
+    if pages>1 then ui:text(cx,173,page.." / "..pages,.83,ui.colors.dim,nil,true) end
+    if page<pages then ui:button(cx+285,173,230,62,"Далее ›",function() open_page(page+1) end) end
 end
 
 local CATEGORIES={
@@ -62,7 +79,8 @@ local function entries(section)
         if section=="synergies" then detail=title(data.needs[1]).." + "..title(data.needs[2])
         elseif section=="evolutions" then detail=title(id).." 6/6 + "..title(data.passive).." 3/3"
         elseif section=="organs" or section=="adaptations" then detail=Catalog.effect_text(id,1) end
-        rows[#rows+1]={id=id,organ=section=="temporary" and data.organ or id,title=data.name,
+        rows[#rows+1]={id=id,icon=(Catalog.ORGANS[id] or Catalog.ADAPTATIONS[id]) and id or nil,
+            organ=section=="temporary" and data.organ or id,title=data.name,
             detail=detail,desc=data.desc or data.summary or detail}
     end
     return rows
@@ -141,7 +159,8 @@ function Panels.legacy(app,section,page,leave)
     elseif section=="form" then
         for _,id in ipairs(legacy.forms) do
             local entry = Legacy.FORMS[id]
-            rows[#rows+1] = {title=entry.name,detail=entry.desc,label=legacy.selected_form==id and "Выбрана" or "Выбрать",
+            rows[#rows+1] = {title=entry.name,meta=legacy.selected_form==id and "ТЕКУЩАЯ ФОРМА" or "ФОРМА ТЕЛА",
+                detail=entry.desc,label=legacy.selected_form==id and "Выбрана" or "Выбрать",
                 action=function() edit("select_form",id) end}
         end
     elseif section=="trait" then
@@ -149,15 +168,17 @@ function Panels.legacy(app,section,page,leave)
             local entry = Legacy.TRAITS[id]
             local chosen = false
             for _,selected in ipairs(legacy.equipped_traits) do if selected==id then chosen=true end end
-            rows[#rows+1] = {title=(chosen and "✓  " or "")..entry.name, detail=entry.desc,
+            rows[#rows+1] = {title=entry.name,meta=chosen and "УСТАНОВЛЕН" or "ДОСТУПЕН",
+                detail=entry.desc,extra_color=chosen and ui.colors.mint or ui.colors.dim,
                 label=chosen and "Снять" or "Выбрать",action=function() edit("toggle_trait",id) end}
         end
     elseif section=="imprint" then
         for _,item in ipairs(legacy.pending) do
-            rows[#rows+1] = {title=item.name,detail="Ожидает записи",label="Сохранить",action=function() edit("claim_imprint",item.id) end}
+            rows[#rows+1] = {title=item.name,meta="НОВЫЙ ОТПЕЧАТОК",detail="Ожидает записи",label="Сохранить",action=function() edit("claim_imprint",item.id) end}
         end
         for _,item in ipairs(legacy.imprints) do
-            rows[#rows+1] = {title=item.name,detail=legacy.selected_imprint==item.id and "Выбран" or "Доступен для наследования",
+            rows[#rows+1] = {title=item.name,meta=legacy.selected_imprint==item.id and "АКТИВЕН" or "ДОСТУПЕН ДЛЯ НАСЛЕДИЯ",
+                detail=item.desc or "Наследуемая особенность",
                 label="Выбрать", action=function() edit("select_imprint",item.id) end}
         end
     elseif section=="research" then
@@ -166,14 +187,14 @@ function Panels.legacy(app,section,page,leave)
         table.sort(ids)
         for _,id in ipairs(ids) do
             local item = Legacy.RESEARCH[id]
-            rows[#rows+1] = {title=item.name,detail=item.effect,label="Ядра: "..item.cost,
+            rows[#rows+1] = {title=item.name,meta="СТОИМОСТЬ · "..item.cost.." ЯДЕР",detail=item.effect,
                 action=function() edit("research",id) end}
         end
     elseif section=="upgrades" then
         for _,entry in ipairs({{"health","Здоровье"},{"collect","Рецепторы"},{"regen","Регенерация"}}) do
             local id=entry[1]
             local rank=profile.upgrades[id] or 0
-            rows[#rows+1]={title=entry[2],detail=("Ранг %d/5"):format(rank),
+            rows[#rows+1]={title=entry[2],meta=("РАНГ %d / 5"):format(rank),detail="Усиление действует во всех забегах",
                 label=rank==5 and "Предел" or ("Усилить · "..(4+rank*4)),
                 action=function() if rank<5 then edit("buy_upgrade",id) end end}
         end
@@ -187,7 +208,7 @@ function Panels.legacy(app,section,page,leave)
     Panels.list(ui,names[section],nil,rows,page,open_page,root)
 end
 
-function Panels.offer_cards(ui,choices,y,choose)
+function Panels.offer_cards(ui,choices,y,choose,preview)
     local items = {}
     for _,raw in ipairs(choices) do
         local choice = type(raw)=="string" and {id=raw} or raw
@@ -202,10 +223,12 @@ function Panels.offer_cards(ui,choices,y,choose)
             elseif choice.kind=="evolution" then display="Эволюция · "..display
             elseif choice.kind=="temporary" then display="Временная мутация · "..display end
             items[#items+1] = {id=id,grade=choice.grade or choice.quality or 0,
-                title=display, icon=(Catalog.ORGANS[id] or Catalog.ADAPTATIONS[id]) and id or nil, detail=detail, meta=choice.meta, extra=choice.extra, action=choice.action, data=choice}
+                title=choice.title or display, icon=(Catalog.ORGANS[id] or Catalog.ADAPTATIONS[id]) and id or nil,
+                rank=choice.rank, detail=detail, meta=choice.meta, rarity=choice.rarity or Rewards.quality_name(choice.grade or choice.quality or 0),
+                extra=choice.extra, extra_color=choice.extra_color, action=choice.action, sold=choice.sold, data=choice}
         end
     end
-    ui:cards(items,y,choose,quality_color)
+    ui:cards(items,y,choose,quality_color,preview)
 end
 
 return Panels

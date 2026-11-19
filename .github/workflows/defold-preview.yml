@@ -155,6 +155,10 @@ jobs:
             grep -Fq "MICROGEN RUN READY" "$2/linux-smoke.log"
             grep -Fq "MICROGEN MUTATION CARDS READY" "$2/linux-smoke.log"
             grep -Fq "MICROGEN ORGANISM PANEL READY" "$2/linux-smoke.log"
+            grep -Fq "MICROGEN MENU CARDS READY" "$2/linux-smoke.log"
+            grep -Fq "MICROGEN REPLACEMENT CARDS READY" "$2/linux-smoke.log"
+            grep -Fq "MICROGEN BOSS REWARD READY" "$2/linux-smoke.log"
+            grep -Fq "MICROGEN LEGACY SCREEN READY" "$2/linux-smoke.log"
             kill -0 "$pid"
             if grep -E "ERROR:SCRIPT|ERROR:RENDER|FATAL" "$2/linux-smoke.log"; then exit 1; fi
             timeout 15s import -window root "$2/Microgen-Defold-Preview.png"

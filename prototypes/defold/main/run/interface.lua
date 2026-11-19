@@ -111,7 +111,7 @@ function Interface:fit_text(x,y,message,scale,shade,width,height)
     return self:text(x,y,message,scale,shade,width)
 end
 
-function Interface:cards(items,row_y,callback,set_color)
+function Interface:cards(items,row_y,callback,set_color,preview)
     local count = #items
     local gap = 22
     local width = math.min(680,math.floor(((self.panel_width or 1545)-72-(count-1)*gap)/math.max(1,count)))
@@ -122,15 +122,26 @@ function Interface:cards(items,row_y,callback,set_color)
         local left = x-width/2+28
         local shade = set_color and set_color(item) or MINT
         self:surface(x,row_y,width,570)
-        self:box(x,row_y+259,width-60,4,shade)
-        if item.icon then self:image("icons","icon_"..item.icon,left+42,row_y+176,84,84) end
-        local inset = item.icon and 108 or 0
-        self:fit_text(left+inset,row_y+176,item.title or "",1.10,shade,width-56-inset,105)
-        if item.meta then self:fit_text(left,row_y+94,item.meta,.94,DIM,width-56,48) end
+        self:box(x,row_y+259,width-60,6,shade)
+        if item.icon then
+            self:surface(left+67,row_y+170,144,144,"button")
+            if preview and preview(item,left+67,row_y+170,144) then
+                self:image("icons","icon_"..item.icon,left+111,row_y+123,42,42)
+            else
+                self:image("icons","icon_"..item.icon,left+67,row_y+170,116,116)
+            end
+        end
+        local inset = item.icon and 154 or 0
+        self:fit_text(left+inset,row_y+177,item.title or "",1.08,PALE,width-56-inset,112)
+        if item.meta then self:fit_text(left+inset,row_y+106,item.meta,1.0,MINT,width-56-inset,55) end
+        if item.rarity then
+            self:surface(left+76,row_y+42,154,40,"button")
+            self:text(left+76,row_y+42,item.rarity,.73,shade,140,true)
+        end
         if item.detail then self:fit_text(left,row_y+1,item.detail,.98,PALE,width-56,115) end
         if item.extra then
-            self:box(x,row_y-69,width-56,2,color("2a4a53"))
-            self:fit_text(left,row_y-116,item.extra,.85,MINT,width-56,82)
+            self:box(x,row_y-65,width-56,2,color("2a4a53"))
+            self:fit_text(left,row_y-112,item.extra,.83,item.extra_color or DIM,width-56,88)
         end
         local action
         if not item.sold then action=function() callback(item,index) end end

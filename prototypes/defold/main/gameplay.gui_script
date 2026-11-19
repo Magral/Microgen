@@ -15,6 +15,7 @@ local Interface = require "main.run.interface"
 local Legacy = require "main.run.genome_legacy"
 local Minimap = require "main.run.minimap"
 local StageRewards = require "main.run.stage_rewards"
+local Rewards = require "main.run.rewards"
 local Copy = require("main.run.meta_util").copy
 local Panels = require "main.run.panels"
 local Save = require "main.run.save_store"
@@ -521,7 +522,8 @@ function App:inventory(page,live,group,target)
     local reopen=function() self:inventory(page,live,group,target) end
     for _,location in ipairs(group and {group} or {"equipped","stock","reserve"}) do
         for _,part in ipairs(state[location] or {}) do
-            rows[#rows+1]={title=part_caption(part),detail=locations[location],
+            rows[#rows+1]={title=name(part.kind),icon=part.kind,
+                meta=("РАНГ %d · %d ЯЧ."):format(part.rank,part.cells),detail=locations[location],
                 label="Открыть",action=function() self:equipment(part,location,page,live,target,reopen) end}
         end
     end
@@ -583,7 +585,8 @@ function App:equipment(organ,location,page,live,target,return_to,tab)
             local cells=Slots.used_cells(state)+organ.cells
             for _,part in ipairs(state.equipped) do
                 if selected[part.id] then cells=cells-part.cells end
-                rows[#rows+1]={title=(selected[part.id] and "✓  " or "")..part_caption(part),label=selected[part.id] and "Оставить" or "Заменить",action=function()
+                rows[#rows+1]={title=(selected[part.id] and "✓  " or "")..part_caption(part),icon=part.kind,
+                    label=selected[part.id] and "Оставить" or "Заменить",action=function()
                     selected[part.id]=not selected[part.id]
                     choose(next_page)
                 end}
@@ -885,7 +888,9 @@ function App:build(page,tab,live)
     local heading
     if tab=="synergies" then
         for _,data in ipairs(Inspector.synergy_rows(sim.build)) do
-            rows[#rows+1] = {title=data.title,detail=data.requirements,
+            rows[#rows+1] = {title=data.title,meta=data.active and "✓ АКТИВНА" or "НУЖНЫ ОРГАНЫ-ПАРТНЁРЫ",
+                extra=data.active and "Эффект действует" or "Собери пару органов",extra_color=data.active and ui.colors.mint or ui.colors.dim,
+                detail=data.requirements,badge=data.active and "✓" or "◇",
                 color=data.active and ui.colors.mint or ui.colors.pale,action=function()
                     self:overlay("build")
                     local left=ui:panel(data.title,data.requirements,function() self:build(page,tab,live) end)
@@ -898,7 +903,7 @@ function App:build(page,tab,live)
             local rank=sim.build:temporary_mutation_rank(id)
             if rank>0 then
                 local mutation=Catalog.TEMP_MUTATIONS[id]
-                rows[#rows+1]={title=mutation.name.." · "..rank,detail=mutation.summary}
+                rows[#rows+1]={title=mutation.name,meta="РАНГ "..rank,detail=mutation.summary}
             end
         end
     elseif tab=="journal" then
@@ -910,7 +915,9 @@ function App:build(page,tab,live)
         local ids = tab=="organs" and Catalog.ORGAN_IDS or Catalog.ADAPTATION_IDS
         for _,id in ipairs(ids) do
             local rank=sim.build:rank(id)
-            if rank>0 then rows[#rows+1]={title=name(id).."  ·  "..rank,detail=Inspector.effect_text(sim.build,id,sim:ability_scale(),sim:cooldown_factor())} end
+            if rank>0 then rows[#rows+1]={title=name(id),icon=id,meta="РАНГ "..rank,
+                extra="Качество · "..Rewards.quality_name(sim.build:quality(id)),
+                detail=Inspector.effect_text(sim.build,id,sim:ability_scale(),sim:cooldown_factor())} end
         end
     end
     local back=function() self:body(live) end
@@ -973,22 +980,63 @@ function App:accepted(before)
     ui:button(1230,343,630,103,"Продолжить",function() self:show_run() end,true)
 end
 
-function App:replacement(id,apply,back)
+local draw_offer_preview
+
+function App:replacement(id,grade,apply,back)
     local ui = self.modal
     self:overlay("replace")
     local rows = {}
     local ids=Catalog.ORGANS[id] and Catalog.ORGAN_IDS or Catalog.ADAPTATION_IDS
     for _,old in ipairs(ids) do
         if self.sim.build:rank(old)>0 and old~=id then
-            rows[#rows+1]={title=name(old),detail="Освободить место",label="Заменить",action=function()
-                local result=apply(old)
-                if result then self:save_run();self:show_run() else self:notice("В теле недостаточно свободных ячеек") end
-            end}
+            local current=self.sim.build:rank(id)
+            local gain=Catalog.ORGANS[id] and Catalog.duplicate_rank_gain(grade or 0) or 1
+            local next_rank=current==0 and 1 or math.min(Catalog.max_rank(id),current+gain)
+            local replacement_build=setmetatable(Copy(self.sim.build),Build)
+            local was_active={}
+            for _,synergy_id in ipairs(replacement_build:active_synergies()) do was_active[synergy_id]=true end
+            local target=Catalog.ORGANS[id] and replacement_build.organs or replacement_build.adaptations
+            local old_target=Catalog.ORGANS[old] and replacement_build.organs or replacement_build.adaptations
+            if old_target then old_target[old]=nil end
+            if target then target[id]=next_rank end
+            replacement_build.qualities[id]=math.max(replacement_build:quality(id),grade or 0)
+            replacement_build._synergy_signature=nil
+            local synergy_hint
+            for _,synergy_id in ipairs(replacement_build:active_synergies()) do
+                if not was_active[synergy_id] then
+                    synergy_hint="⚡ ВКЛЮЧИТ · "..Catalog.SYNERGIES[synergy_id].name
+                    break
+                end
+            end
+            rows[#rows+1]={id=id,replace_id=old,
+                title=name(id),meta="ЗАМЕНА · "..name(old),
+                rank=next_rank,grade=grade or 0,
+                detail=Catalog.effect_text(id,Catalog.effective_rank(next_rank)),
+                extra=synergy_hint or ("Освободит ячейки · "..name(old)),
+                extra_color=synergy_hint and ui.colors.mint or ui.colors.dim,action="Заменить"}
         end
     end
+    local per_page=3
+    local pages=math.max(1,math.ceil(#rows/per_page))
     local function page(p)
         ui:clear()
-        Panels.list(ui,"Освободи ячейку",name(id),rows,p,page,back)
+        ui:panel("Замена органа","Выбери, что освободить · "..name(id),back,2070)
+        local shown={}
+        for index=(p-1)*per_page+1,math.min(#rows,p*per_page) do shown[#shown+1]=rows[index] end
+        Panels.offer_cards(ui,shown,554,function(item)
+            local result=apply(item.data.replace_id)
+            if result then self:save_run();self:show_run()
+            else self:notice("В теле недостаточно свободных ячеек") end
+        end,function(item,x,y,radius)
+            return draw_offer_preview and draw_offer_preview(ui,self.sim,item,x,y,radius*.30)
+        end)
+        if pages>1 then
+            if p>1 then ui:button(660,182,320,72,"‹ Назад",function() page(p-1) end) end
+            ui:text(1230,182,("%d / %d"):format(p,pages),.82,ui.colors.dim,nil,true)
+            if p<pages then ui:button(1800,182,320,72,"Далее ›",function() page(p+1) end) end
+        elseif #rows==0 then
+            ui:text(1230,554,"Нет подходящего органа для замены",1.0,ui.colors.dim,nil,true)
+        end
     end
     page(1)
 end
@@ -1032,6 +1080,42 @@ function App:open_pending()
     else self:show_run() end
 end
 
+draw_offer_preview = function(ui,sim,item,x,y,radius)
+    if not item.icon then return false end
+    local id,grade=item.id or (item.data and item.data.id),item.grade or 0
+    local data=item.data or {}
+    if not id then return false end
+    local build=setmetatable(Copy(sim.build),Build)
+    build._synergy_signature=nil
+    if data.replace_id then
+        local old_target=Catalog.ORGANS[data.replace_id] and build.organs or build.adaptations
+        if old_target then old_target[data.replace_id]=nil end
+    end
+    if data.kind=="evolution" then
+        build:evolve(id)
+    elseif data.kind=="temporary" then
+        build:apply_temporary_mutation(id,grade)
+    else
+        local target=Catalog.ORGANS[id] and build.organs or build.adaptations
+        if target then target[id]=item.rank or data.rank or (target[id] or 0)+1 end
+        build.qualities[id]=math.max(build:quality(id),grade)
+    end
+    build._synergy_signature=nil
+    local recipe=sim.player_genome
+    local art=BodyArt[recipe.family+1]
+    local body=ui:image("cells","body_"..recipe.family,x,y,art[1]*radius/108,art[2]*radius/108)
+    gui.set_color(body,Interface.color(Genome.colors(recipe)[1]))
+    local anatomy=Anatomy.new(ui.group)
+    ui:remember(anatomy.node)
+    local preview={player={x=0,y=0},player_genome=recipe,build=build,facing=sim.facing,elapsed=sim.elapsed,
+        enemies={},pickups={},remains={},effects={},hp=sim.hp,max_hp=sim.max_hp,
+        body_radius=function() return radius end,body_color=function() return sim:body_color() end,
+        spore_charge=sim.spore_charge or 0}
+    Anatomy.update(anatomy,preview,x,y,radius,1,nil,sim.elapsed)
+    for _,node in ipairs(anatomy.ribbons) do ui:remember(node) end
+    return true
+end
+
 function App:level_up()
     local ui,sim=self.modal,self.sim
     self:overlay("level")
@@ -1049,20 +1133,25 @@ function App:level_up()
             local rank=current==0 and 1 or math.min(Catalog.max_rank(id),current+gain)
             local quality=({ "Обычная", "Редкая", "Эпическая", "Легендарная" })[grade+1]
             local baseline=Catalog.effect_text(id,Catalog.effective_rank(rank))
-            local rank_text=current==0 and "Ранг 1" or ("Ранг %d → %d"):format(current,rank)
-            local hint
+            local rank_text=current==0 and "НОВЫЙ ОРГАН · РАНГ 1" or ("РАНГ %d → %d"):format(current,rank)
+            local hints,synergy_ready={},false
             for _, synergy_id in ipairs(Catalog.SYNERGY_IDS) do
                 local synergy=Catalog.SYNERGIES[synergy_id]
                 local first,second=synergy.needs[1],synergy.needs[2]
                 if id==first or id==second then
                     local partner=id==first and second or first
                     local ready=sim.build:rank(partner)>0
-                    hint=ready and ("✓ "..synergy.name) or ("◇ Нужен: "..Catalog.item(partner).name)
-                    if ready then break end
+                    local already_active=sim.build:rank(id)>0 and ready
+                    hints[#hints+1]=already_active and ("✓ АКТИВНА · "..synergy.name)
+                        or ready and ("⚡ ВКЛЮЧИТ ЕЁ · "..synergy.name)
+                        or ("○ НЕ АКТИВНА · нужен "..Catalog.item(partner).name)
+                    synergy_ready=synergy_ready or ready
                 end
             end
-            shaped[#shaped+1]={id=id,rank=rank,grade=grade,meta=rank_text.." · "..quality,detail=baseline,
-                extra=hint,action=current>0 and "Усилить" or "Выбрать"}
+            local hint=#hints>0 and table.concat(hints,"\n") or nil
+            local hint_color=synergy_ready and ui.colors.mint or ui.colors.dim
+            shaped[#shaped+1]={id=id,rank=rank,grade=grade,meta=rank_text,rarity=quality,detail=baseline,
+                extra=hint,extra_color=hint_color,action=current>0 and "Усилить" or "Выбрать"}
         end
     end
     Panels.offer_cards(ui,shaped,554,function(item)
@@ -1070,9 +1159,9 @@ function App:level_up()
         local function apply(old)
             return sim:choose_mutation(item.id,old,function(...) return self:award(...) end)
         end
-        if not apply() then self:replacement(item.id,apply,function() self:level_up() end)
+        if not apply() then self:replacement(item.id,item.grade,apply,function() self:level_up() end)
         else self:accepted(before) end
-    end)
+    end,function(item,x,y,radius) return draw_offer_preview(ui,sim,item,x,y,radius*.30) end)
     if #shaped==0 then
         ui:button(1230,530,650,97,"Получить 15 биомассы",function()
             if sim:take_level_biomass() then self:save_run();self:show_run() end
@@ -1097,17 +1186,37 @@ function App:colony(index)
     ui:panel("Колония",string.format("Биомасса · %d",sim.build.biomass),function() self:show_run() end,2070)
     local items={}
     for stock_index,entry in ipairs(site.stock or {}) do
-        items[#items+1]={title=entry.id=="heal" and "Восстановление" or name(entry.id),id=entry.id,
-            index=stock_index,grade=entry.quality or 0,action=entry.sold and "Куплено" or "Купить",
-            detail=entry.id=="heal" and "Восстанавливает здоровье" or Catalog.effect_text(entry.id,sim.build:rank(entry.id)+1),
-            extra="Цена "..entry.price,sold=entry.sold}
+        local id,grade=entry.id,entry.quality or 0
+        local current=sim.build:rank(id)
+        local gain=Catalog.ORGANS[id] and Catalog.duplicate_rank_gain(grade) or 1
+        local next_rank=current==0 and 1 or math.min(Catalog.max_rank(id),current+gain)
+        local detail=id=="heal" and "Восстанавливает здоровье" or Catalog.effect_text(id,next_rank)
+        detail=detail..("\nЦена · %d биомассы"):format(entry.price)
+        local synergy_hints,synergy_ready={},false
+        for _,synergy_id in ipairs(Catalog.SYNERGY_IDS) do
+            local synergy=Catalog.SYNERGIES[synergy_id]
+            local first,second=synergy.needs[1],synergy.needs[2]
+            if id==first or id==second then
+                local partner=id==first and second or first
+                local ready=sim.build:rank(partner)>0
+                synergy_hints[#synergy_hints+1]=ready and ("⚡ ВКЛЮЧИТ · "..synergy.name)
+                    or ("○ НЕ АКТИВНА · нужен "..Catalog.item(partner).name)
+                synergy_ready=synergy_ready or ready
+            end
+        end
+        local synergy_hint=#synergy_hints>0 and table.concat(synergy_hints,"\n") or nil
+        local synergy_color=synergy_ready and ui.colors.mint or ui.colors.dim
+        items[#items+1]={title=id=="heal" and "Восстановление" or name(id),id=id,
+            index=stock_index,grade=grade,action=entry.sold and "Куплено" or (current>0 and "Усилить" or "Встроить"),
+            meta=current==0 and "НОВЫЙ ОРГАН · РАНГ 1" or ("РАНГ %d → %d"):format(current,next_rank),
+            detail=detail,extra=synergy_hint,extra_color=synergy_color,sold=entry.sold}
     end
-    ui:cards(items,552,function(item)
+    Panels.offer_cards(ui,items,552,function(item)
         if item.sold then return end
-        local ok=sim:buy_colony(index,item.index,nil,function(...) return self:award(...) end)
+        local ok=sim:buy_colony(index,item.data.index,nil,function(...) return self:award(...) end)
         if ok then self:save_run();self:colony(index)
         else self:notice("Покупка недоступна") end
-    end)
+    end,function(item,x,y,radius) return draw_offer_preview(ui,sim,item,x,y,radius*.30) end)
 end
 
 function App:reward(skip_animation)
@@ -1151,7 +1260,7 @@ function App:reward(skip_animation)
         end
         if not apply() then self:notice("Награда недоступна")
         else self:accepted(before) end
-    end)
+    end,function(item,x,y,radius) return draw_offer_preview(ui,sim,item,x,y,radius*.30) end)
 end
 
 function App:stage_transition()
@@ -1161,18 +1270,26 @@ function App:stage_transition()
     if boss.organ and not boss.claimed then
         ui:panel("Главная угроза повержена",boss.name or sim:boss_title())
         local parts=sim:boss_reward_materials()
-        ui:text(556,693,"Легендарный орган · "..name(boss.organ),1.15,ui.colors.gold)
+        ui:surface(1230,679,1140,330,"card")
+        local rarity=ui:surface(1230,792,220,44,"button")
+        gui.set_color(rarity,Interface.color("584222"))
+        ui:text(1230,792,"ЛЕГЕНДАРНЫЙ",.76,ui.colors.gold,nil,true)
+        draw_offer_preview(ui,sim,{id=boss.organ,icon=boss.organ,rank=1,grade=3},865,665,106)
+        ui:image("icons","icon_"..boss.organ,1102,591,45,45)
+        ui:fit_text(1340,745,name(boss.organ),1.18,ui.colors.pale,420,75)
+        ui:fit_text(1340,665,Catalog.effect_text(boss.organ,1),.92,ui.colors.gold,420,100)
+        ui:fit_text(1340,585,("Расщепление · %d органелл · %d мембрана · %d плазма")
+            :format(parts.organelle,parts.membrane,parts.plasma),.78,ui.colors.dim,420,56)
         local function claim(take_organ)
             local ok,err=StageRewards.claim_boss_reward(self.store,sim,take_organ)
             if ok then self:stage_transition() else self:notice(err or self.store.last_error) end
         end
-        ui:button(1230,565,805,93,"Забрать орган",function() claim(true) end,true)
-        ui:button(1230,458,805,93,"Расщепить ткани",function() claim(false) end)
-        ui:text(828,367,string.format("Органеллы +%d  ·  Мембрана +%d  ·  Плазма +%d",parts.organelle,parts.membrane,parts.plasma),.87,ui.colors.dim)
-        ui:button(1230,258,805,83,boss.rerolled and "Переброс использован" or ("Переброс · "..StageRewards.BOSS_REROLL_COST.." органиума"),function()
+        ui:button(900,449,580,78,"Встроить в организм",function() claim(true) end,true,.91)
+        ui:button(1560,449,580,78,"Расщепить на материалы",function() claim(false) end,false,.88)
+        ui:button(1230,328,1140,74,boss.rerolled and "Переброс использован" or ("Переброс · "..StageRewards.BOSS_REROLL_COST.." органиума"),function()
             local ok,err=StageRewards.reroll_boss_reward(self.store,sim)
             if ok then self:stage_transition() else self:notice(err or self.store.last_error) end
-        end)
+        end,false,.91)
     else
         local seed=math.max(1,sim.pending_stage_seed)
         local stage=sim.stage_index+1
@@ -1240,13 +1357,32 @@ function App:finish()
     self:save_run()
     self:overlay("finish")
     local ui,sim=self.modal,self.sim
-    ui:panel("Поколение завершено",string.format("Уровень %d  ·  Ступень %d",sim.level,sim.stage_index))
-    ui:button(1230,545,760,106,"Сохранить наследие",function()
+    ui:panel("Жизнь завершена · наследие сохранено",
+        string.format("%s · уровень %d · ступень %d",sim.outcome=="victory" and "Победа" or "Организм погиб",sim.level,sim.stage_index),
+        nil,1660)
+    ui:surface(1230,591,1390,500,"card")
+    local recipe=sim.player_genome
+    local color=sim:body_color()
+    local body=portrait(ui,789,604,145,recipe)
+    gui.set_color(body,Interface.color(color))
+    local anatomy=Anatomy.new(ui.group)
+    ui:remember(anatomy.node)
+    local preview={player_genome=recipe,build=sim.build,facing=sim.facing,elapsed=sim.elapsed,
+        enemies={},pickups={},remains={},effects={},hp=math.max(0,sim.hp),max_hp=sim.max_hp,
+        body_radius=function() return 145 end,body_color=function() return color end}
+    Anatomy.update(anatomy,preview,789,604,145)
+    for _,node in ipairs(anatomy.ribbons) do ui:remember(node) end
+    ui:text(1075,750,"Путь организма",1.04,ui.colors.mint)
+    ui:text(1075,680,("Время · %02d:%02d"):format(math.floor(sim.elapsed/60),math.floor(sim.elapsed%60)),.91,ui.colors.pale)
+    ui:text(1075,615,"Биомасса · "..math.floor(sim.build.biomass or 0),.91,ui.colors.pale)
+    ui:text(1075,550,"Активные синергии · "..#sim.build:active_synergies(),.91,ui.colors.pale)
+    ui:text(1075,485,"Наследие семьи и найденные органы сохранены",.84,ui.colors.dim,790)
+    ui:button(1230,266,900,90,"Подготовить следующего потомка",function()
         if self.store:finish_run(sim) then
             self.sim=nil
             self:show_home()
         else self:notice(self.store.last_error) end
-    end,true)
+    end,true,.96)
 end
 
 function App:process_events()
@@ -1410,6 +1546,34 @@ function init(self)
         app:show_run()
         app.scene:draw_number(sim.player,"6",tint,1)
         assert(labels.count==1 and labels.slots[1].enabled)
+        app:overlay("smoke_list")
+        local sample_rows={
+            {title="Орган",icon="tentacle",meta="РАНГ 2 · 3 ЯЧ.",detail="Увеличивает захват",label="Открыть",action=function() end},
+            {title="Исследование",meta="Ранг 1 / 5",detail="Усиливает организм",label="Улучшить",action=function() end},
+            {title="Синергия",meta="✓ АКТИВНА",detail="Щупальца + кислота",extra="Эффект действует",label="Подробнее",action=function() end},
+            {title="Потомок",meta="Поколение 2",detail="Наследие сохранено",label="Выбрать",action=function() end},
+        }
+        Panels.list(app.modal,"Проверка карточек","Карточки меню и кодекса",sample_rows,1,function() end,function() end)
+        assert(#app.modal.buttons>=5)
+        print("MICROGEN MENU CARDS READY")
+        local prior_barrier_rank=sim.build.organs.barrier
+        sim.build.organs.barrier=1
+        app:replacement("enzymes",2,function() return false end,function() end)
+        assert(app.screen=="replace" and #app.modal.buttons>=2)
+        print("MICROGEN REPLACEMENT CARDS READY")
+        sim.build.organs.barrier=prior_barrier_rank
+        local prior_boss_reward=sim.boss_reward
+        sim.boss_reward={organ="enzymes",name="Тестовый архит",claimed=false}
+        app:stage_transition()
+        assert(app.screen=="stage" and #app.modal.buttons>=3)
+        print("MICROGEN BOSS REWARD READY")
+        sim.boss_reward=prior_boss_reward
+        local prior_outcome=sim.outcome
+        sim.outcome="death"
+        app:finish()
+        assert(app.screen=="finish" and #app.modal.buttons>=1)
+        print("MICROGEN LEGACY SCREEN READY")
+        sim.outcome=prior_outcome
         app:level_up()
         print("MICROGEN MUTATION CARDS READY")
     end

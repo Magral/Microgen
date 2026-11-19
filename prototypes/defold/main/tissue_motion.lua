@@ -10,6 +10,7 @@ local flow_property = hash("tissue_flow")
 local contact_property = hash("tissue_contact")
 local wounds_property = hash("tissue_wounds")
 local pigment_property = hash("tissue_pigment")
+local fragment_property = hash("tissue_fragment")
 local TAU = 2 * math.pi
 local atan2 = math.atan2 or math.atan
 local zero = vmath.vector4()
@@ -55,6 +56,28 @@ function tissue.attach(atlas, node, frame)
     gui.set_material(node, "tissue")
     gui.set(node, atlas_property, bounds)
     return {node = node}
+end
+
+function tissue.attach_fragment(atlas, node, frame, half_width, half_height, angle, half_angle, quality, phase, pigment_hex)
+    local state = tissue.attach(atlas, node, frame)
+    if not state then return nil end
+    -- Remains are frozen tissue, so use the shader's light static path.
+    gui.set(node, size_property, vmath.vector4(half_width, half_height, 1, 0))
+    gui.set(node, strain_property, zero)
+    gui.set(node, waves_property, zero)
+    gui.set(node, flow_property, rest_flow)
+    gui.set(node, contact_property, zero)
+    gui.set(node, wounds_property, vmath.vector4(phase, 0.42, 0, 0))
+    local hex = type(pigment_hex) == "string" and pigment_hex:match("^#?(%x%x%x%x%x%x)$")
+    local rgb = hex and tonumber(hex, 16)
+    local r, g, b = 0.76, 0.58, 0.83
+    if rgb then
+        r, g, b = math.floor(rgb / 65536) / 255, (math.floor(rgb / 256) % 256) / 255, (rgb % 256) / 255
+    end
+    gui.set(node, pigment_property, vmath.vector4(r, g, b, 0.42))
+    gui.set(node, fragment_property, vmath.vector4(1, angle, half_angle, quality or 0))
+    state.fragment = true
+    return state
 end
 
 function tissue.motion(previous, dt, x, y, genome, player_facing)

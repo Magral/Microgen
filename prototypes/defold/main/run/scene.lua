@@ -117,7 +117,7 @@ function Scene.new(tissue_atlas)
     return setmetatable({
         atlas=tissue_atlas, anatomy=Anatomy.new("anatomy"), ocean=Ocean.new(WIDTH,HEIGHT,CX,CY),
         walls=pool("substrate"), bed=pool("bed"), landmarks=pool("substrate"),
-        fields=pool("fields"), organisms=pool("organisms"), objects=pool("objects"),
+        fields=pool("fields"), organisms=pool("organisms"), fragments=pool("organisms"), objects=pool("objects"),
         effects=pool("effects"), labels=pool("world_labels",true),
         motions=setmetatable({},{__mode="k"}), scale=1,
     },Scene)
@@ -398,12 +398,37 @@ function Scene:render(sim, breakup_time)
         local p,shrink,opacity=fragment.pos,1,1
         if fragment.captured then p,shrink,opacity=feeding_pose(sim,fragment,fragment.progress) end
         local quality=fragment.quality or 0
-        local tint=quality>=3 and vmath.vector4(1,.78,.45,opacity) or quality==2 and vmath.vector4(.84,.56,.99,opacity)
-            or quality==1 and vmath.vector4(.65,.79,1,opacity) or vmath.vector4(.89,.55,.64,opacity)
-        local side=(fragment.r or 9)*2.8*shrink
-        local shard=(fragment.part or fragment.id)%3
-        self:draw_combat(fragment.captured and self.effects or self.objects,"shard_"..shard,p,
-            side,side,tint,time*.24+(fragment.progress or 0)*1.4)
+        if fragment.piece_count and fragment.genome then
+            local family=math.max(0,math.min(#BodyArt-1,fragment.genome.family or 0))
+            local frame="body_"..family
+            local dimensions=BodyArt[family+1]
+            local x,y=self:project(p)
+            local source_radius=fragment.body_radius or 108
+            local stretch=self.scale*source_radius/108*(fragment.visual_scale or 1)*shrink
+            local padding=math.max(dimensions[1],dimensions[2])*stretch*.7
+            if visibly_inside(x,y,padding) then
+                local slot=take(self.fragments)
+                if slot.frame~=frame or not slot.pose or not slot.is_fragment or slot.fragment_id~=fragment.id then
+                    slot.pose=Tissue.attach_fragment(self.atlas,slot.node,frame,
+                        dimensions[1]/(2*108),dimensions[2]/(2*108),fragment.cut_angle or 0,
+                        fragment.cut_half_angle or math.pi/3,quality,
+                        ((fragment.id or 1)*.61803398875)%TAU,
+                        "#"..Genome.colors(fragment.genome)[1])
+                    slot.frame,slot.is_fragment,slot.fragment_id=frame,true,fragment.id
+                end
+                position(slot.node,x,y)
+                size(slot.node,dimensions[1]*stretch,dimensions[2]*stretch)
+                gui.set_color(slot.node,color_at(opacity,WHITE))
+                gui.set_rotation(slot.node,vmath.vector3(0,0,-math.deg(fragment.rotation or 0)))
+            end
+        else
+            local tint=quality>=3 and vmath.vector4(1,.78,.45,opacity) or quality==2 and vmath.vector4(.84,.56,.99,opacity)
+                or quality==1 and vmath.vector4(.65,.79,1,opacity) or vmath.vector4(.89,.55,.64,opacity)
+            local side=(fragment.r or 9)*2.8*shrink
+            local shard=(fragment.part or fragment.id)%3
+            self:draw_combat(fragment.captured and self.effects or self.objects,"shard_"..shard,p,
+                side,side,tint,time*.24+(fragment.progress or 0)*1.4)
+        end
     end
     for _,cyst in ipairs(sim.cysts) do
         if not cyst.used then
@@ -444,13 +469,13 @@ function Scene:render(sim, breakup_time)
     Effects.draw_damage_sources(self,sim,sim.elapsed)
     if breakup_time then Effects.draw_breakup(self,sim.boss_breakup,breakup_time,time) end
     self.ocean:draw(self.x,self.y,self.scale)
-    for _,group in ipairs({self.bed,self.walls,self.landmarks,self.fields,self.organisms,self.objects,self.effects,self.labels}) do finish(group) end
+    for _,group in ipairs({self.bed,self.walls,self.landmarks,self.fields,self.organisms,self.fragments,self.objects,self.effects,self.labels}) do finish(group) end
 end
 
 function Scene:hide()
     Anatomy.hide(self.anatomy)
     self.ocean:hide()
-    for _,group in ipairs({self.bed,self.walls,self.landmarks,self.fields,self.organisms,self.objects,self.effects,self.labels}) do finish(group) end
+    for _,group in ipairs({self.bed,self.walls,self.landmarks,self.fields,self.organisms,self.fragments,self.objects,self.effects,self.labels}) do finish(group) end
 end
 
 return Scene
