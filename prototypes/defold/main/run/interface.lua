@@ -96,7 +96,7 @@ function Interface:image(atlas,frame,x,y,w,h)
     return node
 end
 
-local function card_text(self,x,y,message,scale,shade,width,height)
+function Interface:fit_text(x,y,message,scale,shade,width,height)
     self.card_font = self.card_font or gui.get_font_resource("interface")
     local metrics
     for _ = 1, 7 do
@@ -125,12 +125,12 @@ function Interface:cards(items,row_y,callback,set_color)
         self:box(x,row_y+259,width-60,4,shade)
         if item.icon then self:image("icons","icon_"..item.icon,left+42,row_y+176,84,84) end
         local inset = item.icon and 108 or 0
-        card_text(self,left+inset,row_y+176,item.title or "",1.10,shade,width-56-inset,105)
-        if item.meta then card_text(self,left,row_y+94,item.meta,.94,DIM,width-56,48) end
-        if item.detail then card_text(self,left,row_y+1,item.detail,.98,PALE,width-56,115) end
+        self:fit_text(left+inset,row_y+176,item.title or "",1.10,shade,width-56-inset,105)
+        if item.meta then self:fit_text(left,row_y+94,item.meta,.94,DIM,width-56,48) end
+        if item.detail then self:fit_text(left,row_y+1,item.detail,.98,PALE,width-56,115) end
         if item.extra then
             self:box(x,row_y-69,width-56,2,color("2a4a53"))
-            card_text(self,left,row_y-116,item.extra,.85,MINT,width-56,82)
+            self:fit_text(left,row_y-116,item.extra,.85,MINT,width-56,82)
         end
         local action
         if not item.sold then action=function() callback(item,index) end end

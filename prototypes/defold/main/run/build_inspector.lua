@@ -233,27 +233,33 @@ function M.synergy_summary(build, id)
     return #lines > 0 and table.concat(lines, "\n") or "Нет связей с другими органами."
 end
 
-function M.synergy_rows(build)
-    local rows, inactive = {}, {}
+function M.synergy_rows(build, selected)
+    local rows, inactive, related = {}, {}, {}
     for _, id in ipairs(Catalog.SYNERGY_IDS) do
         local synergy = Catalog.SYNERGIES[id]
         local first, second = synergy.needs[1], synergy.needs[2]
         local has_first, has_second = build:rank(first) > 0, build:rank(second) > 0
         local active = has_first and has_second
-        local group = active and rows or inactive
+        local matches = selected == first or selected == second
+        local group = matches and related or (active and rows or inactive)
+        local first_name,second_name=Catalog.item(first).name,Catalog.item(second).name
+        local missing = not has_first and not has_second and (first_name.." + "..second_name)
+            or (not has_first and first_name or second_name)
         group[#group + 1] = {
             id = id,
+            name = synergy.name,
             title = (active and "✓ " or "◇ ") .. synergy.name,
-            requirements = (has_first and "✓ " or "+ ") .. Catalog.item(first).name ..
-                " + " .. (has_second and "✓ " or "+ ") .. Catalog.item(second).name,
+            requirements = (has_first and "✓ " or "+ ") .. first_name ..
+                " + " .. (has_second and "✓ " or "+ ") .. second_name,
             description = synergy.desc,
+            status = active and "✓ Активна" or ("◇ Неактивна · нужно: "..missing),
+            related = matches,
             active = active,
         }
     end
-    for _, row in ipairs(inactive) do
-        rows[#rows + 1] = row
-    end
-    return rows
+    for _, row in ipairs(rows) do related[#related + 1] = row end
+    for _, row in ipairs(inactive) do related[#related + 1] = row end
+    return related
 end
 
 return M

@@ -1,3 +1,5 @@
+local Anatomy = require "main.anatomy"
+local Build = require "main.run.build_model"
 local Updater = require "main.run.updater"
 local Audio = require "main.run.audio"
 local BodyArt = require "main.body_art"
@@ -283,44 +285,111 @@ function App:body(live)
     local close=function() self:leave_body(live) end
     self.close_current=close
     local form=Legacy.FORMS[state.form]
-    local left=ui:panel("Организм","Нажми на орган или свободные ячейки. Перестановка бесплатна; бой на паузе.",close,1650)
+    local left=ui:panel("Организм",("%s · %s"):format(family_name,form.name),close,2220)
     local used=Slots.used_cells(state)
     local materials=profile.organ_materials or {}
-    ui:text(left+33,834,("%s · %s · Тело %d/%d кл."):format(family_name,form.name,used,state.body_capacity),1,ui.colors.mint)
-    ui:text(left+33,774,("Органиум · %d   Органеллы · %d   Мембраны · %d   Плазма · %d"):format(
-        profile.organium,materials.organelle or 0,materials.membrane or 0,materials.plasma or 0),.88,Interface.color("c9dfa2"))
-    local recipe=live and self.sim.player_genome or family_recipe(profile,state.form)
-    portrait(ui,1230,535,110,recipe)
-    local right=left+1066
-    ui:text(right-250,707,("ОРГАНЫ · %d / %d"):format(used,state.body_capacity),.83,ui.colors.dim)
-    ui:meter(right-250,671,500,13,ui.colors.mint)
-    ui:box(right-250+250*(1+used/state.body_capacity),671,500*(1-used/state.body_capacity),13,Interface.color("193540"))
+    ui:text(left+33,859,("Тело %d/%d · Органиум %d · Органеллы %d · Мембраны %d · Плазма %d"):format(
+        used,state.body_capacity,profile.organium or 0,materials.organelle or 0,materials.membrane or 0,materials.plasma or 0),.80,ui.colors.dim)
+
+    local organs_x, synergies_x=left+365,left+1855
+    for _,x in ipairs({organs_x,1230,synergies_x}) do ui:surface(x,570,660,505,"card") end
+    ui:text(organs_x,779,"Органы",1.08,ui.colors.pale,nil,true)
+    ui:text(synergies_x,779,"Синергии",1.08,ui.colors.pale,nil,true)
+    ui:box(organs_x,750,580,3,ui.colors.mint)
+    ui:box(synergies_x,750,580,3,ui.colors.mint)
+
     local function open(part,location)
         return function() self:equipment(part,location,1,live,nil,function() self:body(live) end) end
     end
     local body_pages=math.max(1,math.ceil(#state.equipped/3))
     self.body_page=math.min(self.body_page or 1,body_pages)
-    local body_count=0
+    local offset=(self.body_page-1)*3
+    local selected
     for i=1,3 do
-        local part=state.equipped[(self.body_page-1)*3+i]
+        local part=state.equipped[offset+i]
+        if part and part.id==self.body_selected then selected=part end
+    end
+    selected=selected or state.equipped[offset+1]
+    for i=1,3 do
+        local part=state.equipped[offset+i]
         if not part then break end
-        body_count=i
-        ui:button(right,628-(i-1)*72,500,65,(part.kind==form.organ and "✧ " or "")..part_caption(part),open(part,"equipped"),false,.82)
+        local y=686-(i-1)*79
+        local current=selected==part
+        ui:button(organs_x,y,598,72,"",function()
+            self.body_selected=part.id
+            self.body_synergy_page=1
+            self:body(live)
+        end,current)
+        ui:image("icons","icon_"..part.kind,organs_x-245,y,55,55)
+        ui:fit_text(organs_x-204,y,name(part.kind),1,current and Interface.color("09272c") or ui.colors.pale,390,57)
+        ui:text(organs_x+245,y,tostring(part.rank),1.03,current and Interface.color("09272c") or ui.colors.mint,nil,true)
     end
-    ui:button(right,628-body_count*72,500,65,"+ Добавить орган",(used<state.body_capacity) and function()
+    ui:button(organs_x-149,443,282,64,"Свойства",selected and open(selected,"equipped"),false,.9)
+    ui:button(organs_x+149,443,282,64,"+ Добавить",used<state.body_capacity and function()
         self:inventory(1,live,"stock","body")
-    end or nil,false,.82)
-    if body_pages>1 then
-        local y=555-body_count*72
-        ui:button(right-152,y,122,63,"‹",self.body_page>1 and function() self.body_page=self.body_page-1;self:body(live) end or nil)
-        ui:text(right,y,self.body_page.." / "..body_pages,.83,ui.colors.dim,nil,true)
-        ui:button(right+152,y,122,63,"›",self.body_page<body_pages and function() self.body_page=self.body_page+1;self:body(live) end or nil)
+    end or nil,false,.9)
+    local function pager(x,page,total,change)
+        if total<=1 then return end
+        ui:button(x-178,365,106,58,"‹",page>1 and function() change(page-1) end or nil)
+        ui:text(x,365,page.." / "..total,.85,ui.colors.dim,nil,true)
+        ui:button(x+178,365,106,58,"›",page<total and function() change(page+1) end or nil)
     end
+    pager(organs_x,self.body_page,body_pages,function(page)
+        self.body_page=page
+        self.body_synergy_page=1
+        self:body(live)
+    end)
+
+    local recipe=live and self.sim.player_genome or family_recipe(profile,state.form)
+    local build=live and self.sim.build or Build.new()
+    if not live then StageRewards.apply_equipment(state,build) end
+    local color=live and self.sim:body_color() or Genome.colors(recipe)[1]
+    local facing=live and self.sim.facing or 0
+    local body=portrait(ui,1230,592,112,recipe)
+    gui.set_color(body,Interface.color(color))
+    gui.set_rotation(body,vmath.vector3(0,0,-math.deg(facing)))
+    local anatomy=Anatomy.new(ui.group)
+    ui:remember(anatomy.node)
+    local preview={player_genome=recipe,build=build,facing=facing,elapsed=1,
+        enemies={},pickups={},remains={},effects={},hp=1,max_hp=1,
+        body_radius=function() return 112 end,body_color=function() return color end}
+    Anatomy.update(anatomy,preview,1230,592,112)
+    if selected then
+        local spotlight=Anatomy.new(ui.group)
+        ui:remember(spotlight.node)
+        local kind=selected.kind
+        preview.build={
+            rank=function(_,id) return id==kind and build:rank(id) or 0 end,
+            quality=function(_,id) return build:quality(id) end,
+            evolved=function(_,id) return id==kind and build:evolved(id) end,
+        }
+        Anatomy.update(spotlight,preview,1230,592,112)
+        gui.set_color(spotlight.node,vmath.vector4(1.25,1.25,1.25,.78))
+        ui:image("icons","icon_"..kind,1005,388,50,50)
+        ui:fit_text(1048,388,name(kind),.92,ui.colors.mint,394,62)
+    end
+
+    local rows=Inspector.synergy_rows(build,selected and selected.kind)
+    local pages=math.max(1,math.ceil(#rows/3))
+    self.body_synergy_page=math.min(self.body_synergy_page or 1,pages)
+    for i=1,3 do
+        local row=rows[(self.body_synergy_page-1)*3+i]
+        if not row then break end
+        local y=678-(i-1)*104
+        ui:surface(synergies_x,y,598,94,row.related and "button" or "card")
+        if row.related then ui:box(synergies_x-282,y,5,66,ui.colors.mint) end
+        ui:fit_text(synergies_x-263,y+22,row.name,.92,ui.colors.pale,524,38)
+        ui:fit_text(synergies_x-263,y-18,row.status,.82,row.active and ui.colors.mint or Interface.color("c4aeea"),524,42)
+    end
+    pager(synergies_x,self.body_synergy_page,pages,function(page)
+        self.body_synergy_page=page
+        self:body(live)
+    end)
     ui:text(left+33,300,("Запас %d/%d мест"):format(#state.stock,state.stock_capacity),.83,ui.colors.dim)
     local stock_pages=math.max(1,math.ceil(state.stock_capacity/3))
     self.stock_page=math.min(self.stock_page or 1,stock_pages)
     local shown=math.min(3,state.stock_capacity-(self.stock_page-1)*3)
-    local stock_width=(1335-(shown-1)*14)/math.max(1,shown)
+    local stock_width=(1904-(shown-1)*14)/math.max(1,shown)
     for i=1,shown do
         local index=(self.stock_page-1)*3+i
         local part=state.stock[index]
@@ -346,7 +415,7 @@ function App:body(live)
         end}
         actions[#actions+1]={"Начать жизнь",function() self:start() end,true}
     end
-    local w=(1584-(#actions-1)*17)/#actions
+    local w=(2154-(#actions-1)*17)/#actions
     for i,action in ipairs(actions) do
         ui:button(left+33+w/2+(i-1)*(w+17),127,w,75,action[1],action[2],action[3],.83)
     end
@@ -497,7 +566,7 @@ function App:equipment(organ,location,page,live,target,return_to,tab)
     else
         actions[#actions+1]={"В архив",function() change("move","archive") end}
     end
-    local w=(1584-(#actions-1)*17)/#actions
+    local w=(2154-(#actions-1)*17)/#actions
     for i,action in ipairs(actions) do
         ui:button(left+33+w/2+(i-1)*(w+17),127,w,75,action[1],action[2],action[3],.83)
     end
@@ -1199,6 +1268,12 @@ function init(self)
         sim.build.biomass=108
         sim.current_offers={"enzymes","barrier","armor"}
         sim.offer_quality={enzymes=2}
+        app:body(true)
+        assert(app.screen=="build")
+        app:body(false)
+        assert(app.screen=="preparation")
+        app:show_run()
+        print("MICROGEN ORGANISM PANEL READY")
         app.scene:render(sim)
         local labels=app.scene.labels
         local tint=vmath.vector4(1,.5,.5,1)
