@@ -125,14 +125,14 @@ function App:show_home()
     local family=by_slot[page]
     ui:text(1230,977,"МИКРОГЕН",1.92,ui.colors.pale,nil,true)
     ui:surface(1230,590,1770,596,"panel")
-    ui:button(216,590,132,230,"‹",page>1 and function()
+    ui:button(216,590,132,230,"НАЗАД",page>1 and function()
         self.home_slot=page-1
         self:show_home()
-    end or nil,false,1.6)
-    ui:button(2244,590,132,230,"›",page<total and function()
+    end or nil,false,.72)
+    ui:button(2244,590,132,230,"ДАЛЕЕ",page<total and function()
         self.home_slot=page+1
         self:show_home()
-    end or nil,false,1.6)
+    end or nil,false,.72)
     ui:text(1230,242,("%d / %d"):format(page,total),1,ui.colors.dim,nil,true)
 
     local function new()
@@ -232,9 +232,9 @@ function App:show_families()
             end
         end
         local pager=y-card_height/2+58
-        ui:button(x-311,pager,156,75,"‹",index>1 and move(-1) or nil,false,.83)
+        ui:button(x-311,pager,156,75,"НАЗАД",index>1 and move(-1) or nil,false,.83)
         ui:text(x,pager,("%d / %d"):format(family and index or 0,#list),.83,ui.colors.dim,nil,true)
-        ui:button(x+311,pager,156,75,"›",index<#list and move(1) or nil,false,.83)
+        ui:button(x+311,pager,156,75,"ДАЛЕЕ",index<#list and move(1) or nil,false,.83)
     end
     family_group("alive",804,"Живые организмы","Нет живых организмов.\nСоздайте новую семью.")
     family_group("ancestral",1656,"Семьи · подготовка","Здесь появятся семьи\nдля следующего поколения.")
@@ -432,9 +432,9 @@ function App:body(live)
     end or nil,false,.9)
     local function pager(x,page,total,change)
         if total<=1 then return end
-        ui:button(x-178,365,106,58,"‹",page>1 and function() change(page-1) end or nil)
+        ui:button(x-178,365,106,58,"НАЗАД",page>1 and function() change(page-1) end or nil)
         ui:text(x,365,page.." / "..total,.85,ui.colors.dim,nil,true)
-        ui:button(x+178,365,106,58,"›",page<total and function() change(page+1) end or nil)
+        ui:button(x+178,365,106,58,"ДАЛЕЕ",page<total and function() change(page+1) end or nil)
     end
     pager(organs_x,self.body_page,body_pages,function(page)
         self.body_page=page
@@ -500,9 +500,9 @@ function App:body(live)
             part and open(part,"stock") or function() self:stock_sources(live) end,false,.82)
     end
     if stock_pages>1 then
-        ui:button(1030,213,122,63,"‹",self.stock_page>1 and function() self.stock_page=self.stock_page-1;self:body(live) end or nil)
+        ui:button(1030,213,122,63,"НАЗАД",self.stock_page>1 and function() self.stock_page=self.stock_page-1;self:body(live) end or nil)
         ui:text(1230,213,self.stock_page.." / "..stock_pages,.83,ui.colors.dim,nil,true)
-        ui:button(1430,213,122,63,"›",self.stock_page<stock_pages and function() self.stock_page=self.stock_page+1;self:body(live) end or nil)
+        ui:button(1430,213,122,63,"ДАЛЕЕ",self.stock_page<stock_pages and function() self.stock_page=self.stock_page+1;self:body(live) end or nil)
     end
     local actions={
         {"Назад",close},
@@ -750,10 +750,10 @@ function App:show_run()
     local left,right,top,bottom=safe_edges()
     local control_x=right-144
     local color=Interface.color
-    local width=500
+    local width=720
     self.hud_left,self.hud_top=left,top
-    self.vitals=ui:surface(left+280,top-153,560,306,"panel")
-    self.stage=ui:text(left+23,top-32,"",.90,ui.colors.pale,width)
+    self.vitals=ui:surface(left+380,top-200,760,400,"panel")
+    self.stage=ui:text(left+23,top-32,"",.80,ui.colors.pale,width)
     self.level=ui:text(left+23,top-76,"",.82,ui.colors.pale,width)
     self.health=ui:meter(left+23,top-105,width,12,color("78d9bd"))
     self.shield_metric=ui:text(left+23,top-136,"",.80,color("b5d5ff"),width)
@@ -788,8 +788,8 @@ function App:draw_hud()
     local sim=self.sim
     local health=math.min(1,math.max(0,sim.hp/math.max(1,sim.max_hp)))
     local xp=math.min(1,math.max(0,sim.xp/sim:xp_needed()))
-    gui.set_size(self.health,vmath.vector3(math.max(.01,500*health),12,0))
-    gui.set_size(self.xp,vmath.vector3(math.max(.01,500*xp),10,0))
+    gui.set_size(self.health,vmath.vector3(math.max(.01,720*health),12,0))
+    gui.set_size(self.xp,vmath.vector3(math.max(.01,720*xp),10,0))
     gui.set_text(self.stage,("Ступень %d · %s"):format(sim.stage_index,sim:stage_name()))
     gui.set_text(self.level,("Здоровье  %.0f / %.0f"):format(sim.hp,sim.max_hp))
     gui.set_text(self.area,("Уровень %d · ДНК %.0f%%"):format(sim.level,xp*100))
@@ -812,23 +812,23 @@ function App:draw_hud()
         local left,top=self.hud_left,self.hud_top
         gui.set_position(self.area,vmath.vector3(left+23,top-192+lift,0))
         gui.set_position(self.xp,vmath.vector3(left+23,top-220+lift,0))
-        gui.set_position(self.xp_base,vmath.vector3(left+273,top-220+lift,0))
+        gui.set_position(self.xp_base,vmath.vector3(left+383,top-220+lift,0))
         gui.set_position(self.biomass,vmath.vector3(left+23,top-250+lift,0))
         gui.set_position(self.goal,vmath.vector3(left+23,top-279+lift,0))
         gui.set_position(self.last_damage,vmath.vector3(left+23,top-326+lift,0))
-        gui.set_position(self.vitals,vmath.vector3(left+280,top-153+lift/2,0))
-        gui.set_size(self.vitals,vmath.vector3(560,306-lift,0))
+        gui.set_position(self.vitals,vmath.vector3(left+380,top-200+lift/2,0))
+        gui.set_size(self.vitals,vmath.vector3(760,400-lift,0))
     end
     if barrier then
         local cooldown=sim.cooldowns.barrier or 0
         gui.set_text(self.shield_metric,cooldown<=0 and ("Щит готов · до %.0f урона"):format(sim:barrier_capacity())
             or ("Щит · восстановление %.1f с"):format(cooldown))
-        gui.set_size(self.shield,vmath.vector3(math.max(.01,500*(1-math.min(1,cooldown/8))),10,0))
+        gui.set_size(self.shield,vmath.vector3(math.max(.01,720*(1-math.min(1,cooldown/8))),10,0))
     end
     self.minimap:update(sim)
     Interface.button_enabled(self.colony_label,sim:nearby_colony()>0)
     local damage=sim.last_damage or {}
-    gui.set_text(self.last_damage,damage.name and string.format("Последний урон: −%.1f HP · %s",damage.amount or 0,damage.name) or "")
+    gui.set_text(self.last_damage,damage.name and string.format("Урон: −%.1f HP · %s",damage.amount or 0,damage.name) or "")
 end
 
 function App:pause()
@@ -1102,9 +1102,9 @@ function App:replacement(id,grade,apply,back)
             return draw_offer_preview and draw_offer_preview(ui,self.sim,item,x,y,radius*.30)
         end)
         if pages>1 then
-            if p>1 then ui:button(660,182,320,72,"‹ Назад",function() page(p-1) end) end
+            if p>1 then ui:button(660,182,320,72,"Назад",function() page(p-1) end) end
             ui:text(1230,182,("%d / %d"):format(p,pages),.82,ui.colors.dim,nil,true)
-            if p<pages then ui:button(1800,182,320,72,"Далее ›",function() page(p+1) end) end
+            if p<pages then ui:button(1800,182,320,72,"Далее",function() page(p+1) end) end
         elseif #rows==0 then
             ui:text(1230,554,"Нет подходящего органа для замены",1.0,ui.colors.dim,nil,true)
         end

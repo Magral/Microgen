@@ -2,6 +2,7 @@ local Catalog = require "main.run.catalog"
 local Legacy = require "main.run.genome_legacy"
 local Rewards = require "main.run.rewards"
 local Interface = require "main.run.interface"
+local Interface = require "main.run.interface"
 
 local Panels = {}
 local PER_PAGE = 4
@@ -57,9 +58,9 @@ function Panels.list(ui,heading,subtext,rows,page,open_page,leave)
         end
         if row.action then ui:button(x+225,y-101,218,62,row.label or "Открыть",row.action,true,.82) end
     end
-    if page>1 then ui:button(cx-285,173,230,62,"‹ Назад",function() open_page(page-1) end) end
+    if page>1 then ui:button(cx-285,173,230,62,"Назад",function() open_page(page-1) end) end
     if pages>1 then ui:text(cx,173,page.." / "..pages,.83,ui.colors.dim,nil,true) end
-    if page<pages then ui:button(cx+285,173,230,62,"Далее ›",function() open_page(page+1) end) end
+    if page<pages then ui:button(cx+285,173,230,62,"Далее",function() open_page(page+1) end) end
 end
 
 local CATEGORIES={
