@@ -1,6 +1,7 @@
 local Catalog = require "main.run.catalog"
 local Legacy = require "main.run.genome_legacy"
 local Rewards = require "main.run.rewards"
+local Interface = require "main.run.interface"
 
 local Panels = {}
 local PER_PAGE = 4
