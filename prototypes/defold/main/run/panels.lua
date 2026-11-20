@@ -2,7 +2,6 @@ local Catalog = require "main.run.catalog"
 local Legacy = require "main.run.genome_legacy"
 local Rewards = require "main.run.rewards"
 local Interface = require "main.run.interface"
-local Interface = require "main.run.interface"
 
 local Panels = {}
 local PER_PAGE = 4
@@ -53,7 +52,7 @@ function Panels.list(ui,heading,subtext,rows,page,open_page,leave)
         end
         if row.detail then ui:fit_text(x-320,y-30,row.detail,.75,ui.colors.dim,610,70) end
         if row.extra then
-            ui:box(x-320,y-72,610,2,Interface.color("294c54"))
+            ui:box(x-15,y-72,610,2,Interface.color("294c54"))
             ui:fit_text(x-320,y-101,row.extra,.70,row.extra_color or ui.colors.mint,414,42)
         end
         if row.action then ui:button(x+225,y-101,218,62,row.label or "Открыть",row.action,true,.82) end

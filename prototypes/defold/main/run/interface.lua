@@ -2,6 +2,8 @@ local Interface = {}
 Interface.__index = Interface
 
 Interface.width, Interface.height = 2460, 1080
+local PANEL_WIDTH = 2140
+local CENTER_X = Interface.width / 2
 
 function Interface.color(hex,alpha)
     return vmath.vector4(
@@ -29,13 +31,19 @@ function Interface:remember(node)
     return node
 end
 
+function Interface:layout_x(x)
+    return CENTER_X + (x - CENTER_X) * (self.horizontal_scale or 1)
+end
+
 function Interface:box(x,y,w,h,color)
+    x = self:layout_x(x)
+    w = w * (self.horizontal_scale or 1)
     local node = self:remember(gui.new_box_node(vmath.vector3(x,y,0),vmath.vector3(w,h,0)))
     gui.set_color(node,color or DARK)
     return node
 end
 
-function Interface:text(x,y,message,scale,color,width,center)
+local function place_text(self,x,y,message,scale,color,width,center)
     local node = self:remember(gui.new_text_node(vmath.vector3(x,y,0),message))
     gui.set_font(node,"interface")
     gui.set_pivot(node,center and gui.PIVOT_CENTER or gui.PIVOT_W)
@@ -48,16 +56,28 @@ function Interface:text(x,y,message,scale,color,width,center)
     return node
 end
 
+function Interface:text(x,y,message,scale,color,width,center)
+    local font_scale = (scale or 1) * (self.font_scale or 1)
+    return place_text(self,self:layout_x(x),y,message,font_scale,color,width and width*(self.horizontal_scale or 1),center)
+end
+
 function Interface:surface(x,y,w,h,frame)
-    local node = self:image("skin",frame or "card",x,y,w,h)
+    local node = self:box(x,y,w,h,vmath.vector4(1,1,1,1))
+    gui.set_texture(node,"skin")
+    gui.play_flipbook(node,frame or "card")
     gui.set_slice9(node,vmath.vector4(24,24,24,24))
     return node
 end
 
 function Interface:button(x,y,w,h,label,callback,accent,scale)
     local node = self:surface(x,y,w,h,callback and (accent and "primary" or "button") or "disabled")
-    local text = self:text(x,y,label,scale or 1,
-        callback and (accent and color("09272c") or color("d6eeea")) or color("637b82"),nil,true)
+    local shade = callback and (accent and color("09272c") or color("d6eeea")) or color("637b82")
+    local text
+    if self.horizontal_scale and label ~= "" then
+        text = self:fit_text(x,y,label,scale or 1,shade,w-24,h-12,true)
+    else
+        text = self:text(x,y,label,scale or 1,shade,nil,true)
+    end
     local button = {node=node,text=text,callback=callback}
     if callback then self.buttons[#self.buttons+1] = button end
     return button
@@ -74,8 +94,13 @@ function Interface:panel(title,subtitle,close,size,variant)
     local w = size or 1545
     local left = (Interface.width-w)/2
     self.panel_width=w
+    self.horizontal_scale,self.font_scale=nil,nil
     local backdrop=variant=="mutation" and vmath.vector4(.008,.023,.035,.30) or SHADE
     self:box(1230,540,2460,1080,backdrop)
+    if w < PANEL_WIDTH then
+        self.horizontal_scale=PANEL_WIDTH/w
+        self.font_scale=math.min(1.18,math.sqrt(self.horizontal_scale))
+    end
     local shell=self:surface(1230,540,w,1038,"panel")
     gui.set_color(shell,vmath.vector4(.54,.84,.85,variant=="mutation" and .12 or .76))
     self:box(left+8,540,4,972,color("4edbb9"))
@@ -86,7 +111,7 @@ function Interface:panel(title,subtitle,close,size,variant)
         self:fit_text(1230,980,title,1.38,color("e2f4ed"),w-820,72,true)
         if subtitle then self:fit_text(1230,916,subtitle,.94,color("a8c7c8"),w-118,52,true) end
     else
-        self:text(left+44,980,title,1.30,color("e2f4ed"),w-176)
+        self:fit_text(left+44,980,title,1.30,color("e2f4ed"),w-176,72)
         if subtitle then self:fit_text(left+44,916,subtitle,.94,color("a8c7c8"),w-118,52) end
     end
     self:button(left+w-77,980,84,84,"×",close)
@@ -101,7 +126,7 @@ function Interface:meter(left,y,w,h,fill)
 end
 
 function Interface:image(atlas,frame,x,y,w,h)
-    local node=self:box(x,y,w,h,vmath.vector4(1,1,1,1))
+    local node=self:box(x,y,w/(self.horizontal_scale or 1),h,vmath.vector4(1,1,1,1))
     gui.set_texture(node,atlas)
     gui.play_flipbook(node,frame)
     return node
@@ -109,6 +134,8 @@ end
 
 function Interface:fit_text(x,y,message,scale,shade,width,height,center)
     self.card_font = self.card_font or gui.get_font_resource("interface")
+    width = width * (self.horizontal_scale or 1)
+    scale = scale * (self.font_scale or 1)
     local metrics
     for _ = 1, 7 do
         metrics = resource.get_text_metrics(self.card_font,message,{width=width/scale,line_break=true})
@@ -119,7 +146,7 @@ function Interface:fit_text(x,y,message,scale,shade,width,height,center)
         assert(metrics.height*scale <= height and metrics.width*scale <= width,
             "Mutation text exceeds its layout slot: "..message)
     end
-    return self:text(x,y,message,scale,shade,width,center)
+    return place_text(self,self:layout_x(x),y,message,scale,shade,width,center)
 end
 
 function Interface:cards(items,row_y,callback,set_color,preview)
@@ -192,6 +219,7 @@ end
 function Interface:clear()
     for i=#self.nodes,1,-1 do gui.delete_node(self.nodes[i]) end
     self.nodes,self.buttons,self.panel_width = {},{},nil
+    self.horizontal_scale,self.font_scale = nil,nil
 end
 
 function Interface:visible(value)

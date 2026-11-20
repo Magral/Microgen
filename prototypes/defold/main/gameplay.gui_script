@@ -308,7 +308,7 @@ function App:new_family(slot)
         local preview={player={x=0,y=0},player_genome=recipe,build=build,facing=0,elapsed=0,
             enemies={},pickups={},remains={},effects={},hp=100,max_hp=100,
             body_radius=function() return 120 end,body_color=function() return Genome.colors(recipe)[1] end}
-        Anatomy.update(anatomy,preview,x,645,120)
+        Anatomy.update(anatomy,preview,ui:layout_x(x),645,120)
         for _,node in ipairs(anatomy.ribbons) do ui:remember(node) end
         ui:surface(x,439,350,42,"button")
         ui:text(x,439,string.upper(data.name).." ФОРМА",.72,accent,nil,true)
@@ -928,7 +928,7 @@ function App:pause()
         enemies={},pickups={},remains={},effects={},hp=sim.hp,max_hp=sim.max_hp,
         body_radius=function() return 152 end,body_color=function() return sim:body_color() end,
         spore_charge=sim.spore_charge or 0}
-    Anatomy.update(anatomy,preview,1705,560,152,1,nil,sim.elapsed)
+    Anatomy.update(anatomy,preview,ui:layout_x(1705),560,152,1,nil,sim.elapsed)
     for _,node in ipairs(anatomy.ribbons) do ui:remember(node) end
     ui:text(1705,211,"ОРГАНИЗМ · ЗЕРНО "..tostring(sim.world.seed_value),.78,ui.colors.dim,nil,true)
 end
@@ -997,11 +997,11 @@ function App:build(page,tab,live)
     local back=function() self:body(live) end
     self.close_current=back
     Panels.list(ui,"Сводка организма",heading or sim:stage_name(),rows,page,function(p) self:build(p,tab,live) end,back)
-    ui:button(1100,822,195,46,"Ячейки",back)
-    ui:button(1305,822,172,46,"Органы",function() self:build(1,"organs",live) end)
-    ui:button(1512,822,223,46,"Адаптации",function() self:build(1,"passives",live) end)
-    ui:button(1733,822,205,46,"Синергии",function() self:build(1,"synergies",live) end)
-    ui:button(1946,822,198,46,"Журнал",function() self:build(1,"journal",live) end)
+    ui:button(748,96,220,54,"Ячейки",back)
+    ui:button(989,96,220,54,"Органы",function() self:build(1,"organs",live) end)
+    ui:button(1230,96,220,54,"Адаптации",function() self:build(1,"passives",live) end)
+    ui:button(1471,96,220,54,"Синергии",function() self:build(1,"synergies",live) end)
+    ui:button(1712,96,220,54,"Журнал",function() self:build(1,"journal",live) end)
 end
 
 function App:award(id,replace_id,grade)
@@ -1066,7 +1066,7 @@ function App:accepted(before)
         enemies={},pickups={},remains={},effects={},hp=sim.hp,max_hp=sim.max_hp,
         body_radius=function() return 150 end,body_color=function() return sim:body_color() end,
         spore_charge=sim.spore_charge or 0}
-    Anatomy.update(anatomy,preview,760,584,150,1,nil,sim.elapsed)
+    Anatomy.update(anatomy,preview,ui:layout_x(760),584,150,1,nil,sim.elapsed)
     for _,node in ipairs(anatomy.ribbons) do ui:remember(node) end
     ui:surface(1660,555,930,658,"panel")
     ui:surface(1660,555,918,646,"card")
@@ -1215,7 +1215,7 @@ draw_offer_preview = function(ui,sim,item,x,y,radius)
         enemies={},pickups={},remains={},effects={},hp=sim.hp,max_hp=sim.max_hp,
         body_radius=function() return radius end,body_color=function() return sim:body_color() end,
         spore_charge=sim.spore_charge or 0}
-    Anatomy.update(anatomy,preview,x,y,radius,1,nil,sim.elapsed)
+    Anatomy.update(anatomy,preview,ui:layout_x(x),y,radius,1,nil,sim.elapsed)
     for _,node in ipairs(anatomy.ribbons) do ui:remember(node) end
     return true
 end
@@ -1427,8 +1427,8 @@ function App:stage_transition()
         local counts={0,0,0}
         for _,item in ipairs(preview.cysts) do counts[item.tier]=counts[item.tier]+1 end
         local attack=sim:boss_attack(stage,seed)
-        ui:panel("Переход на ступень "..stage,sim:stage_name(stage,seed),close_to_pause,1840)
-        MapView.grid(ui,next_world,preview,382,337,12,true,false)
+        ui:panel("Переход на ступень "..stage,sim:stage_name(stage,seed),close_to_pause,2140)
+        MapView.grid(ui,next_world,preview,264,305,14,true,false)
         ui:surface(1548,567,820,554,"panel")
         ui:surface(1548,567,808,542,"card")
         ui:box(1548,827,742,4,Interface.color("70ddc1"))
@@ -1446,7 +1446,7 @@ function App:stage_transition()
             if ok then self:show_run() else self:notice(err or self.store.last_error) end
         end,true)
         local cost=StageRewards.stage_reroll_cost(sim.stage_index)
-        ui:button(1874,190,650,68,"Переброс · "..cost.." органиума",function()
+        ui:button(1835,190,650,68,"Переброс · "..cost.." органиума",function()
             local ok,err=StageRewards.reroll_stage_area(self.store,sim)
             if ok then self:stage_transition() else self:notice(err or self.store.last_error) end
         end)
@@ -1482,7 +1482,7 @@ function App:finish()
     local preview={player_genome=recipe,build=sim.build,facing=sim.facing,elapsed=sim.elapsed,
         enemies={},pickups={},remains={},effects={},hp=math.max(0,sim.hp),max_hp=sim.max_hp,
         body_radius=function() return 154 end,body_color=function() return color end}
-    Anatomy.update(anatomy,preview,692,594,154)
+    Anatomy.update(anatomy,preview,ui:layout_x(692),594,154)
     for _,node in ipairs(anatomy.ribbons) do ui:remember(node) end
     local stats=sim.combat_stats or {}
     local kills=0
@@ -1633,6 +1633,37 @@ function init(self)
     end
     if smoke and sys.get_config_string("microgen.smoke_cards","0")=="1" then
         local sim=app.sim
+        local function check_window()
+            local ui=app.modal
+            if ui.panel_width then
+                assert(gui.get_size(ui.nodes[2]).x>=2139,"Narrow panel: "..app.screen)
+            end
+            for _,button in ipairs(ui.buttons) do
+                local pos,size=gui.get_position(button.node),gui.get_size(button.node)
+                assert(pos.x-size.x/2>=0 and pos.x+size.x/2<=WIDTH
+                    and pos.y-size.y/2>=0 and pos.y+size.y/2<=HEIGHT,
+                    "Button outside window: "..app.screen.." / "..gui.get_text(button.text))
+            end
+        end
+        app:help();check_window()
+        app:updates();check_window()
+        app:new_family(2);check_window()
+        app:delete_family(app.store:family_summaries()[1]);check_window()
+        Panels.catalog(app);check_window()
+        for _,section in ipairs({"organs","adaptations","temporary","synergies","specializations","evolutions"}) do
+            Panels.catalog(app,section,1);check_window()
+            app.modal.buttons[2].callback();check_window()
+            assert(app.screen=="codex_entry")
+        end
+        Panels.legacy(app);check_window()
+        for _,section in ipairs({"form","trait","imprint","presets","research","upgrades"}) do
+            Panels.legacy(app,section,1);check_window()
+        end
+        app:inventory(1,true);check_window()
+        app:stock_sources(true);check_window()
+        app:pause();check_window()
+        app:colony(1);check_window()
+        app:show_run()
         sim.level,sim.pending_levels=10,1
         sim.build.biomass=108
         sim.current_offers={"enzymes","barrier","armor"}
@@ -1683,7 +1714,11 @@ function init(self)
             {title="Потомок",meta="Поколение 2",detail="Наследие сохранено",label="Выбрать",action=function() end},
         }
         Panels.list(app.modal,"Проверка карточек","Карточки меню и кодекса",sample_rows,1,function() end,function() end)
+        check_window()
         assert(#app.modal.buttons>=5)
+        local card_button=app.modal.buttons[3]
+        local position,size=gui.get_position(card_button.node),gui.get_size(card_button.node)
+        assert(position.x>1800 and app.modal:hit(position.x+size.x*.4,position.y)==card_button.callback)
         print("MICROGEN MENU CARDS READY")
         local prior_barrier_rank=sim.build.organs.barrier
         sim.build.organs.barrier=1
@@ -1695,6 +1730,12 @@ function init(self)
         sim.boss_reward={organ="enzymes",name="Тестовый архит",claimed=false}
         app:stage_transition()
         assert(app.screen=="stage" and #app.modal.buttons>=3)
+        check_window()
+        sim.boss_reward={claimed=true}
+        app:stage_transition();check_window()
+        assert(app.screen=="briefing_roll")
+        app:stage_transition();check_window()
+        assert(app.screen=="stage")
         print("MICROGEN BOSS REWARD READY")
         sim.boss_reward=prior_boss_reward
         local prior_outcome=sim.outcome
@@ -1790,8 +1831,8 @@ function update(self,dt)
         local open=math.min(1,math.max(0,(state.time-.9)))
         open=open*open*(3-2*open)
         local sway=5*math.sin(state.time*19)*(1-open)
-        gui.set_position(state.shell_left,vmath.vector3(1150-open*100+sway,589+open*19,0))
-        gui.set_position(state.shell_right,vmath.vector3(1310+open*100+sway,589-open*11,0))
+        gui.set_position(state.shell_left,vmath.vector3(app.modal:layout_x(1150-open*100+sway),589+open*19,0))
+        gui.set_position(state.shell_right,vmath.vector3(app.modal:layout_x(1310+open*100+sway),589-open*11,0))
         gui.set_rotation(state.shell_left,vmath.vector3(0,0,open*20))
         gui.set_rotation(state.shell_right,vmath.vector3(0,0,-open*20))
         gui.set_color(state.inner,vmath.vector4(state.palette.x,state.palette.y,state.palette.z,open))
