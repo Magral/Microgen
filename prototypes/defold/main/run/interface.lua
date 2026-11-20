@@ -74,9 +74,10 @@ function Interface:panel(title,subtitle,close,size,variant)
     local w = size or 1545
     local left = (Interface.width-w)/2
     self.panel_width=w
-    self:box(1230,540,2460,1080,SHADE)
+    local backdrop=variant=="mutation" and vmath.vector4(.008,.023,.035,.30) or SHADE
+    self:box(1230,540,2460,1080,backdrop)
     local shell=self:surface(1230,540,w,1038,"panel")
-    gui.set_color(shell,vmath.vector4(.54,.84,.85,variant=="mutation" and .34 or .76))
+    gui.set_color(shell,vmath.vector4(.54,.84,.85,variant=="mutation" and .12 or .76))
     self:box(left+8,540,4,972,color("4edbb9"))
     self:box(1230,870,w-74,2,color("39727b"))
     if variant=="mutation" then
