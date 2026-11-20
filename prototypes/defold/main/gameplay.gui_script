@@ -1704,6 +1704,45 @@ function init(self)
         print("MICROGEN LEGACY SCREEN READY")
         sim.outcome=prior_outcome
         app:level_up()
+
+        local fracture_sim=Simulation.new(47)
+        fracture_sim.enemies={}
+        fracture_sim.residents={}
+        local center={x=fracture_sim.player.x+220,y=fracture_sim.player.y}
+        local enemy=fracture_sim:spawn_enemy(center,"hunter")
+        enemy.r=75
+        app.scene:render(fracture_sim)
+        local target=app.scene.organisms.slots[1]
+        local original_texture,original_frame=target.texture,target.frame
+        local original_position=gui.get_position(target.node)
+        local original_size=gui.get_size(target.node)
+        fracture_sim:_die(1,false)
+        app.scene:render(fracture_sim)
+        local previous=0
+        for index,part in ipairs(fracture_sim.remains) do
+            local slot=app.scene.fragments.slots[index]
+            assert(slot.enabled and slot.texture==original_texture and slot.frame==original_frame and slot.pose)
+            assert(vmath.length(gui.get_position(slot.node)-original_position)<.01
+                and vmath.length(gui.get_size(slot.node)-original_size)<.01)
+            assert(part.cut_start==previous and part.cut_end>previous)
+            previous=part.cut_end
+        end
+        assert(#fracture_sim.remains==5 and previous==2*math.pi)
+        local first=fracture_sim.remains[1]
+        first.pos={x=first.pos.x+125,y=first.pos.y}
+        app.scene:render(fracture_sim)
+        assert(gui.get_position(app.scene.fragments.slots[1].node).x>original_position.x)
+        local boss=fracture_sim:spawn_enemy(center,"boss")
+        app.scene:render(fracture_sim)
+        local boss_frame=app.scene.body_looks[boss.id].frame
+        fracture_sim:_die(1,false)
+        app.scene:render(fracture_sim,0)
+        assert(#fracture_sim.boss_breakup.pieces==7 and #fracture_sim.remains==5)
+        for index=6,12 do
+            local slot=app.scene.fragments.slots[index]
+            assert(slot.enabled and slot.texture=="cells" and slot.frame==boss_frame and slot.pose)
+        end
+        print("MICROGEN TISSUE FRACTURE READY")
         print("MICROGEN MUTATION CARDS READY")
         app:map()
     end

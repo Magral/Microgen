@@ -58,25 +58,15 @@ function tissue.attach(atlas, node, frame)
     return {node = node}
 end
 
-function tissue.attach_fragment(atlas, node, frame, half_width, half_height, angle, half_angle, quality, phase, pigment_hex)
-    local state = tissue.attach(atlas, node, frame)
+function tissue.attach_fragment(atlas, node, look, first, last, phase)
+    local state = tissue.attach(atlas, node, look.frame)
     if not state then return nil end
-    -- Remains are frozen tissue, so use the shader's light static path.
-    gui.set(node, size_property, vmath.vector4(half_width, half_height, 1, 0))
-    gui.set(node, strain_property, zero)
-    gui.set(node, waves_property, zero)
-    gui.set(node, flow_property, rest_flow)
-    gui.set(node, contact_property, zero)
-    gui.set(node, wounds_property, vmath.vector4(phase, 0.42, 0, 0))
-    local hex = type(pigment_hex) == "string" and pigment_hex:match("^#?(%x%x%x%x%x%x)$")
-    local rgb = hex and tonumber(hex, 16)
-    local r, g, b = 0.76, 0.58, 0.83
-    if rgb then
-        r, g, b = math.floor(rgb / 65536) / 255, (math.floor(rgb / 256) % 256) / 255, (rgb % 256) / 255
-    end
-    gui.set(node, pigment_property, vmath.vector4(r, g, b, 0.42))
-    gui.set(node, fragment_property, vmath.vector4(1, angle, half_angle, quality or 0))
-    state.fragment = true
+    local diameter = 2 * look.source_radius
+    gui.set(node, size_property, vmath.vector4(look.dimensions[1] / diameter, look.dimensions[2] / diameter,
+        look.pose and look.pose.compact and 1 or 0, 0))
+    tissue.apply_deformation(node, look.pose)
+    gui.set(node, pigment_property, look.pose and look.pose.stain or look.stain)
+    gui.set(node, fragment_property, vmath.vector4(1, first, last, phase))
     return state
 end
 
@@ -183,7 +173,8 @@ function tissue.update(state, motion, time, angle, half_width, half_height, cont
             g = (math.floor(rgb / 256) % 256) / 255
             b = (rgb % 256) / 255
         end
-        gui.set(node, pigment_property, vmath.vector4(r, g, b, pigment))
+        state.stain = vmath.vector4(r, g, b, pigment)
+        gui.set(node, pigment_property, state.stain)
         state.pigment, state.pigment_hex = pigment, pigment_hex
     end
 end

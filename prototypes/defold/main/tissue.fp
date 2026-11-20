@@ -16,7 +16,7 @@ uniform fs_uniforms
     mediump vec4 tissue_contact; // Feeding direction, strength, and chewing wave.
     mediump vec4 tissue_wounds;  // Wound phase, severity, and circulation.
     mediump vec4 tissue_pigment; // Absorbed color and its concentration.
-    mediump vec4 tissue_fragment; // Enabled, sector angle, half-angle, and quality grade.
+    highp vec4 tissue_fragment;  // Enabled, start, end, and shared tear phase.
 };
 
 #include "/main/tissue_deform.glsl"
@@ -52,18 +52,19 @@ void main()
     mediump vec4 rgba = texture(texture_sampler, tissue_atlas.xy + atlas_extent * warped);
 
     if (tissue_fragment.x > 0.5) {
-        mediump float theta = atan(sample_point.y, sample_point.x);
-        mediump float delta = abs(mod(theta - tissue_fragment.y + TISSUE_TAU * 0.5, TISSUE_TAU) - TISSUE_TAU * 0.5);
-        mediump float tear = tissue_fragment.z
-            + sin(theta * 13.0 + tissue_wounds.x * 1.7) * 0.060
-            + sin(theta * 27.0 - tissue_wounds.x * 0.8) * 0.025;
-        mediump float seam = 1.0 - smoothstep(0.012, 0.052, abs(delta - tear));
-        mediump vec3 seam_color = tissue_fragment.w >= 2.5 ? vec3(1.0, 0.76, 0.38)
-            : tissue_fragment.w >= 1.5 ? vec3(0.86, 0.63, 1.0)
-            : tissue_fragment.w >= 0.5 ? vec3(0.66, 0.83, 1.0)
-            : vec3(0.82, 0.97, 0.89);
-        rgba.rgb = mix(rgba.rgb, seam_color * max(max(rgba.r, rgba.g), rgba.b), seam * 0.72);
-        rgba.a *= 1.0 - smoothstep(tear - 0.012, tear + 0.012, delta);
+        // All pieces remap the angle with the same curve, so neighboring masks
+        // share the same torn edge and cover the original tissue exactly.
+        highp float r = length(source);
+        highp float theta = r > 0.0 ? atan(-source.y, source.x) : 0.0;
+        highp float phase = tissue_fragment.w;
+        highp float tear = 0.17 * sin(r * 12.0 + phase) + 0.06 * sin(r * 29.0 - phase);
+        const highp float turn = 6.283185307179586;
+        highp float cut_angle = mod(theta + tear, turn);
+        highp float first = tissue_fragment.y;
+        highp float last = tissue_fragment.z;
+        bool inside = last <= turn ? cut_angle >= first && cut_angle < last
+            : cut_angle >= first || cut_angle < last - turn;
+        if (!inside) discard;
     }
 
     // Circulation carries accumulated pigment through the folds of the moving membrane.
