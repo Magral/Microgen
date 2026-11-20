@@ -160,12 +160,12 @@ function Interface:cards(items,row_y,callback,set_color,preview)
             local state=tostring(item.extra)
             local state_label=state:find("СИНЕРГИЯ",1,true) and "СИНЕРГИЯ" or "УСЛОВИЕ"
             local state_color=item.extra_color or DIM
-            if state:find("УЖЕ АКТИВНА",1,true) or state:find("АКТИВНА ·",1,true) then
-                state_label="АКТИВНА"
-                state_color=MINT
-            elseif state:find("НЕ АКТИВНА",1,true) then
+            if state:find("НЕ АКТИВНА",1,true) then
                 state_label="НЕ АКТИВНА"
                 state_color=color("e7ad9c")
+            elseif state:find("УЖЕ АКТИВНА",1,true) or state:find("АКТИВНА ·",1,true) then
+                state_label="АКТИВНА"
+                state_color=MINT
             elseif state:find("ВКЛЮЧИТСЯ",1,true) then
                 state_label="ГОТОВА"
                 state_color=color("e5cc82")
