@@ -1259,8 +1259,8 @@ function App:level_up()
             if sim:reroll_offers(focused) then self:save_run();self:level_up()
             else self:notice("Недостаточно биомассы или новых вариантов") end
         end
-        ui:button(966,58,450,64,"Переброс · "..price,function() reroll(false) end,false,.90)
-        ui:button(1494,58,450,64,"Ветвь · "..(price+5),function() reroll(true) end,false,.90)
+        ui:button(966,35,450,54,"Переброс · "..price,function() reroll(false) end,false,.84)
+        ui:button(1494,35,450,54,"Ветвь · "..(price+5),function() reroll(true) end,false,.84)
     end
 end
 
