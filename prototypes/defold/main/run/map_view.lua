@@ -75,6 +75,7 @@ local function raster_map(world, sim, reveal)
                 for px = 0, MAP_SCALE - 1 do
                     local fx = (px + .5) / MAP_SCALE
                     local r, g, b = base[1], base[2], base[3]
+                    local alpha = kind == 0 and 0 or 255
                     if membrane then
                         local distance = math.min(left ~= kind and fx or 1, right ~= kind and 1-fx or 1,
                             up ~= kind and fy or 1, down ~= kind and 1-fy or 1)
@@ -84,8 +85,14 @@ local function raster_map(world, sim, reveal)
                         r = r*swell + (membrane[1]-r)*light
                         g = g*swell + (membrane[2]-g)*light
                         b = b*swell + (membrane[3]-b)*light
+                        local unknown_x = math.min(left == 0 and fx or 1, right == 0 and 1-fx or 1)
+                        local unknown_y = math.min(up == 0 and fy or 1, down == 0 and 1-fy or 1)
+                        if unknown_x < .31 and unknown_y < .31 then
+                            local corner = math.sqrt((.31-unknown_x)^2 + (.31-unknown_y)^2)
+                            alpha = math.floor(255*clamp((.37-corner)/.13,0,1))
+                        end
                     end
-                    scanline[#scanline + 1] = string.char(math.floor(r),math.floor(g),math.floor(b),kind==0 and 64 or 255)
+                    scanline[#scanline + 1] = string.char(math.floor(r),math.floor(g),math.floor(b),alpha)
                 end
                 rows[py] = table.concat(scanline)
             end
@@ -250,7 +257,7 @@ function MapView.screen(ui, sim, leave, zoom, set_zoom, locate)
     local world = sim.world
     local mint, pale, dim = ui.colors.mint, ui.colors.pale, ui.colors.dim
     local shield_color = vmath.vector4(.43,.86,1,1)
-    ui:box(1230,540,2460,1080,vmath.vector4(.006,.035,.052,.69))
+    ui:box(1230,540,2460,1080,vmath.vector4(.006,.035,.052,.81))
     zoom = clamp(zoom or 1, .76, 1.12)
     local tile = math.min(1540/world.w, 782/world.h) * zoom
     local center_x, center_y = 1400, 461
@@ -308,13 +315,13 @@ function MapView.screen(ui, sim, leave, zoom, set_zoom, locate)
         {"cells", "field", "Гнездо", vmath.vector4(.98, .72, .33, 1)},
         {"collectibles", "cyst_2", "Циста с наградой", vmath.vector4(.82, .56, 1, 1)},
         {"collectibles", "core", "Главная угроза", vmath.vector4(1, .43, .49, 1)},
-        {nil, nil, "Ценная питательная точка", vmath.vector4(.84, .68, 1, 1)},
+        {nil, nil, "Ценный нутриент", vmath.vector4(.84, .68, 1, 1)},
     }
     for i, item in ipairs(legend) do
         local y = 390 - (i - 1) * 58
         if item[1] then ui:image(item[1], item[2], 109, y, 36, 36)
         else frame_marker(ui, 109, y, item[4], 10) end
-        ui:text(152, y, item[3], .83, pale)
+        ui:fit_text(152, y, item[3], .83, pale, 344, 46)
     end
     ui:button(2332, 414, 94, 94, "+", set_zoom and zoom<1.12 and function() set_zoom(math.min(1.12,zoom+.12)) end,false,1.35)
     ui:button(2332, 300, 94, 94, "−", set_zoom and zoom>.76 and function() set_zoom(math.max(.76,zoom-.12)) end,false,1.35)
