@@ -16,7 +16,7 @@ local PALE = color("d4e7e7")
 local MINT = color("9ce3cf")
 local DIM = color("a5c4c4")
 local DARK = color("0c202b")
-local SHADE = vmath.vector4(.015,.035,.05,.88)
+local SHADE = vmath.vector4(.008,.023,.035,.68)
 Interface.colors = {pale=PALE,mint=MINT,dim=DIM,gold=color("dbbd8c"),red=color("efb6a9")}
 
 function Interface.new()
@@ -75,9 +75,10 @@ function Interface:panel(title,subtitle,close,size)
     local left = (Interface.width-w)/2
     self.panel_width=w
     self:box(1230,540,2460,1080,SHADE)
-    self:surface(1230,540,w,1038,"panel")
+    local shell=self:surface(1230,540,w,1038,"panel")
+    gui.set_color(shell,vmath.vector4(.54,.84,.85,.76))
     self:box(left+8,540,4,972,color("4edbb9"))
-    self:box(1230,870,w-74,2,color("234650"))
+    self:box(1230,870,w-74,2,color("39727b"))
     self:text(left+44,980,title,1.30,color("e2f4ed"),w-176)
     if subtitle then self:fit_text(left+44,916,subtitle,.94,color("a8c7c8"),w-118,52) end
     self:button(left+w-77,980,84,84,"×",close)
@@ -98,7 +99,7 @@ function Interface:image(atlas,frame,x,y,w,h)
     return node
 end
 
-function Interface:fit_text(x,y,message,scale,shade,width,height)
+function Interface:fit_text(x,y,message,scale,shade,width,height,center)
     self.card_font = self.card_font or gui.get_font_resource("interface")
     local metrics
     for _ = 1, 7 do
@@ -110,7 +111,7 @@ function Interface:fit_text(x,y,message,scale,shade,width,height)
         assert(metrics.height*scale <= height and metrics.width*scale <= width,
             "Mutation text exceeds its layout slot: "..message)
     end
-    return self:text(x,y,message,scale,shade,width)
+    return self:text(x,y,message,scale,shade,width,center)
 end
 
 function Interface:cards(items,row_y,callback,set_color,preview)
@@ -121,65 +122,62 @@ function Interface:cards(items,row_y,callback,set_color,preview)
     for i,item in ipairs(items) do
         local index = i
         local x = first+(width+gap)*(i-1)
-        local left = x-width/2+28
         local shade = set_color and set_color(item) or MINT
-        self:surface(x,row_y,width+6,578,"panel")
-        self:surface(x,row_y,width,570,"card")
-        self:box(x,row_y+276,width-54,5,shade)
-        self:box(x-width/2+3,row_y,5,510,shade)
-        if item.icon or item.image_frame then
-            self:surface(left+67,row_y+157,132,132,"button")
-            local has_preview=item.icon and preview and preview(item,left+67,row_y+157,132)
+        local height=690
+        self:surface(x,row_y,width+8,height+8,"panel")
+        local card=self:surface(x,row_y,width,height,"card")
+        gui.set_color(card,vmath.vector4(.72,.91,.91,.74))
+        self:box(x,row_y+height/2-12,width-54,4,shade)
+        self:box(x-width/2+3,row_y,5,height-30,shade)
+        self:box(x+width/2-3,row_y,2,height-30,vmath.vector4(shade.x,shade.y,shade.z,.45))
+        local has_icon=item.icon or item.image_frame
+        local art_y=row_y+184
+        if has_icon then
+            local halo=self:image("cells","surge",x,art_y,324,324)
+            gui.set_color(halo,vmath.vector4(shade.x,shade.y,shade.z,.19))
+            local has_preview=item.icon and preview and preview(item,x,art_y,106)
             if not has_preview then
                 local atlas=item.image_atlas or "icons"
                 local frame=item.image_frame or ("icon_"..item.icon)
-                self:image(atlas,frame,left+67,row_y+157,104,104)
+                local emblem=self:image(atlas,frame,x,art_y,176,176)
+                gui.set_color(emblem,vmath.vector4(1,1,1,1))
             end
         end
-        local has_icon=item.icon or item.image_frame
-        local title_x = has_icon and left+151 or left+8
-        local title_width = has_icon and width-206 or width-72
-        self:fit_text(title_x,row_y+174,item.title or "",1.08,PALE,title_width,94)
+        self:fit_text(x,row_y+15,item.title or "",1.24,PALE,width-64,68,true)
         if item.meta then
-            self:surface(title_x+title_width/2,row_y+91,title_width,38,"button")
-            self:fit_text(title_x,row_y+91,item.meta,.80,MINT,title_width-20,34)
+            local badge=self:surface(x,row_y-53,math.min(width-82,330),48,"button")
+            gui.set_color(badge,vmath.vector4(shade.x,shade.y,shade.z,.20))
+            self:fit_text(x,row_y-53,item.meta,.92,MINT,width-98,42,true)
         end
         if item.rarity then
-            self:surface(x+width/2-96,row_y+232,174,42,"button")
-            self:box(x+width/2-96,row_y+232,5,30,shade)
-            self:text(x+width/2-96,row_y+232,string.upper(item.rarity),.67,shade,154,true)
+            self:fit_text(x,row_y-106,string.upper(item.rarity),.78,shade,width-90,38,true)
         end
         if item.detail then
-            self:box(x,row_y+23,width-56,2,color("2a4a53"))
-            self:fit_text(left,row_y-14,item.detail,.94,PALE,width-62,98)
+            self:box(x,row_y-133,width-56,2,color("50727a"))
+            self:fit_text(x,row_y-176,item.detail,.90,PALE,width-78,82,true)
         end
         if item.extra then
-            local panel=self:surface(x,row_y-112,width-52,92,"button")
-            gui.set_color(panel,vmath.vector4(.52,.83,.81,.28))
-            self:box(x-width/2+40,row_y-112,4,60,item.extra_color or MINT)
+            local panel=self:surface(x,row_y-291,width-52,86,"button")
+            gui.set_color(panel,vmath.vector4(.35,.70,.71,.28))
+            self:box(x-width/2+40,row_y-291,5,58,item.extra_color or MINT)
             local state=tostring(item.extra)
-            local state_label=state:find("СИНЕРГИЯ",1,true) and "СИНЕРГИЯ" or "УСЛОВИЕ"
             local state_color=item.extra_color or DIM
             if state:find("НЕ АКТИВНА",1,true) then
-                state_label="НЕТ ПАРЫ"
                 state_color=color("e7ad9c")
             elseif state:find("УЖЕ АКТИВНА",1,true) or state:find("АКТИВНА ·",1,true) then
-                state_label="АКТИВНА"
                 state_color=MINT
             elseif state:find("ВКЛЮЧИТСЯ",1,true) then
-                state_label="ГОТОВА"
                 state_color=color("e5cc82")
             end
-            self:fit_text(left+18,row_y-112,item.extra,.69,state_color,width-226,78)
-            self:surface(x+width/2-92,row_y-112,136,40,"button")
-            self:text(x+width/2-92,row_y-112,state_label,.60,state_color,122,true)
+            self:fit_text(x-width/2+63,row_y-291,item.extra,.76,state_color,width-112,72)
         else
-            self:surface(x,row_y-112,width-52,74,"button")
-            self:text(x,row_y-112,"ПАССИВНЫЙ ЭФФЕКТ",.72,DIM,nil,true)
+            local passive=self:surface(x,row_y-291,width-52,72,"button")
+            gui.set_color(passive,vmath.vector4(.35,.70,.71,.20))
+            self:text(x,row_y-291,"ПАССИВНЫЙ ЭФФЕКТ",.78,DIM,nil,true)
         end
         local action
         if not item.sold then action=function() callback(item,index) end end
-        self:button(x,row_y-220,width-52,84,item.action or "Выбрать",action,true,1.08)
+        self:button(x,row_y-390,width-52,84,item.action or "Выбрать",action,true,1.18)
     end
 end
 

@@ -141,7 +141,21 @@ function App:show_home()
     if family then
         local profile=family_profile(self.store,family.id)
         local form=Legacy.FORMS[profile.legacy.selected_form] or Legacy.FORMS[family.form]
-        portrait(ui,735,590,172,family_recipe(profile,family.form))
+        local recipe=family_recipe(profile,family.form)
+        local family_state=Equipment.from_profile(profile)
+        local build_data=Equipment.aggregate(family_state)
+        local build=Build.new()
+        build.organs,build.qualities,build.specializations=build_data.organs,build_data.qualities,build_data.specializations
+        local glow=ui:image("cells","surge",735,590,530,530)
+        gui.set_color(glow,vmath.vector4(.31,.91,.75,.17))
+        portrait(ui,735,590,164,recipe)
+        local anatomy=Anatomy.new(ui.group)
+        ui:remember(anatomy.node)
+        local preview={player={x=0,y=0},player_genome=recipe,build=build,facing=0,elapsed=0,
+            enemies={},pickups={},remains={},effects={},hp=100,max_hp=100,
+            body_radius=function() return 164 end,body_color=function() return Genome.colors(recipe)[1] end}
+        Anatomy.update(anatomy,preview,735,590,164)
+        for _,node in ipairs(anatomy.ribbons) do ui:remember(node) end
         ui:fit_text(1110,795,form.name.." амёба",1.50,ui.colors.pale,870,75)
         ui:fit_text(1110,700,form.desc,1,ui.colors.pale,850,75)
         local stage=profile.checkpoint.stage_index or 1
@@ -1204,7 +1218,7 @@ function App:level_up()
             local rank=current==0 and 1 or math.min(Catalog.max_rank(id),current+gain)
             local quality=({ "Обычная", "Редкая", "Эпическая", "Легендарная" })[grade+1]
             local baseline=Catalog.effect_text(id,Catalog.effective_rank(rank))
-            local rank_text=current==0 and "НОВЫЙ ОРГАН · РАНГ 1" or ("РАНГ %d → %d"):format(current,rank)
+            local rank_text=current==0 and "НОВЫЙ · РАНГ 1" or ("РАНГ %d · СТАНЕТ %d"):format(current,rank)
             local hints,synergy_ready={},false
             for _, synergy_id in ipairs(Catalog.SYNERGY_IDS) do
                 local synergy=Catalog.SYNERGIES[synergy_id]
@@ -1225,14 +1239,14 @@ function App:level_up()
                 extra=hint,extra_color=hint_color,action=current>0 and "Усилить" or "Выбрать"}
         end
     end
-    Panels.offer_cards(ui,shaped,554,function(item)
+    Panels.offer_cards(ui,shaped,505,function(item)
         local before=Copy(sim.build:active_synergies())
         local function apply(old)
             return sim:choose_mutation(item.id,old,function(...) return self:award(...) end)
         end
         if not apply() then self:replacement(item.id,item.grade,apply,function() self:level_up() end)
         else self:accepted(before) end
-    end,function(item,x,y,radius) return draw_offer_preview(ui,sim,item,x,y,radius*.42) end)
+    end,function(item,x,y,radius) return draw_offer_preview(ui,sim,item,x,y,radius) end)
     if #shaped==0 then
         ui:button(1230,530,650,97,"Получить 15 биомассы",function()
             if sim:take_level_biomass() then self:save_run();self:show_run() end
@@ -1245,8 +1259,8 @@ function App:level_up()
             if sim:reroll_offers(focused) then self:save_run();self:level_up()
             else self:notice("Недостаточно биомассы или новых вариантов") end
         end
-        ui:button(966,182,450,76,"Переброс · "..price,function() reroll(false) end)
-        ui:button(1494,182,450,76,"Ветвь · "..(price+5),function() reroll(true) end)
+        ui:button(966,58,450,64,"Переброс · "..price,function() reroll(false) end,false,.90)
+        ui:button(1494,58,450,64,"Ветвь · "..(price+5),function() reroll(true) end,false,.90)
     end
 end
 
