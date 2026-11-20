@@ -92,7 +92,9 @@ local function raster_map(world, sim, reveal)
                             alpha = math.floor(255*clamp((.37-corner)/.13,0,1))
                         end
                     end
-                    scanline[#scanline + 1] = string.char(math.floor(r),math.floor(g),math.floor(b),alpha)
+                    local opacity = alpha / 255
+                    scanline[#scanline + 1] = string.char(
+                        math.floor(r*opacity),math.floor(g*opacity),math.floor(b*opacity),alpha)
                 end
                 rows[py] = table.concat(scanline)
             end
