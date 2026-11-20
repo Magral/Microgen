@@ -76,7 +76,10 @@ function Updater:check()
         else
             self:set("error")
         end
-    end, { Accept="application/vnd.github+json" }, nil, { timeout=20, ignore_cache=true })
+    end, {
+        Accept="application/vnd.github+json",
+        ["User-Agent"]="Microgen-Defold/" .. self.installed,
+    }, nil, { timeout=20, ignore_cache=true })
 end
 
 function Updater:install()
