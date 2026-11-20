@@ -1617,10 +1617,10 @@ function init(self)
         assert(app.hud_has_barrier and gui.get_text(app.shield_metric):find("Щит готов",1,true))
         sim.cooldowns.barrier=4
         app:draw_hud()
-        assert(gui.get_size(app.shield).x==250 and gui.get_text(app.shield_metric):find("4.0",1,true))
+        assert(gui.get_size(app.shield).x==360 and gui.get_text(app.shield_metric):find("4.0",1,true))
         sim.build.organs.barrier=nil
         app:draw_hud()
-        assert(not app.hud_has_barrier and gui.get_size(app.vitals).y==246)
+        assert(not app.hud_has_barrier and gui.get_size(app.vitals).y==340)
         sim.build.organs.barrier,sim.cooldowns.barrier=prior_barrier,prior_cooldown
         app:draw_hud()
         app.scene:render(sim)
