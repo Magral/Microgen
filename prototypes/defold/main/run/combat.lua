@@ -139,12 +139,16 @@ function Combat:interaction(enemy)
         build:rank("magnet") + ((enemy.grasp or 0) > 0 and 1 or 0), build:rank("devour"), self:mouth_contact(enemy))
 end
 
-function Combat:_is_engulfing(enemy)
-    if enemy.hp <= 0 or enemy.kind == "boss" then return false end
-    if enemy.captured then return true end
-    if enemy.r >= self:body_radius() * 1.6 then return false end
+function Combat:_can_be_absorbed(enemy, radius)
+    radius = radius or self:body_radius()
+    if enemy.hp <= 0 or enemy.kind == "boss" or enemy.r >= radius * 1.6 then return false end
     if enemy.kind == "miniboss" and enemy.hp > enemy.max_hp * 0.15 then return false end
-    return self:interaction(enemy).eligible and self:_touches(enemy.pos, enemy.r * 1.17)
+    return self:interaction(enemy).eligible
+end
+
+function Combat:_is_engulfing(enemy)
+    if enemy.captured then return true end
+    return self:_can_be_absorbed(enemy) and self:_touches(enemy.pos, enemy.r * 1.17)
 end
 
 function Combat:_blocks_body(enemy, radius)
@@ -339,7 +343,8 @@ function Combat:_update_enemy(i, dt, radius, safe)
             end
         end
     end
-    if distance < enemy.r + radius * 0.75 and rules.impact > 0 and self.invuln <= 0 and not safe then
+    if distance < enemy.r + radius * 0.75 and rules.impact > 0 and self.invuln <= 0 and not safe
+        and not self:_can_be_absorbed(enemy, radius) then
         self:hurt_player(rules.impact * (elite and 1.2 or 1), { kind = "collision", name = self:_enemy_label(enemy), pos = enemy.pos, id = enemy.id })
         self.invuln, enemy.impulse = 0.65, point(-x * 24, -y * 24)
         self:_effect("hurt", self.player, 45, 0.3)

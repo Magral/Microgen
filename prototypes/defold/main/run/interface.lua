@@ -76,8 +76,10 @@ function Interface:panel(title,subtitle,close,size)
     self.panel_width=w
     self:box(1230,540,2460,1080,SHADE)
     self:surface(1230,540,w,1038,"panel")
-    self:text(left+33,980,title,1.25,color("e2f4ed"),w-150)
-    if subtitle then self:text(left+33,907,subtitle,.92,color("94b5b8"),w-72) end
+    self:box(left+8,540,4,972,color("4edbb9"))
+    self:box(1230,870,w-74,2,color("234650"))
+    self:text(left+44,980,title,1.30,color("e2f4ed"),w-176)
+    if subtitle then self:fit_text(left+44,916,subtitle,.94,color("a8c7c8"),w-118,52) end
     self:button(left+w-77,980,84,84,"×",close)
     return left
 end
@@ -121,31 +123,63 @@ function Interface:cards(items,row_y,callback,set_color,preview)
         local x = first+(width+gap)*(i-1)
         local left = x-width/2+28
         local shade = set_color and set_color(item) or MINT
-        self:surface(x,row_y,width,570)
-        self:box(x,row_y+259,width-60,6,shade)
-        if item.icon then
-            self:surface(left+67,row_y+170,144,144,"button")
-            if preview and preview(item,left+67,row_y+170,144) then
-                self:image("icons","icon_"..item.icon,left+111,row_y+123,42,42)
-            else
-                self:image("icons","icon_"..item.icon,left+67,row_y+170,116,116)
+        self:surface(x,row_y,width+6,578,"panel")
+        self:surface(x,row_y,width,570,"card")
+        self:box(x,row_y+276,width-54,5,shade)
+        self:box(x-width/2+3,row_y,5,510,shade)
+        if item.icon or item.image_frame then
+            self:surface(left+67,row_y+157,132,132,"button")
+            local has_preview=item.icon and preview and preview(item,left+67,row_y+157,132)
+            if not has_preview then
+                local atlas=item.image_atlas or "icons"
+                local frame=item.image_frame or ("icon_"..item.icon)
+                self:image(atlas,frame,left+67,row_y+157,104,104)
             end
         end
-        local inset = item.icon and 154 or 0
-        self:fit_text(left+inset,row_y+177,item.title or "",1.08,PALE,width-56-inset,112)
-        if item.meta then self:fit_text(left+inset,row_y+106,item.meta,1.0,MINT,width-56-inset,55) end
-        if item.rarity then
-            self:surface(left+76,row_y+258,154,38,"button")
-            self:text(left+76,row_y+258,item.rarity,.70,shade,140,true)
+        local has_icon=item.icon or item.image_frame
+        local title_x = has_icon and left+151 or left+8
+        local title_width = has_icon and width-206 or width-72
+        self:fit_text(title_x,row_y+174,item.title or "",1.08,PALE,title_width,94)
+        if item.meta then
+            self:surface(title_x+title_width/2,row_y+91,title_width,38,"button")
+            self:fit_text(title_x,row_y+91,item.meta,.80,MINT,title_width-20,34)
         end
-        if item.detail then self:fit_text(left,row_y+1,item.detail,.98,PALE,width-56,115) end
+        if item.rarity then
+            self:surface(x+width/2-96,row_y+232,174,42,"button")
+            self:box(x+width/2-96,row_y+232,5,30,shade)
+            self:text(x+width/2-96,row_y+232,string.upper(item.rarity),.67,shade,154,true)
+        end
+        if item.detail then
+            self:box(x,row_y+23,width-56,2,color("2a4a53"))
+            self:fit_text(left,row_y-14,item.detail,.94,PALE,width-62,98)
+        end
         if item.extra then
-            self:box(x,row_y-65,width-56,2,color("2a4a53"))
-            self:fit_text(left,row_y-112,item.extra,.83,item.extra_color or DIM,width-56,88)
+            local panel=self:surface(x,row_y-112,width-52,92,"button")
+            gui.set_color(panel,vmath.vector4(.52,.83,.81,.28))
+            self:box(x-width/2+40,row_y-112,4,60,item.extra_color or MINT)
+            local state=tostring(item.extra)
+            local state_label=state:find("СИНЕРГИЯ",1,true) and "СИНЕРГИЯ" or "УСЛОВИЕ"
+            local state_color=item.extra_color or DIM
+            if state:find("УЖЕ АКТИВНА",1,true) or state:find("АКТИВНА ·",1,true) then
+                state_label="АКТИВНА"
+                state_color=MINT
+            elseif state:find("НЕ АКТИВНА",1,true) then
+                state_label="НЕ АКТИВНА"
+                state_color=color("e7ad9c")
+            elseif state:find("ВКЛЮЧИТСЯ",1,true) then
+                state_label="ГОТОВА"
+                state_color=color("e5cc82")
+            end
+            self:fit_text(left+18,row_y-112,item.extra,.69,state_color,width-226,78)
+            self:surface(x+width/2-92,row_y-112,136,40,"button")
+            self:text(x+width/2-92,row_y-112,state_label,.60,state_color,122,true)
+        else
+            self:surface(x,row_y-112,width-52,74,"button")
+            self:text(x,row_y-112,"ПАССИВНЫЙ ЭФФЕКТ",.72,DIM,nil,true)
         end
         local action
         if not item.sold then action=function() callback(item,index) end end
-        self:button(x,row_y-217,width-56,88,item.action or "Выбрать",action,true,1.04)
+        self:button(x,row_y-220,width-52,84,item.action or "Выбрать",action,true,1.08)
     end
 end
 

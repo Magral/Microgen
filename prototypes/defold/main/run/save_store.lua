@@ -67,7 +67,9 @@ local function normalize_state(state)
     end
     clean.cores = util.clamp(util.integer(clean.cores), 0, util.MAX_INTEGER)
     clean.best_stage = util.clamp(util.integer(clean.best_stage), 0, 1000000)
-    for _, id in ipairs({"health", "collect", "regen"}) do clean.upgrades[id] = util.clamp(util.integer(clean.upgrades[id]), 0, 5) end
+    for _, id in ipairs({"health", "collect", "regen"}) do
+        clean.upgrades[id] = util.clamp(util.integer(clean.upgrades[id]), 0, util.MAX_INTEGER)
+    end
     clean.legacy = legacy.normalize(clean)
     return clean
 end
@@ -222,8 +224,8 @@ end
 
 function Store:buy_upgrade(id)
     local rank = self.profile.upgrades[id]
-    if not rank or rank >= 5 then return false end
-    local price = 4 + 4 * rank
+    if not rank or rank >= util.MAX_INTEGER then return false end
+    local price = math.min(util.MAX_INTEGER, 4 + 4 * rank)
     if self.profile.cores < price then return false end
     local profile = util.copy(self.profile)
     profile.cores = profile.cores - price

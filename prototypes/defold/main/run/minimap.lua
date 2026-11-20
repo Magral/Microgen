@@ -18,7 +18,9 @@ end
 function Minimap.new(world)
     local visible = {}
     for i=1,world.w*world.h do visible[i]=UNKNOWN end
-    local created=gui.new_texture(TEXTURE,world.w,world.h,"rgba",table.concat(visible),true)
+    -- The minimap's first data row is world row y=0. Upload without vertical
+    -- flipping so the marker and explored terrain use the gameplay orientation.
+    local created=gui.new_texture(TEXTURE,world.w,world.h,"rgba",table.concat(visible),false)
     return setmetatable({visible=visible,created=created},Minimap)
 end
 
@@ -57,7 +59,7 @@ function Minimap:update(sim)
     end
     if active>=1 and active<=#pixels then pixels[active]=THREAT end
     pixels[player]=PLAYER
-    gui.set_texture_data(TEXTURE,world.w,world.h,"rgba",table.concat(pixels),true)
+    gui.set_texture_data(TEXTURE,world.w,world.h,"rgba",table.concat(pixels),false)
 end
 
 return Minimap

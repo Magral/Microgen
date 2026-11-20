@@ -55,8 +55,8 @@ void main()
         mediump float theta = atan(sample_point.y, sample_point.x);
         mediump float delta = abs(mod(theta - tissue_fragment.y + TISSUE_TAU * 0.5, TISSUE_TAU) - TISSUE_TAU * 0.5);
         mediump float tear = tissue_fragment.z
-            + sin(theta * 13.0 + tissue_wounds.x * 1.7) * 0.022
-            + sin(theta * 27.0 - tissue_wounds.x * 0.8) * 0.010;
+            + sin(theta * 13.0 + tissue_wounds.x * 1.7) * 0.060
+            + sin(theta * 27.0 - tissue_wounds.x * 0.8) * 0.025;
         mediump float seam = 1.0 - smoothstep(0.012, 0.052, abs(delta - tear));
         mediump vec3 seam_color = tissue_fragment.w >= 2.5 ? vec3(1.0, 0.76, 0.38)
             : tissue_fragment.w >= 1.5 ? vec3(0.86, 0.63, 1.0)

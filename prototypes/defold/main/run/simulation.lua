@@ -645,20 +645,28 @@ function Simulation:_leave_remains(enemy)
     local visual_scale = clamp(0.95 / sqrt(count / 3), 0.52, 1.2)
     local materials = {"organelle", "membrane", "plasma"}
     local body_angle = enemy.genome.rotation or 0
+    local boundaries = {[0] = 0, [count] = TAU}
+    for boundary = 1, count - 1 do
+        boundaries[boundary] = boundary * angle_step + self.rng:randf_range(-angle_step * 0.20, angle_step * 0.20)
+    end
     for i = 1, count do
         local sector = i - 1
-        local angle = body_angle + sector * angle_step
+        local cut_start, cut_end = boundaries[sector], boundaries[sector + 1]
+        local cut_width = cut_end - cut_start
+        local cut_center = (cut_start + cut_end) * 0.5
+        local angle = body_angle + cut_center
         local dna_share = floor(dna / count) + (sector < dna % count and 1 or 0)
         local bio_share = floor(bio / count) + (sector < bio % count and 1 or 0)
-        local piece_angle = sector * angle_step
-        local radial_angle = angle + self.rng:randf_range(-angle_step * 0.10, angle_step * 0.10)
+        local piece_scale = self.rng:randf_range(0.78, 1.22)
+        local radial_angle = angle + self.rng:randf_range(-cut_width * 0.10, cut_width * 0.10)
         local piece_grade = i == 1 and max(1, grade) or max(0, grade - 1)
         self:_store_fragment({
-            id = self:_id(), pos = offset(enemy.pos, radial_angle, enemy.r * 0.30),
-            vel = offset(point(), radial_angle, self.rng:randf_range(9, 19)), r = radius,
+            id = self:_id(), pos = offset(enemy.pos, radial_angle, enemy.r * self.rng:randf_range(0.28, 0.46)),
+            vel = offset(point(), radial_angle, self.rng:randf_range(12, 25)), r = radius * piece_scale,
             genome = copy(enemy.genome), part = sector % #materials, quality = piece_grade,
-            piece_count = count, piece_index = sector, cut_angle = piece_angle, cut_half_angle = angle_step * 0.43,
-            body_radius = enemy.r, visual_scale = visual_scale,
+            piece_count = count, piece_index = sector, cut_angle = cut_center,
+            cut_half_angle = cut_width * self.rng:randf_range(0.92, 0.99),
+            body_radius = enemy.r, visual_scale = visual_scale * piece_scale,
             rotation = body_angle + self.rng:randf_range(-0.18, 0.18), spin = self.rng:randf_range(-0.65, 0.65),
             material = materials[sector % #materials + 1], dna = dna_share, bio = bio_share,
             progress = 0, duration = self.rng:randf_range(1.2, 2),
