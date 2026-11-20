@@ -109,7 +109,7 @@ function App:show_home()
     self.scene:render(self.home_world)
     gui.set_enabled(self.cover,false)
     local ui=self.modal
-    ui:box(1230,540,2460,1080,vmath.vector4(.015,.035,.05,.55))
+    ui:box(1230,540,2460,1080,vmath.vector4(.006,.027,.043,.35))
     local families=self.store:family_summaries()
     local total,by_slot=HOME_SLOTS,{}
     local active_slot
@@ -123,17 +123,34 @@ function App:show_home()
     page=math.min(total,page or 1)
     self.home_slot=page
     local family=by_slot[page]
-    ui:text(1230,977,"МИКРОГЕН",1.92,ui.colors.pale,nil,true)
-    ui:surface(1230,590,1770,596,"panel")
-    ui:button(216,590,132,230,"НАЗАД",page>1 and function()
-        self.home_slot=page-1
+    local function select_slot(slot)
+        self.home_slot=slot
         self:show_home()
-    end or nil,false,.72)
-    ui:button(2244,590,132,230,"ДАЛЕЕ",page<total and function()
-        self.home_slot=page+1
-        self:show_home()
-    end or nil,false,.72)
-    ui:text(1230,242,("%d / %d"):format(page,total),1,ui.colors.dim,nil,true)
+    end
+    ui:text(1230,1011,"МИКРОГЕН",2.08,ui.colors.pale,nil,true)
+    local first_slot=math.max(1,page-HOME_SLOTS+1)
+    for i=1,HOME_SLOTS do
+        local slot=first_slot+i-1
+        local occupant=by_slot[slot]
+        local form=occupant and Legacy.FORMS[occupant.form]
+        ui:button(1230+(i-2)*591,898,566,78,
+            ("%d · %s"):format(slot,form and form.name or (occupant and "Организм" or "Пусто")),
+            function() select_slot(slot) end,slot==page,1.15)
+    end
+    local frame=ui:surface(1230,524,1818,610,"panel")
+    gui.set_color(frame,vmath.vector4(.71,1,1,.90))
+    local function slot_arrow(x,direction)
+        local slot=page+direction
+        local enabled=slot>=1 and slot<=total
+        ui:button(x,524,136,285,"",enabled and function() select_slot(slot) end or nil)
+        local shade=enabled and ui.colors.pale or Interface.color("496972")
+        for _,side in ipairs({-1,1}) do
+            local stroke=ui:box(x-direction*4,524+side*16,48,9,shade)
+            gui.set_rotation(stroke,vmath.vector3(0,0,-side*direction*45))
+        end
+    end
+    slot_arrow(227,-1)
+    slot_arrow(2233,1)
 
     local function new()
         if #families<HOME_SLOTS then self:new_family(not family and page<=HOME_SLOTS and page or nil) else self:show_families() end
@@ -146,30 +163,32 @@ function App:show_home()
         local build_data=Equipment.aggregate(family_state)
         local build=Build.new()
         build.organs,build.qualities,build.specializations=build_data.organs,build_data.qualities,build_data.specializations
-        local glow=ui:image("cells","surge",735,590,530,530)
-        gui.set_color(glow,vmath.vector4(.31,.91,.75,.17))
-        portrait(ui,735,590,164,recipe)
+        local radius=184
+        local glow=ui:image("cells","surge",708,528,540,540)
+        gui.set_color(glow,vmath.vector4(.31,.91,.75,.24))
+        portrait(ui,708,528,radius,recipe)
         local anatomy=Anatomy.new(ui.group)
         ui:remember(anatomy.node)
         local preview={player={x=0,y=0},player_genome=recipe,build=build,facing=0,elapsed=0,
             enemies={},pickups={},remains={},effects={},hp=100,max_hp=100,
-            body_radius=function() return 164 end,body_color=function() return Genome.colors(recipe)[1] end}
-        Anatomy.update(anatomy,preview,735,590,164)
+            body_radius=function() return radius end,body_color=function() return Genome.colors(recipe)[1] end}
+        Anatomy.update(anatomy,preview,708,528,radius)
         for _,node in ipairs(anatomy.ribbons) do ui:remember(node) end
-        ui:fit_text(1110,795,form.name.." амёба",1.50,ui.colors.pale,870,75)
-        ui:fit_text(1110,700,form.desc,1,ui.colors.pale,850,75)
+        ui:fit_text(1110,748,form.name.." амёба",1.78,ui.colors.pale,940,82)
+        ui:fit_text(1110,655,form.desc,1.06,ui.colors.pale,940,80)
         local stage=profile.checkpoint.stage_index or 1
-        ui:text(1110,620,("%s · Поколение %d · Ступень %d"):format(family.name,family.generation,stage),.91,ui.colors.dim,850)
-        ui:button(1550,508,880,106,family.alive and "Продолжить" or "Подготовить",function()
+        ui:fit_text(1110,566,("%s · Поколение %d · Ступень %d"):format(family.name,family.generation,stage),.99,ui.colors.dim,940,63)
+        ui:button(1578,445,936,113,family.alive and "Продолжить" or "Подготовить",function()
             if not self.store:select_family(family.id) then return self:notice(self.store.last_error) end
             self.equipment_state=nil
             self.body_page,self.stock_page=1,1
             if family.alive then self:start() else self:body(false) end
-        end,true,1.26)
-        ui:button(1550,389,880,84,#families<HOME_SLOTS and "Новый организм" or "Управление слотами",new,false,1)
+        end,true,1.53)
+        ui:button(1578,313,936,90,#families<HOME_SLOTS and "Новый организм" or "Управление слотами",new,false,1.16)
     else
-        ui:surface(735,590,300,300,"card")
-        ui:text(735,590,"+",2.0,ui.colors.dim,nil,true)
+        local glow=ui:image("cells","surge",708,528,440,440)
+        gui.set_color(glow,vmath.vector4(.35,.83,.79,.34))
+        ui:text(708,528,"+",2.0,ui.colors.dim,nil,true)
         ui:text(1110,705,"Свободный слот",1.5,ui.colors.pale)
         ui:text(1110,619,"Выбери форму для нового забега.",1,ui.colors.dim)
         ui:button(1550,490,880,106,"Новый организм",new,true,1.20)
@@ -183,7 +202,7 @@ function App:show_home()
         {"Выход",function() sys.exit(0) end},
     }
     for i,button in ipairs(buttons) do
-        ui:button(1230+(i-3.5)*358,129,342,86,button[1],button[2],false,.94)
+        ui:button(1230+(i-3.5)*382,116,362,112,button[1],button[2],false,1.10)
     end
 end
 
@@ -1638,6 +1657,9 @@ function init(self)
         sim.build.organs.barrier,sim.cooldowns.barrier=prior_barrier,prior_cooldown
         app:draw_hud()
         app.scene:render(sim)
+        app:map()
+        assert(app.screen=="map")
+        app:show_run()
         local labels=app.scene.labels
         local tint=vmath.vector4(1,.5,.5,1)
         app.scene:draw_number(sim.player,"6",tint,1)
@@ -1683,6 +1705,7 @@ function init(self)
         sim.outcome=prior_outcome
         app:level_up()
         print("MICROGEN MUTATION CARDS READY")
+        app:map()
     end
 end
 

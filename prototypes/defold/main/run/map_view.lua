@@ -2,12 +2,13 @@ local MapView = {}
 
 local MAP_TEXTURE = "microgen_detailed_map"
 local MAP_SCALE = 8
-local map_texture_created = false
+local uploaded_map
 local RGB = {
-    [0] = {6, 19, 28}, [1] = {9, 27, 38}, [2] = {26, 117, 122},
-    [3] = {23, 38, 31}, [4] = {107, 122, 61}, [5] = {18, 15, 38},
-    [6] = {84, 61, 133},
+    [0] = {5, 20, 29}, [1] = {11, 35, 44}, [2] = {10, 77, 90},
+    [3] = {28, 38, 23}, [4] = {67, 89, 23}, [5] = {30, 21, 50},
+    [6] = {63, 35, 111},
 }
+local MEMBRANE = {[2]={44,223,241}, [4]={185,228,76}, [6]={180,111,255}}
 
 local function cell_index(world, x, y)
     return y * world.w + x + 1
@@ -28,26 +29,20 @@ local function clamp(value, low, high)
     return math.max(low, math.min(high, value))
 end
 
-local function rgb_bytes(red, green, blue)
-    return string.char(red, green, blue)
+local function upload(cache)
+    if uploaded_map == cache then return end
+    local method = uploaded_map and gui.set_texture_data or gui.new_texture
+    method(MAP_TEXTURE, cache.width, cache.height, "rgba", cache.data, true)
+    uploaded_map = cache
 end
 
-local function raster_map(ui, world, sim, reveal)
+local function raster_map(world, sim, reveal)
     local width, height = world.w * MAP_SCALE, world.h * MAP_SCALE
     local seen_count = 0
     if sim and not reveal then for _ in pairs(sim.explored or {}) do seen_count = seen_count + 1 end end
     local cache = sim and sim.map_raster_cache
     local key = tostring(world.seed_value) .. ":" .. tostring(reveal) .. ":" .. tostring(seen_count)
-    if cache and cache.key == key then
-        if not map_texture_created then
-            gui.new_texture(MAP_TEXTURE, width, height, "rgb", cache.data, true)
-            map_texture_created = true
-        elseif cache.key ~= cache.uploaded then
-            gui.set_texture_data(MAP_TEXTURE, width, height, "rgb", cache.data, true)
-            cache.uploaded = cache.key
-        end
-        return
-    end
+    if cache and cache.world == world and cache.key == key then return upload(cache) end
     local kinds = {}
     for y = 0, world.h - 1 do
         local row = {}
@@ -58,38 +53,39 @@ local function raster_map(ui, world, sim, reveal)
         if x < 0 or y < 0 or x >= world.w or y >= world.h then return 0 end
         return kinds[y][x]
     end
-    -- Rasterize each cell once, then stitch scanlines. The same detail remains,
-    -- while trig and temporary pixel strings are no longer repeated per pixel.
+    -- Texture detail is baked when exploration changes. Zooming reuses the raster.
     local tile_rows = {}
     for gy = 0, world.h - 1 do
         local row = {}
         tile_rows[gy] = row
         for gx = 0, world.w - 1 do
             local kind = tile_kind(gx, gy)
-            local base = RGB[kind] or RGB[0]
+            local base = RGB[kind]
+            local membrane = MEMBRANE[kind]
             local left, right = tile_kind(gx - 1, gy), tile_kind(gx + 1, gy)
             local up, down = tile_kind(gx, gy - 1), tile_kind(gx, gy + 1)
-            local warp_x = .125 + .125 * (.5 + .5 * math.sin(gy * 2.17 + gx * .61))
-            local warp_y = .125 + .125 * (.5 + .5 * math.sin(gx * 2.03 - gy * .73))
+            local phase = gy * 2.17 + gx * .61
+            local swell = .87 + .13 * math.sin(gx * .64 + gy * .31)
             local seed = (gx * 37 + gy * 71) % 19
             local rows = {}
             for py = 0, MAP_SCALE - 1 do
-                local fy = py / MAP_SCALE
+                local fy = (py + .5) / MAP_SCALE
+                local warp_x = .16 + .10 * math.sin(fy * math.pi + phase)
                 local scanline = {}
                 for px = 0, MAP_SCALE - 1 do
-                    local fx = px / MAP_SCALE
-                    local edge = (left ~= kind and fx < warp_x and fx >= warp_x - .25)
-                        or (right ~= kind and fx > 1 - warp_x and fx <= 1 - warp_x + .25)
-                        or (up ~= kind and fy < warp_y and fy >= warp_y - .25)
-                        or (down ~= kind and fy > 1 - warp_y and fy <= 1 - warp_y + .25)
-                    local glint = math.abs(fx - .5) <= .126 and math.abs(fy - .5) <= .126 and seed < 3
+                    local fx = (px + .5) / MAP_SCALE
                     local r, g, b = base[1], base[2], base[3]
-                    if edge then
-                        r, g, b = math.min(255, r * 1.45 + 15), math.min(255, g * 1.38 + 20), math.min(255, b * 1.35 + 20)
-                    elseif glint then
-                        r, g, b = math.min(255, r * 1.55), math.min(255, g * 1.55), math.min(255, b * 1.55)
+                    if membrane then
+                        local distance = math.min(left ~= kind and fx or 1, right ~= kind and 1-fx or 1,
+                            up ~= kind and fy or 1, down ~= kind and 1-fy or 1)
+                        local rim = math.max(0, 1 - math.abs(distance - warp_x) * 4)
+                        local glint = seed < 4 and math.max(0, .18 - math.abs(fx-.48) - math.abs(fy-.46)) or 0
+                        local light = rim * .69 + glint
+                        r = r*swell + (membrane[1]-r)*light
+                        g = g*swell + (membrane[2]-g)*light
+                        b = b*swell + (membrane[3]-b)*light
                     end
-                    scanline[#scanline + 1] = rgb_bytes(math.floor(r), math.floor(g), math.floor(b))
+                    scanline[#scanline + 1] = string.char(math.floor(r),math.floor(g),math.floor(b),kind==0 and 64 or 255)
                 end
                 rows[py] = table.concat(scanline)
             end
@@ -104,16 +100,9 @@ local function raster_map(ui, world, sim, reveal)
             data_rows[#data_rows + 1] = table.concat(scanline)
         end
     end
-    local data = table.concat(data_rows)
-    if not map_texture_created then
-        gui.new_texture(MAP_TEXTURE, width, height, "rgb", data, true)
-        map_texture_created = true
-    else
-        gui.set_texture_data(MAP_TEXTURE, width, height, "rgb", data, true)
-    end
-    if sim then
-        sim.map_raster_cache={key=key,data=data,uploaded=key}
-    end
+    cache={key=key,world=world,data=table.concat(data_rows),width=width,height=height}
+    if sim then sim.map_raster_cache=cache end
+    upload(cache)
 end
 
 local function discovered(sim, world, point)
@@ -159,14 +148,14 @@ local function draw_route(ui, world, from, target, left, top, tile, reveal, sim)
     end
 end
 
-function MapView.grid(ui, world, sim, left, bottom, tile, reveal, labels)
+function MapView.grid(ui, world, sim, left, bottom, tile, reveal, labels, frameless)
     local width, height = world.w * tile, world.h * tile
     local top = bottom + height
-    ui:surface(left + width / 2, bottom + height / 2, width + 26, height + 26, "panel")
-    ui:box(left + width / 2, bottom + height / 2, width + 10, height + 10,
-        vmath.vector4(.012, .055, .075, .96))
+    if not frameless then
+        ui:surface(left + width / 2, bottom + height / 2, width + 26, height + 26, "panel")
+    end
 
-    raster_map(ui, world, sim, reveal)
+    raster_map(world, sim, reveal)
     local map = ui:box(left + width / 2, bottom + height / 2, width, height, vmath.vector4(1,1,1,1))
     gui.set_texture(map, MAP_TEXTURE)
 
@@ -207,8 +196,10 @@ function MapView.grid(ui, world, sim, left, bottom, tile, reveal, labels)
 
     local function mark(point, color, radius, atlas, frame)
         local x, y = map_point(world, point, left, top, tile)
-        frame_marker(ui, x, y, color, radius)
-        if atlas and frame then ui:image(atlas, frame, x, y, radius * 1.45, radius * 1.45) end
+        local size = radius * (frameless and 3.25 or 1.65)
+        local halo=ui:image("cells","surge",x,y,size*1.85,size*1.85)
+        gui.set_color(halo,vmath.vector4(color.x,color.y,color.z,.64))
+        ui:image(atlas, frame, x, y, size, size)
     end
     for _, colony in ipairs(world.colonies or {}) do
         if colony.visited or reveal or discovered(sim, world, colony.pos) then
@@ -257,29 +248,59 @@ end
 
 function MapView.screen(ui, sim, leave, zoom, set_zoom, locate)
     local world = sim.world
-    ui:panel("Карта микромира", sim:stage_name(), leave, 2340)
-    zoom = clamp(zoom or 1, .82, 1.02)
-    local tile = 20.4 * zoom
-    local center_x = 946 + world.w * 20.4 * .5
-    local center_y = 52 + world.h * 20.4 * .5
+    local mint, pale, dim = ui.colors.mint, ui.colors.pale, ui.colors.dim
+    local shield_color = vmath.vector4(.43,.86,1,1)
+    ui:box(1230,540,2460,1080,vmath.vector4(.006,.035,.052,.69))
+    zoom = clamp(zoom or 1, .76, 1.12)
+    local tile = math.min(1540/world.w, 782/world.h) * zoom
+    local center_x, center_y = 1400, 461
     MapView.grid(ui, world, sim, center_x - world.w * tile * .5,
-        center_y - world.h * tile * .5, tile, false, true)
+        center_y - world.h * tile * .5, tile, false, false, true)
 
-    ui:surface(440, 517, 650, 836, "card")
-    ui:box(440, 895, 582, 4, vmath.vector4(.34, .94, .78, 1))
-    ui:text(170, 875, "СТУПЕНЬ " .. tostring(sim.stage_index), .84, vmath.vector4(.53, .96, .83, 1))
-    ui:fit_text(170, 815, sim:stage_name(), 1.02, vmath.vector4(.88, .96, .91, 1), 520, 72)
-    ui:text(170, 733, "ЦЕЛЬ ЗАБЕГА", .77, vmath.vector4(.68, .85, .82, 1))
+    ui:box(1230,1016,2460,128,vmath.vector4(.008,.043,.057,.91))
+    ui:text(62,1019,"МИКРОГЕН",1.14,mint)
+    ui:text(389,1034,("Здоровье  %.0f / %.0f"):format(sim.hp,sim.max_hp),.90,pale)
+    local function meter(left,width,fraction,color)
+        ui:box(left+width/2,991,width,9,vmath.vector4(.11,.24,.30,1))
+        local fill=width*clamp(fraction,0,1)
+        if fill>0 then ui:box(left+fill/2,991,fill,9,color) end
+    end
+    meter(389,310,sim.hp/math.max(1,sim.max_hp),mint)
+    if sim.build:rank("barrier")>0 then
+        local cooldown=sim.cooldowns.barrier or 0
+        local shield=cooldown<=0 and ("Щит готов · до %.0f урона"):format(sim:barrier_capacity())
+            or ("Щит восстанавливается · %.1f с"):format(cooldown)
+        ui:fit_text(770,1034,shield,.90,shield_color,610,42)
+        meter(770,480,1-cooldown/8,shield_color)
+    else
+        ui:text(770,1020,"Щит не установлен",.88,dim)
+    end
+    ui:text(1450,1020,"Биомасса  "..sim.build.biomass,1.06,mint)
+    ui:button(2362,1016,90,86,"×",leave,false,1.4)
+    ui:text(64,904,"Карта",1.74,pale)
+    for biome=1,2 do
+        local tint=MEMBRANE[2+world.conditions[biome]*2]
+        local shade=vmath.vector4(tint[1]/255,tint[2]/255,tint[3]/255,1)
+        local x=1060+(biome-1)*680
+        ui:fit_text(x,921,world:condition_name(biome),.85,shade,600,42,true)
+    end
+
+    ui:surface(288,676,464,324,"card")
+    ui:text(86,793,"Ступень " .. sim.stage_index,1.08,mint)
+    ui:fit_text(86,736,sim:stage_name(),1.00,pale,404,56)
+    ui:box(288,690,402,2,vmath.vector4(.27,.55,.57,.75))
+    ui:text(86,652,"Цель забега",.82,mint)
     local nest_count = 0
     for _, nest in ipairs(world.nests or {}) do if nest.used then nest_count = nest_count + 1 end end
-    ui:fit_text(170, 683, string.format("Гнёзда %d/%d · мини-боссы %d/%d",
+    ui:fit_text(86, 611, string.format("Гнёзда %d/%d · минибоссы %d/%d",
         nest_count, math.min(4, sim:stage_miniboss_target() * 2),
         sim.minibosses_defeated or 0, sim:stage_miniboss_target()), .82,
-        vmath.vector4(.92, .83, .61, 1), 520, 62)
-    ui:fit_text(170, 600, "Главная угроза · " .. (sim:boss_title() or "не обнаружена"),
-        .88, vmath.vector4(1, .57, .63, 1), 520, 60)
-    ui:box(440, 546, 582, 2, vmath.vector4(.22, .40, .43, 1))
-    ui:text(170, 491, "ОБОЗНАЧЕНИЯ", .76, vmath.vector4(.68, .85, .82, 1))
+        vmath.vector4(.92, .83, .61, 1), 404, 52)
+    ui:fit_text(86, 550, "Главная угроза · " .. (sim:boss_title() or "не обнаружена"),
+        .86, vmath.vector4(1, .63, .71, 1), 404, 56)
+
+    ui:surface(288,275,464,446,"card")
+    ui:text(86,451,"Обозначения",1.02,mint)
 
     local legend = {
         {"cells", "player", "Твой организм", vmath.vector4(.88, 1, .96, 1)},
@@ -290,17 +311,14 @@ function MapView.screen(ui, sim, leave, zoom, set_zoom, locate)
         {nil, nil, "Ценная питательная точка", vmath.vector4(.84, .68, 1, 1)},
     }
     for i, item in ipairs(legend) do
-        local y = 424 - (i - 1) * 47
-        if item[1] then ui:image(item[1], item[2], 196, y, 32, 32)
-        else frame_marker(ui, 196, y, item[4], 9) end
-        ui:text(232, y, item[3], .78, vmath.vector4(.78, .9, .87, 1))
+        local y = 390 - (i - 1) * 58
+        if item[1] then ui:image(item[1], item[2], 109, y, 36, 36)
+        else frame_marker(ui, 109, y, item[4], 10) end
+        ui:text(152, y, item[3], .83, pale)
     end
-    ui:button(440, 135, 540, 60, "Вернуться к организму", leave, false, .86)
-    ui:button(2290, 520, 84, 84, "+", set_zoom and function() set_zoom(clamp(zoom + .08, .82, 1.02)) end,
-        false, 1.35)
-    ui:button(2290, 420, 84, 84, "−", set_zoom and function() set_zoom(clamp(zoom - .08, .82, 1.02)) end,
-        false, 1.35)
-    ui:button(2155, 300, 354, 68, "Общий вид", locate, true, .85)
+    ui:button(2332, 414, 94, 94, "+", set_zoom and zoom<1.12 and function() set_zoom(math.min(1.12,zoom+.12)) end,false,1.35)
+    ui:button(2332, 300, 94, 94, "−", set_zoom and zoom>.76 and function() set_zoom(math.max(.76,zoom-.12)) end,false,1.35)
+    ui:button(2228, 174, 304, 78, "Общий вид", locate, false, .98)
 end
 
 return MapView
