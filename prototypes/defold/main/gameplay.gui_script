@@ -1206,7 +1206,7 @@ function App:level_up()
     self:overlay("level")
     self.deferred_choices=false
     self.close_current=function() self:defer_choices() end
-    ui:panel("Мутация · уровень "..sim.level,"Выбери одно улучшение · Биомасса "..sim.build.biomass,self.close_current,2070)
+    ui:panel("Мутация · уровень "..sim.level,"Выбери одно улучшение · Биомасса "..sim.build.biomass,self.close_current,2070,"mutation")
     local choices=sim:prepare_offers()
     local shaped={}
     for _,entry in ipairs(choices or {}) do

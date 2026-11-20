@@ -16,7 +16,7 @@ local PALE = color("d4e7e7")
 local MINT = color("9ce3cf")
 local DIM = color("a5c4c4")
 local DARK = color("0c202b")
-local SHADE = vmath.vector4(.008,.023,.035,.68)
+local SHADE = vmath.vector4(.008,.023,.035,.56)
 Interface.colors = {pale=PALE,mint=MINT,dim=DIM,gold=color("dbbd8c"),red=color("efb6a9")}
 
 function Interface.new()
@@ -70,17 +70,24 @@ function Interface.button_enabled(button,enable)
     gui.set_enabled(button.text,enable)
 end
 
-function Interface:panel(title,subtitle,close,size)
+function Interface:panel(title,subtitle,close,size,variant)
     local w = size or 1545
     local left = (Interface.width-w)/2
     self.panel_width=w
     self:box(1230,540,2460,1080,SHADE)
     local shell=self:surface(1230,540,w,1038,"panel")
-    gui.set_color(shell,vmath.vector4(.54,.84,.85,.76))
+    gui.set_color(shell,vmath.vector4(.54,.84,.85,variant=="mutation" and .34 or .76))
     self:box(left+8,540,4,972,color("4edbb9"))
     self:box(1230,870,w-74,2,color("39727b"))
-    self:text(left+44,980,title,1.30,color("e2f4ed"),w-176)
-    if subtitle then self:fit_text(left+44,916,subtitle,.94,color("a8c7c8"),w-118,52) end
+    if variant=="mutation" then
+        self:box(left+75,980,440,3,color("b57ee3"))
+        self:box(left+w-515,980,440,3,color("b57ee3"))
+        self:fit_text(1230,980,title,1.38,color("e2f4ed"),w-820,72,true)
+        if subtitle then self:fit_text(1230,916,subtitle,.94,color("a8c7c8"),w-118,52,true) end
+    else
+        self:text(left+44,980,title,1.30,color("e2f4ed"),w-176)
+        if subtitle then self:fit_text(left+44,916,subtitle,.94,color("a8c7c8"),w-118,52) end
+    end
     self:button(left+w-77,980,84,84,"×",close)
     return left
 end
@@ -133,8 +140,8 @@ function Interface:cards(items,row_y,callback,set_color,preview)
         local has_icon=item.icon or item.image_frame
         local art_y=row_y+184
         if has_icon then
-            local halo=self:image("cells","surge",x,art_y,324,324)
-            gui.set_color(halo,vmath.vector4(shade.x,shade.y,shade.z,.19))
+            local halo=self:image("cells","surge",x,art_y,380,380)
+            gui.set_color(halo,vmath.vector4(shade.x,shade.y,shade.z,.34))
             local has_preview=item.icon and preview and preview(item,x,art_y,106)
             if not has_preview then
                 local atlas=item.image_atlas or "icons"
