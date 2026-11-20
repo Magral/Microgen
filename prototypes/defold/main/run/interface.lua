@@ -31,6 +31,13 @@ function Interface:remember(node)
     return node
 end
 
+function Interface:widen(width)
+    if width < PANEL_WIDTH then
+        self.horizontal_scale=PANEL_WIDTH/width
+        self.font_scale=math.min(1.18,math.sqrt(self.horizontal_scale))
+    end
+end
+
 function Interface:layout_x(x)
     return CENTER_X + (x - CENTER_X) * (self.horizontal_scale or 1)
 end
@@ -97,10 +104,7 @@ function Interface:panel(title,subtitle,close,size,variant)
     self.horizontal_scale,self.font_scale=nil,nil
     local backdrop=variant=="mutation" and vmath.vector4(.008,.023,.035,.30) or SHADE
     self:box(1230,540,2460,1080,backdrop)
-    if w < PANEL_WIDTH then
-        self.horizontal_scale=PANEL_WIDTH/w
-        self.font_scale=math.min(1.18,math.sqrt(self.horizontal_scale))
-    end
+    self:widen(w)
     local shell=self:surface(1230,540,w,1038,"panel")
     gui.set_color(shell,vmath.vector4(.54,.84,.85,variant=="mutation" and .12 or .76))
     self:box(left+8,540,4,972,color("4edbb9"))

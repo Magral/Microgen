@@ -218,6 +218,7 @@ function App:show_families()
     gui.set_enabled(self.cover,false)
     local ui = self.modal
     ui:box(1230,540,2460,1080,vmath.vector4(.015,.035,.05,.65))
+    ui:widen(1681)
     local groups={alive={},ancestral={}}
     for _,family in ipairs(self.store:family_summaries()) do
         local list=groups[family.alive and "alive" or "ancestral"]
@@ -1645,6 +1646,9 @@ function init(self)
                     "Button outside window: "..app.screen.." / "..gui.get_text(button.text))
             end
         end
+        app:show_families();check_window()
+        app:show_home();check_window()
+        app.sim=sim
         app:help();check_window()
         app:updates();check_window()
         app:new_family(2);check_window()
