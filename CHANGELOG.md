@@ -1,16 +1,16 @@
-# Changelog
+# История изменений
 
 ## Defold 1.5.7
 
-- Adopted Defold as the active and accepted engine baseline for Microgen.
-- Android ARM64 landscape release, build/version code 157, package `org.magral.microgen.defold`, minimum API 26.
-- Expanded compact windows in landscape mode.
-- Increased text and touch targets in the codex, organ lists, legacy screens and other menus.
-- Moved organism summary tabs to the bottom.
-- Enlarged the transition map while preserving its proportions.
-- Established universal Android interface adaptation as the next development priority; Poco X8 Pro is the control device, not the only target.
+- Defold принят в качестве основного и единственного движка дальнейшей разработки Microgen.
+- Выпущена Android-сборка ARM64 в альбомной ориентации: номер версии 157, пакет `org.magral.microgen.defold`, минимальный API 26.
+- Расширены компактные окна в альбомной ориентации.
+- Увеличены текст и сенсорные области в кодексе, списках органов, экранах наследия и других меню.
+- Вкладки сводки организма перенесены вниз.
+- Карта перехода увеличена с сохранением пропорций.
+- Следующим приоритетом стала универсальная адаптация интерфейса Android; Poco X8 Pro — контрольное, но не единственное целевое устройство.
 
-The detailed release baseline is documented in [RELEASE_NOTES.md](RELEASE_NOTES.md). Earlier entries below are retained as project history.
+Подробности исходной версии приведены в [заметках к релизу](RELEASE_NOTES.md). Более ранние записи ниже сохранены как история проекта.
 
 ## 1.0.1 · Главное меню и отрисовка
 
@@ -26,29 +26,29 @@ The detailed release baseline is documented in [RELEASE_NOTES.md](RELEASE_NOTES.
 - Постоянные открытия/ядра и незавершённые забеги мигрируют; запись проверяется перед фиксацией, очередь наследия ограничена и защищена от потери наград и повторного зачисления.
 - Три живые эволюции из рабочей ветки вошли в основу; остальные будущие этапы не объявляются готовыми.
 - Явная проверка стабильных обновлений GitHub и загрузка APK через браузер; Android подтверждает установку.
-- Release APK 1.0.0/code100, прежняя подпись, INTERNET только для обновлений, без видеороликов.
+- Релизный APK 1.0.0/code100, прежняя подпись, INTERNET только для обновлений, без видеороликов.
 
-## 0.11.0 — Living mutations
+## 0.11.0 — Живые мутации
 
-- One working tentacle per skill rank (1–10); limbs extend from living tissue toward targets. Multiple foes share the existing total volley damage, preserving slow combat.
-- All 18 skills have visible anatomy; breathing glands, beating cilia/flagella, metabolic flow and catalytic folds. Quality pigments tint corresponding organs; rare membrane veins and evolved double veins remain on the organism.
-- Green actual-healing numbers batch regeneration ticks and exclude overheal. Infection gains a colored skin, vascular growth and a screen-size status label; enzymes have a distinct amber skin.
-- Animated cyst opening with cosmetic rolling icons, tier-colored burst and framed final choices. Skip and X are safe; animations neither grant rewards nor consume gameplay RNG.
-- Blue/purple/gold fragments retain rarity during digestion; acquisitions flash and identify the changed organ/quality.
-- Cache combined player anatomy, reuse the feeding poses prepared for physical contact, reduce rare-vein anchor searches and cache reveal frames.
-- Added actual-damage, healing, cyst geometry/lifecycle and all-skill native render regressions. No videos.
+- По одному рабочему щупальцу на ранг навыка (1–10); отростки тянутся от живой ткани к целям. Несколько противников делят прежний общий урон залпа, сохраняя медленный темп боя.
+- Все 18 навыков имеют видимую анатомию: дыхательные железы, пульсирующие реснички/жгутики, метаболический поток и каталитические складки. Пигменты качества окрашивают соответствующие органы; редкие сосуды мембраны и развитые двойные сосуды остаются на организме.
+- Зелёные числа показывают фактическое лечение, объединяют тики регенерации и не учитывают избыточное лечение. Инфекция получила окрашенную оболочку, сосудистые разрастания и статусную метку, размер которой зависит от экрана; у ферментов отдельная янтарная окраска.
+- Добавлено анимированное раскрытие цисты с декоративной прокруткой значков, вспышкой цвета уровня и оформлением итогового выбора. Пропуск и закрытие крестиком безопасны; анимация не выдаёт награды и не расходует игровой генератор случайных чисел.
+- Синие, фиолетовые и золотые фрагменты сохраняют редкость во время переваривания; получение подсвечивается и показывает изменившийся орган и качество.
+- Кэшируется объединённая анатомия игрока, повторно используются позы кормления, подготовленные для физического контакта, сокращён поиск опор редких сосудов и кэшируются кадры появления.
+- Добавлены нативные регрессионные проверки фактического урона, лечения, геометрии/жизненного цикла цисты и отрисовки всех навыков. Видеоролики не создавались.
 
 ## 0.10.0
 
-Source-specific louder damage audio and one smooth movement voice; bounded actual combat attribution/history and direct journal. Persistent quality, six recipe evolutions, deterministic cyst rewards and atomic/deferred choices; numerical context-aware comparisons. Edible enemy markers, wide touch scrollbars and fixed modal close controls. Cached synergies/enemy anatomy/per-frame clone positions, bounded statistics summaries, paired profiling. Original save identity and no-video delivery retained.
+Добавлены более выразительные звуки урона для конкретных источников и один плавный вариант звука движения; ограниченная история фактического боевого вклада и прямой журнал. Сохранены качество, шесть эволюций рецептов, детерминированные награды цист и атомарный/отложенный выбор; добавлены числовые сравнения с учётом контекста. Добавлены съедобные маркеры врагов, широкие сенсорные полосы прокрутки и закреплённые кнопки закрытия модальных окон. Кэшируются синергии, анатомия врагов и позиции клонов по кадрам; сводки статистики ограничены, профилирование проводится попарно. Идентичность исходного сохранения и выпуск без видео сохранены.
 
 ## 0.9.0
 
-Aquatic caustics and layered parallax matter, rounded directional organism lighting, recessed anatomy, detailed procedural tissue terrain. Single indexed mesh per terrain chunk; bounded palette/density/optical caches; staggered particle currents. Safe triangulated fallback for damaged nonradial jelly contours; corrected per-depth haze transforms. Native static QA and paired long-run evidence in docs/performance/0.9.0.md. No videos.
+Добавлены водные каустические эффекты и многослойная параллаксная материя, мягкое направленное освещение организмов, углублённая анатомия и детализированная процедурная ткань ландшафта. Для каждого участка ландшафта используется единая индексированная сетка; кэши палитры, плотности и оптики ограничены; потоки частиц распределены по времени. Для повреждённых нерадиальных контуров желе предусмотрен безопасный триангулированный резервный вариант; исправлены преобразования дымки для разных глубин. Добавлены статические нативные проверки качества и парные свидетельства длительных прогонов в `docs/performance/0.9.0.md`. Видеоролики не создавались.
 
 ## 0.8.0
 
-Quieter bounded combat audio; ten explicit synergy visuals; ten organ/six passive ranks with 3/6/10 numeric and visual milestones; larger UI text and accessible actions. Cached native terrain chunks and exploration texture; cached infection anatomy, reduced field/infection draw work; valid wound scars at all health levels. Restored checkpoint impulse vectors. Comparative sustained-play evidence in docs/performance/0.8.0.md.
+Снижена громкость и ограничена частота боевых звуков; добавлены десять отдельных визуальных эффектов синергий; десять рангов органов и шесть рангов пассивных навыков получили числовые и визуальные этапы на 3/6/10 рангах; увеличен текст интерфейса и улучшена доступность действий. Кэшируются нативные участки ландшафта и текстура исследования; кэшируется анатомия инфекции, сокращена работа по отрисовке поля и инфекции; корректно отображаются шрамы ран при любом уровне здоровья. Восстановлены векторы импульса контрольной точки. Сравнительные данные длительной игры приведены в `docs/performance/0.8.0.md`.
 
 # 0.2.0 — 17 ноября 2026
 
