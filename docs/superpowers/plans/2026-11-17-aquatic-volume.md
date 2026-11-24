@@ -1,31 +1,34 @@
-# Aquatic Volume Implementation Plan
+# План реализации водного объёма
 
-> For agentic workers: execute the independent organism, environment and profiling domains, then integrate native verification and review.
+> Исторический план прежнего прототипа. Он описывает выполненные на тот момент задачи и не является инструкцией для текущей разработки на Defold.
 
-**Goal:** Make the world read as water and each amoeba as rounded living tissue while optimizing rendering every release.
+**Цель:** добиться ощущения водной среды и округлой живой ткани амёбы, одновременно оптимизируя отрисовку в каждом выпуске.
 
-**Architecture:** Retain Godot native 2D simulation; use cached static formations, layered particle depth and efficient directional volume geometry. Reuse existing painter/fluid/world interfaces.
+**Архитектура:** сохранить нативную 2D-симуляцию прежнего движка; использовать кэшируемые статические формации, слоистую глубину частиц и эффективную геометрию объёма с учётом направления. Повторно использовать существующие интерфейсы отрисовщика, жидкости и мира.
 
-**Tech stack:** Godot 4.6 GL compatibility, GDScript, canvas shader.
+**Технологии исторической реализации:** Godot 4.6, GL Compatibility, GDScript, canvas shader.
 
-**Spec:** ../specs/2026-11-17-aquatic-volume-design.md
+**Спецификация:** ../specs/2026-11-17-aquatic-volume-design.md
 
-## Global constraints
-- Android offline identity/signature retained; no videos.
-- No gameplay collision/attraction/pigment changes.
-- Deterministic visual RNG independent of combat; bounded caches and wakes.
+## Общие ограничения
 
-## Review focus
-- Damaged/strongly deformed geometry remains triangulatable and feeding attached.
-- Camera movement changes parallax while pause freezes water time.
-- New seed replaces all environment caches, growth zoom does not leave gaps.
-- Bright water and highlights retain danger/loot and player readability.
-- Richer shaders are measured separately from CPU drawing on software Mesa.
+- Сохранить автономную работу Android, идентификатор приложения и подпись; не создавать видеоролики.
+- Не менять столкновения, притяжение и пигментацию в игровом процессе.
+- Генератор случайных чисел для визуальных эффектов должен быть независим от боевого; кэши и потоки частиц должны иметь ограничения.
 
-## Tasks
-- [x] Organism: implement volume helper and integrate painter; validate all-health geometry and cache bounds, native static renders.
-- [x] Environment: enrich cached terrain chunks; test deterministic decoration and unchanged collision/culling.
-- [x] Water: replace faint background with visible caustics/haze; layered bounded particles and soft parallax silhouettes, optimize per-frame flow calculation. Test pause, pan/zoom, reset and boundedness.
-- [x] Integration: static gameplay/development/jaw/gallery QA, full suite and review.
-- [x] Performance: immutable 0.8 baseline and identical-scene 0.9 comparisons; document cost/limits and fix avoidable regressions.
-- [ ] Release: 0.9.0/code9, signed APK verification and published download without video.
+## На что обращать внимание при проверке
+
+- Геометрия тела остаётся пригодной для триангуляции при повреждениях и сильных деформациях; прикреплённая добыча не теряется.
+- Движение камеры меняет параллакс, а пауза останавливает течение времени воды.
+- Новый seed заменяет все кэши окружения; увеличение масштаба при росте не оставляет пустот.
+- Яркая вода и блики не мешают различать опасности, добычу и игрока.
+- Более сложные шейдеры измеряются отдельно от CPU-стоимости построения геометрии на программном Mesa.
+
+## Задачи
+
+- [x] Организм: реализовать вспомогательную геометрию объёма и подключить её к отрисовщику; проверить геометрию при любом уровне здоровья, границы кэша и статические нативные снимки.
+- [x] Окружение: обогатить кэшируемые фрагменты ландшафта; проверить детерминированность декора и неизменность столкновений/отсечения невидимых объектов.
+- [x] Вода: заменить едва заметный фон видимыми каустиками и дымкой; добавить ограниченные слоистые частицы и мягкие силуэты с параллаксом; оптимизировать расчёт потока каждого кадра. Проверить паузу, перемещение камеры, масштабирование, сброс и ограничение числа элементов.
+- [x] Интеграция: статически проверить игровой процесс, развитие, челюсть и галерею; выполнить полный набор проверок и ревью.
+- [x] Производительность: сравнить неизменяемую базу 0.8 с теми же сценами версии 0.9; задокументировать стоимость и ограничения, устранить необязательные регрессии.
+- [ ] Выпуск: версия 0.9.0/code9, проверка подписи APK и публикация загрузки без видеороликов.
