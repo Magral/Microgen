@@ -1,11 +1,34 @@
-# Deliberate fights and development panel
+# Продуманные бои и панель развития
 
-User requests5–30second equal/large fights, visiblygraded remains, side-top Buildbutton insteadofbottomtext, pausedvisualdevelopmentpanel with bonuses/passives/synergies, hit/absorb/dangersound, smallred outgoing/incomingdamage numbers, widerwhale-likemouth, minibosses and morebuildchoices. No videos.
+> Исторический план прежнего прототипа. Упомянутые реализации Godot и пути файлов не являются частью текущей основы Defold.
 
-Domains: main/hud/developmentvisualUI; cachedproceduralAudioBus andmouthgeometry; rootcombat/content/loot/feedback/integration. CombatTissue damagebudget by relativeradius limits burst against peers (~7.5%maxHP/sec) andlarger(~4.5%), elites3.5%, keeping tinyfoodquick. Mouth remains advantage but peer capturethresholdbounded. All damagecentralized for resistance, rednumbers and throttledsounds; transientfeedbackseparatefrompersistentrewardevents.
+## Запросы пользователя
 
-Add4combatids cilia/enzymes/electric/barrier,2passives metabolism/catalysis and6concrete synergies. Two timedminiboss encounters at180/360s withsavedidentity/progress andspecialreward. Rarebodyparts carrygraded amount/pigment andsubtlebrightcolorvalue, notjustlootcolorlabels. Existing savedruns migratebasicallyunlockedcontent. Tests for durationagainsthighburst,damagepopup,tiers,rewardconservation,elitespersistence/contenteffects,GUIpauseandback,audiobudgets,mouthgeometry. Runheadless/native/staticrenders,review,release0.7.0/code7 withsamepackage/key.
+- Бои с равными и крупными противниками продолжительностью 5–30 секунд.
+- Останки с заметно различающимися уровнями качества.
+- Кнопка «Сборка» в боковой верхней части вместо текста внизу.
+- Приостанавливаемая визуальная панель развития с бонусами, пассивными способностями и синергиями.
+- Звуки попадания, поглощения и опасности.
+- Небольшие красные числа исходящего и входящего урона.
+- Более широкая пасть, напоминающая пасть кита, мини-боссы и больше вариантов сборки.
+- Без видеороликов.
 
-Validation: combatmaximum-burst tests measurepeer6.15s,large22.30s,miniboss24.95s. All6newsynergies tested foractualeffects, lootgrade+totalconservation,shieldcapacity,elitespawn/persistence. Reviewerfounduniquemini distancecull; fixedexemptionandred→greenregression. Legacyelitecatchupfirst+20s then>=90sapart, savednexttime. NativeUIinitiallyfoundmutationchoicebelowfold afterillustration/numericbonus additions; choicebuttonmovedabovedescription andhints, nativepipelinepasses. Audio34assertions andmouth8327geometryassertionspass. NewBuildbuttonsupportssecondfingerwhilejoystickheld,Androidback,originpause andpreserveslevel/shopcontext. No videos generated. FinalUItextcleanups/staticcaptures rerun before release.
+## Разделение работ и боевые правила
 
-Finalverification: fullheadless/native/staticrunner exit0, all17headlesssuites plusnative andgame/gallery/development/jawcaptures. Mouth8327, audio34, size120 assertions; pacing peer6.15/giant22.30/mini24.95seconds. Staticdevelopment andjawframes inspected: header/backbutton fit, scrollingcards insidepanel, fullyopening tissuejaw, nobottombuildtext. Nativealsofoundshopbuybelowfold afterexpandedhints; actionmoveddirectlyunderitemtitle andnativepurchase passes.6sourceimportertests pass. AllcodeisGodotnative/proceduralaudio, noexternalruntimeassets. PhysicalAndroidfeel/performanceand speakerbalance remainunverified.
+Области работ: визуальный интерфейс развития в `main/hud`; кэшируемая процедурная аудиошина и геометрия пасти; боевой баланс, содержимое, добыча, обратная связь и интеграция.
+
+Бюджет урона `CombatTissue` зависит от относительного радиуса и ограничивает резкий урон против соперников примерно 7,5% максимального здоровья в секунду, против крупных целей — примерно 4,5%, против элитных — 3,5%. Мелкая добыча при этом должна поглощаться быстро. Пасть остаётся преимуществом, но порог захвата равных ограничен. Крупные враги сильнее повреждают маленького игрока и отступают, если игрок их перерастает. Весь урон проходит через единый путь обработки сопротивления, красных чисел и звуков с ограничением частоты. Временная обратная связь отделена от постоянных событий наград.
+
+Добавить четыре боевых навыка: реснички, ферменты, электричество и барьер; две пассивные способности: метаболизм и катализ; шесть конкретных синергий. Два временных столкновения с мини-боссами — на 180-й и 360-й секундах — с сохраняемыми идентификаторами, прогрессом и особыми наградами. Редкие части тела должны передавать качество, количество и пигмент; различие показывается тонкой яркостью цвета, а не только цветовой меткой добычи. Старые сохранённые забеги мигрируют с базовым набором открытого содержимого.
+
+Тесты должны проверять длительность боёв при высоком уроне, всплывающие числа урона, уровни качества останков, сохранность наград, постоянство элитных противников и эффекты их содержимого, паузу и возврат из GUI, ограничения аудио и геометрию пасти. Проверить headless, нативные сценарии и статические снимки, провести ревью и выпустить 0.7.0/code7 с прежними пакетом и ключом подписи.
+
+## Результаты исторической проверки
+
+Тесты максимального темпа боя измерили продолжительность: соперник — 6,15 с, крупный противник — 22,30 с, мини-босс — 24,95 с. Все шесть новых синергий проверены на реальные эффекты, качество добычи и сохранение общего количества ресурсов, ёмкость щита, появление и сохранение элитных противников. После замечания ревью о специальном отсечении мини-босса на расстоянии добавили исключение и регрессионную проверку RED → GREEN. Для старого сохранения элитный противник впервые появляется с задержкой 20 секунд, затем не чаще чем раз в 90 секунд.
+
+Первоначальная нативная проверка интерфейса обнаружила, что выбор мутации оказался ниже видимой области после добавления иллюстрации и числового бонуса. Кнопку выбора переместили выше описания и подсказок; нативный конвейер прошёл проверку. 34 проверки аудио и 8327 проверок геометрии пасти прошли. Новая кнопка «Сборка» поддерживает касание вторым пальцем при удержании джойстика, кнопку «Назад» Android, паузу из исходного места и сохранение контекста уровня/магазина. Видеоролики не создавались.
+
+Итоговая проверка: полный headless-, нативный и статический набор завершился с кодом 0; прошли все 17 headless-наборов, а также снимки нативного режима, игры, галереи, развития и пасти. Проверки: пасть — 8327, аудио — 34, размеры — 120 утверждений; темп боёв — 6,15/22,30/24,95 секунды. На статических кадрах развития и пасти проверили заголовок, кнопку возврата, прокрутку карточек внутри панели, полное открытие тканевой пасти и отсутствие нижней надписи о сборке.
+
+Нативная проверка также обнаружила, что кнопка покупки в магазине оказалась ниже видимой области после расширения подсказок. Действие переместили сразу под название предмета; нативная покупка прошла. Шесть проверок импортёра исходников прошли. Код прежней реализации использовал встроенные средства Godot и процедурный звук, без внешних ресурсов времени выполнения. Ощущения управления и производительность на физическом Android-устройстве, а также баланс громкости динамика, остались непроверенными.
