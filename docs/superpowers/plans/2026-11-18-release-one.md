@@ -1,56 +1,61 @@
-# Release one implementation plan
+# План реализации первого выпуска
 
-> Implement inline with superpowers:executing-plans; use one independent review before integration.
+> Исторический план этапа 1.1. Текущая основа разработки — Defold; документ сохранён как архивная запись.
 
-**Goal:** Complete roadmap stages 1–2 as the first of four substantial releases.
-**Architecture:** Separate family ownership/persistence from the active simulation; use a small pure model for body/stock transactions and compact paged UI views. Retain current save verification and simulation behavior until their replacements are tested.
-**Tech stack:** Godot 4.6.3, GDScript, signed Android export.
-**Spec:** docs/superpowers/specs/2026-11-18-release-one-design.md
+**Цель:** завершить этапы 1–2 дорожной карты как первый из четырёх крупных выпусков.
 
-## Global constraints
+**Архитектура исторической реализации:** отделить владение семействами и их сохранение от активной симуляции; использовать небольшую чистую модель для транзакций тела/запаса и компактные постраничные представления UI. Существующую проверку сохранений и поведение симуляции не менять, пока замены не пройдут тесты.
 
-No release until both stages form a complete flow. No videos. Preserve existing data, signing identity, size/contact/digestion rules and raw-touch fixes. Families own resources; free equipment exchange cannot lose an organ. Three initial stock cells. Exact form capacities and organ cell costs are provisional balance values, not approved facts. Approved ownership rule: one living heir per family; different families can retain separate live saves. A family can be deleted only after an explicit confirmation covering its life and permanent progress.
+**Технологии:** Godot 4.6.3, GDScript, подписанный экспорт Android.
 
-## Review focus
+**Спецификация:** docs/superpowers/specs/2026-11-18-release-one-design.md
 
-Old ended-but-uncredited lives, failed writes during family switching, duplicate organ IDs, stock overflow during a multi-organ replacement, and view/demo state accidentally written as a live checkpoint.
+## Общие ограничения
 
-## Task 1 — capacity transactions (independent of family lifetime decision)
+Не выпускать релиз, пока оба этапа не образуют полный игровой процесс. Не создавать видео. Сохранить существующие данные, идентичность подписи, правила размера/контакта/переваривания и исправления сенсорного ввода. Ресурсы принадлежат семействам; бесплатный обмен экипировкой не должен приводить к потере органа. Изначально три ячейки запаса. Точные вместимости форм и стоимость органов в ячейках — предварительные значения баланса, а не утверждённые факты. Утверждённое правило владения: одно живое наследие на семейство; разные семейства могут хранить отдельные активные сохранения. Семейство можно удалить только после явного подтверждения, охватывающего его жизнь и постоянный прогресс.
 
-Create `core/organism_slots.gd`; test `tests/test_organism_slots.gd`.
+## На что обращать внимание при ревью
 
-Interfaces: `validate(state: Dictionary) -> String`, `used_cells(state: Dictionary) -> int`, `move(state: Dictionary, id: String, destination: String, replacements: Array=[]) -> Dictionary`, `expand(state: Dictionary, target: String) -> Dictionary`. Result has `ok`, `error`, `state`; success returns a deep copy, failure leaves input untouched. State has body_capacity/stock_capacity, equipped/stock arrays of distinct IDs with positive integer cell costs. Body consumes cell cost; stock consumes one position per organ.
+Старые завершённые, но не засчитанные жизни; ошибки записи при переключении семейства; дублирующиеся идентификаторы органов; переполнение запаса при замене нескольких органов; случайная запись состояния просмотра/демо как живой контрольной точки.
 
-- [x] Write RED tests: large organ displaces several small organs, insufficient body cells, full stock rollback, duplicate IDs, unknown item, invalid destinations and expansion preserving contents.
-- [x] Implement the pure model; run GREEN with no mutation/duplication/loss.
-- [x] Include test in headless suite and record a reviewed working checkpoint.
+## Задача 1. Транзакции вместимости
 
-## Task 2 — family repository and compatibility
+Независимо от решения о сроке жизни семейства.
 
-After the concurrent-life question is settled, define the exact profile/repository schema before code. Keep inactive family state out of active simulation writes. Migrate the old profile once; retain a raw backup and prevent active-checkpoint duplication. RED→GREEN tests for every save invariant in the spec, including atomic switch failure and pending result recovery. Measure writes with several saved families.
+Создать `core/organism_slots.gd`; тесты — `tests/test_organism_slots.gd`.
 
-## Task 3 — compact home and organism views
+Интерфейсы: `validate(state: Dictionary) -> String`, `used_cells(state: Dictionary) -> int`, `move(state: Dictionary, id: String, destination: String, replacements: Array=[]) -> Dictionary`, `expand(state: Dictionary, target: String) -> Dictionary`. Результат содержит `ok`, `error`, `state`; при успехе возвращается глубокая копия, при ошибке входные данные не меняются. Состояние содержит `body_capacity/stock_capacity`, массивы `equipped/stock` с уникальными ID и положительной целочисленной стоимостью в ячейках. Тело расходует указанную стоимость ячеек; запас — одну позицию на орган.
 
-Create modular family-home, body and short picker views; root controller supplies state and callbacks. Native tests must exercise actual viewport resizing, paged live/ancestral families, form selection only in new organism, body-cell selection, stock exchange, back/close and save errors. Inspect native captures. Preserve old legacy data without putting the long generation page back on the main path.
+- [x] Написать RED-тесты: крупный орган вытесняет несколько мелких, недостаточно ячеек тела, откат при заполненном запасе, повторные ID, неизвестный предмет, неверные назначения и расширение с сохранением содержимого.
+- [x] Реализовать чистую модель; получить GREEN без изменения, дублирования или потери данных.
+- [x] Включить тест в headless-набор и зафиксировать проверенную рабочую контрольную точку.
 
-## Task 4 — discoveries and run integration
+## Задача 2. Репозиторий семейств и совместимость
 
-Connect family capacity/stock state to starting/resumed builds and paused in-run swaps. Add discoverable body/stock extensions with permanent family ownership and a compact notice. Keep migrated over-capacity builds intact. Test capture/reward/save-resume/duplicate pickup and family switching. Infinite organ economy and new temporary mutation rules remain release-two work.
+После решения вопроса о параллельных жизнях определить точную схему профиля/репозитория до написания кода. Не допускать записи неактивного состояния семейства в активную симуляцию. Однократно мигрировать старый профиль; сохранять исходную резервную копию и предотвращать дублирование активной контрольной точки. RED → GREEN для каждого инварианта сохранения из спецификации, включая сбой атомарного переключения и восстановление ожидающего результата. Измерить запись нескольких сохранённых семейств.
 
-## Task 5 — verification and publication
+## Задача 3. Компактные экраны дома и организма
 
-Full suite, review, native visual/input checks, ten-minute paired profile and multi-family save measurement against stable 1.0.1. Only after both stages pass: update version/export/manifest, build signed APK and verify package/certificate/assets. Current main auto-publishes; preparation stays on `release/1.1.0` until the publication workflow is made safe for this release.
+Создать модульные представления дома семейства, тела и короткого выбора; корневой контроллер передаёт состояние и обратные вызовы. Нативные тесты должны проверять реальное изменение размера области просмотра, постраничные списки живых/предковых семейств, выбор формы только при создании нового организма, выбор ячеек тела, обмен с запасом, возврат/закрытие и ошибки сохранения. Изучить нативные снимки. Сохранить старые данные, не возвращая длинную страницу поколений на основной путь.
 
-## Verified implementation checkpoint
+## Задача 4. Открытия и интеграция забега
 
-Pavel confirmed one living heir per family, simultaneous lives in different families, and confirmed deletion. Stages 1–2 are implemented: isolated repository and old-save migration; compact paged home/body/stock/legacy views; individual organ identity and transactional swaps; persistent discoverable capacity extensions. Infinite organ economy, new whole-organism mutations, ladder worlds and rebuilt bosses remain releases two–four.
+Подключить вместимость/запас семейства к стартовым и возобновляемым сборкам, а также к обмену во время паузы в забеге. Добавить обнаруживаемые расширения тела/запаса с постоянным владением семьи и компактным уведомлением. Сохранить мигрированные сборки с превышением новой вместимости. Проверить захват/награду/сохранение-возобновление/повторный подбор и переключение семейства. Бесконечная экономика органов и новые правила временных мутаций остаются задачами второго выпуска.
 
-- [x] Family persistence and migration regression tests, including failed writes and active/inactive/last-family deletion.
-- [x] Organ/capacity transactions, instance quality/evolution ownership and descendant inheritance tests.
-- [x] Full local ci/run_tests.py: 72 commands, exit0, no Godot script/errors; six source-importer tests also pass.
-- [x] Native 1280×640/720 layout captures inspected. Raw-touch family paging, deletion cancellation, heir resume and body/stock exchange checked separately.
-- [x] Independent review of family/equipment implementation; the important evolution/quality identity finding reproduced and fixed.
-- [x] Paired ten-minute simulation and native rendering, final repeated native logs clean; multi-family save/switch measurements recorded in docs/performance/1.1.0.md.
-- [x] First signed Android candidate passed CI, package/certificate/version/manifest/hash checked. Final publication build repeats these checks after the late tendril rendering correction.
+## Задача 5. Проверка и публикация
 
-Publication is gated by the final main-branch workflow tests/export/signature/manifest checks. Android version1.1.0/code110. The preparation branch also builds signed artifacts but cannot publish stable releases. Preserve the existing package/certificate. No physical Android FPS or universal performance improvement is claimed; ten-family writes remain a measurable hitch risk. No videos.
+Полный набор тестов, ревью, нативные визуальные/сенсорные проверки, парный десятиминутный профиль и измерение сохранений нескольких семейств относительно стабильной 1.0.1. Только после прохождения обоих этапов: обновить версию/экспорт/манифест, собрать подписанный APK и проверить пакет/сертификат/вложения. Текущая ветка main автоматически публикует релиз; подготовка остаётся в `release/1.1.0`, пока процесс публикации не станет безопасным для этого выпуска.
+
+## Проверенная контрольная точка реализации
+
+Пользователь подтвердил одно живое наследие на семейство, одновременные жизни в разных семействах и возможность удаления с подтверждением. Этапы 1–2 реализованы: изолированный репозиторий и миграция старых сохранений; компактные постраничные экраны дома/тела/запаса/наследия; индивидуальная идентичность органов и транзакционный обмен; постоянные обнаруживаемые расширения вместимости. Бесконечная экономика органов, новые мутации всего организма, миры лестницы и переработанные боссы относятся к выпускам 2–4.
+
+- [x] Регрессионные проверки сохранения семейств и миграции, включая неудачную запись, активное/неактивное состояние и удаление последнего семейства.
+- [x] Транзакции органов/вместимости, владение качеством/эволюцией экземпляров и наследование потомком.
+- [x] Полный локальный `ci/run_tests.py`: 72 команды, код завершения 0, ошибок Godot нет; шесть проверок импортёра исходников также прошли.
+- [x] Изучены нативные снимки компоновки 1280×640/720. Отдельно проверены постраничный список семейств через raw touch, отмена удаления, возобновление наследника и обмен органов между телом/запасом.
+- [x] Независимое ревью реализации семейств/экипировки; существенная проблема идентичности эволюции/качества воспроизведена и исправлена.
+- [x] Выполнены парная десятиминутная симуляция и нативная отрисовка, итоговые нативные журналы чистые; измерения сохранения/переключения нескольких семейств записаны в docs/performance/1.1.0.md.
+- [x] Первый подписанный Android-кандидат прошёл CI; проверены пакет/сертификат/версия/манифест/хэш. Финальная сборка публикации повторяет проверки после позднего исправления отрисовки отростков.
+
+Публикация зависит от итоговых проверок тестов/экспорта/подписи/манифеста в рабочем процессе ветки main. Android-версия 1.1.0/code110. Ветка подготовки также собирает подписанные артефакты, но не может публиковать стабильные релизы. Сохранить существующие пакет и сертификат. Физический FPS Android и универсальное улучшение производительности не заявляются; запись десяти семейств остаётся измеримым риском задержек. Видеоролики не создавать.
