@@ -1,3 +1,5 @@
+local ScreenLayout = require "main.run.screen_layout"
+
 local Interface = {}
 Interface.__index = Interface
 
@@ -31,27 +33,47 @@ function Interface:remember(node)
     return node
 end
 
+function Interface:fit_safe_area()
+    local window_width,window_height=window.get_size()
+    local scene_width,scene_height=gui.get_width(),gui.get_height()
+    local left,right,top,bottom=ScreenLayout.safe_bounds(
+        window_width,window_height,scene_width,scene_height,window.get_safe_area(),42,33)
+    self.safe_width=right-left
+    self.safe_height=top-bottom
+    self.center_x=(left+right)/2
+    self.center_y=(top+bottom)/2
+    self.horizontal_scale=math.min(1,self.safe_width/Interface.width)
+    self.vertical_scale=math.min(1,self.safe_height/Interface.height)
+    self.font_scale=math.min(1,math.sqrt(self.horizontal_scale*self.vertical_scale))
+end
+
 function Interface:widen(width)
-    if width < PANEL_WIDTH then
-        self.horizontal_scale=PANEL_WIDTH/width
-        self.font_scale=math.min(1.18,math.sqrt(self.horizontal_scale))
-    end
+    local target=math.min(PANEL_WIDTH,self.safe_width or PANEL_WIDTH)
+    self.horizontal_scale=target/math.max(1,width)
+    self.font_scale=math.min(1.18,math.sqrt(
+        self.horizontal_scale*(self.vertical_scale or 1)))
 end
 
 function Interface:layout_x(x)
-    return CENTER_X + (x - CENTER_X) * (self.horizontal_scale or 1)
+    local center=self.center_x or CENTER_X
+    return center + (x - CENTER_X) * (self.horizontal_scale or 1)
+end
+
+function Interface:layout_y(y)
+    local center=self.center_y or Interface.height/2
+    return center + (y - Interface.height/2) * (self.vertical_scale or 1)
 end
 
 function Interface:box(x,y,w,h,color)
     x = self:layout_x(x)
     w = w * (self.horizontal_scale or 1)
-    local node = self:remember(gui.new_box_node(vmath.vector3(x,y,0),vmath.vector3(w,h,0)))
+    local node = self:remember(gui.new_box_node(vmath.vector3(x,y,0),vmath.vector3(w*(self.horizontal_scale or 1),h*(self.vertical_scale or 1),0)))
     gui.set_color(node,color or DARK)
     return node
 end
 
 local function place_text(self,x,y,message,scale,color,width,center)
-    local node = self:remember(gui.new_text_node(vmath.vector3(x,y,0),message))
+    local node = self:remember(gui.new_text_node(vmath.vector3(x,self:layout_y(y),0),message))
     gui.set_font(node,"interface")
     gui.set_pivot(node,center and gui.PIVOT_CENTER or gui.PIVOT_W)
     gui.set_scale(node,vmath.vector3(scale or 1,scale or 1,1))
@@ -101,9 +123,11 @@ function Interface:panel(title,subtitle,close,size,variant)
     local w = size or 1545
     local left = (Interface.width-w)/2
     self.panel_width=w
-    self.horizontal_scale,self.font_scale=nil,nil
     local backdrop=variant=="mutation" and vmath.vector4(.008,.023,.035,.30) or SHADE
-    self:box(1230,540,2460,1080,backdrop)
+    local shade=self:remember(gui.new_box_node(
+        vmath.vector3(CENTER_X,Interface.height/2,0),
+        vmath.vector3(Interface.width,Interface.height,0)))
+    gui.set_color(shade,backdrop)
     self:widen(w)
     local shell=self:surface(1230,540,w,1038,"panel")
     gui.set_color(shell,vmath.vector4(.54,.84,.85,variant=="mutation" and .12 or .76))
@@ -139,6 +163,7 @@ end
 function Interface:fit_text(x,y,message,scale,shade,width,height,center)
     self.card_font = self.card_font or gui.get_font_resource("interface")
     width = width * (self.horizontal_scale or 1)
+    height = height * (self.vertical_scale or 1)
     scale = scale * (self.font_scale or 1)
     local metrics
     for _ = 1, 7 do
@@ -223,7 +248,8 @@ end
 function Interface:clear()
     for i=#self.nodes,1,-1 do gui.delete_node(self.nodes[i]) end
     self.nodes,self.buttons,self.panel_width = {},{},nil
-    self.horizontal_scale,self.font_scale = nil,nil
+    self.horizontal_scale,self.vertical_scale,self.font_scale = nil,nil,nil
+    self.center_x,self.center_y,self.safe_width,self.safe_height = nil,nil,nil,nil
 end
 
 function Interface:visible(value)
