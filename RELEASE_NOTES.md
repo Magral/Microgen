@@ -1,17 +1,30 @@
-# Микроген 1.1.0 · Семейства и организм
+# Microgen · Defold 1.5.7
 
-Первый из четырёх крупных выпусков новой дорожной карты: этапы 1–2.
+**Status:** released  
+**Engine:** Defold 1.5.7  
+**Android build/version code:** 157  
+**Architecture:** ARM64 (`arm64-v8a`)  
+**Package:** `org.magral.microgen.defold`  
+**Minimum Android API:** 26  
+**Orientation:** landscape
 
-- Несколько независимых семейств. У каждого один живой наследник, собственное сохранение жизни, органы, ядра и наследие. Продолжение возвращает именно к выбранному организму; создание другого семейства сохраняет предыдущие.
-- Удаление семейства — через отдельное подтверждение. Остальные семейства сохраняются. Старый профиль переносится в первое семейство с резервной копией.
-- Компактный экран тела: крупный живой организм, ячейки органов, три стартовых места запаса, свойства, связи и развитие выбранного органа. Коллекции листаются короткими страницами; главный экран без прокрутки.
-- Разная вместимость форм. Крупные органы занимают несколько ячеек; перестановка во время жизни ставит бой на паузу и бесплатна. Снятые органы сохраняются, переполнение не уничтожает находку.
-- Расширения тела и запаса находятся в микромире и остаются у семейства после любой гибели. Наследник получает сохранённые органы с их качеством и эволюциями.
-- Исправлена редкая ошибка поверхности щупальца при складывании назад. Экран тела создаёт только видимые ячейки; сохранение активного состояния не копирует отброшенные архивы семейств.
-- Старые исследования, признаки, отпечатки и журнал сохранены в коротких вкладках. Сводка показывает урон, лечение, средний DPS и последние источники повреждений.
+## Changes
 
-Бесконечное усиление и расщепление органов, новая система временных мутаций, лестница процедурных этапов и новая постановка боссов относятся к следующим выпускам 1.2–1.4. Текущие ранги и рецепты эволюции пока сохраняют прежние пределы.
+- Expanded compact windows in landscape mode.
+- Increased text size and touch targets in the codex, organ lists, legacy screens and other menus.
+- Moved the organism summary tabs to the bottom, making more room for the heading and cards.
+- Enlarged the map on the transition screen while preserving its proportions.
 
-Android 1.1.0/code110; прежние package name и подпись. APK можно установить поверх старой игры. Проверка обновлений запускается вручную; скачивание открывается в браузере, установку подтверждает Android. Видео не создавались. Физический телефон в среде разработки недоступен; настольные измерения не являются Android FPS.
+## Development baseline
 
-Проверки: [семейства и организм](docs/development/families-1.1.md), [измерения производительности](docs/performance/1.1.0.md).
+- Tag: `defold-1.5.7`
+- Commit: `95f1925571010b0b7ee552d387f5e41450c13e1b`
+- Project directory: `prototypes/defold`
+
+## Follow-up
+
+The next priority is a systematic interface adaptation pass across Android resolutions, aspect ratios, pixel densities and safe areas. Poco X8 Pro is the control device for hands-on checks; it is not the only supported target.
+
+These release changes are targeted improvements, not a claim of complete cross-device UI validation.
+
+[Release page](https://github.com/Magral/Microgen/releases/tag/defold-1.5.7) · [Roadmap](ROADMAP.md)
