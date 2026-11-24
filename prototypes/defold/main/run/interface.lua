@@ -156,7 +156,10 @@ function Interface:meter(left,y,w,h,fill)
 end
 
 function Interface:image(atlas,frame,x,y,w,h)
-    local node=self:box(x,y,w/(self.horizontal_scale or 1),h,vmath.vector4(1,1,1,1))
+    local horizontal=self.horizontal_scale or 1
+    local vertical=self.vertical_scale or 1
+    local uniform=math.min(horizontal,vertical)
+    local node=self:box(x,y,w*uniform/horizontal,h*uniform/vertical,vmath.vector4(1,1,1,1))
     gui.set_texture(node,atlas)
     gui.play_flipbook(node,frame)
     return node
