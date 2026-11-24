@@ -42,13 +42,13 @@ function Interface:fit_safe_area()
     self.safe_height=top-bottom
     self.center_x=(left+right)/2
     self.center_y=(top+bottom)/2
-    self.horizontal_scale=math.min(1,self.safe_width/Interface.width)
-    self.vertical_scale=math.min(1,self.safe_height/Interface.height)
+    self.horizontal_scale=math.max(.01,math.min(1,self.safe_width/Interface.width))
+    self.vertical_scale=math.max(.01,math.min(1,self.safe_height/Interface.height))
     self.font_scale=math.min(1,math.sqrt(self.horizontal_scale*self.vertical_scale))
 end
 
 function Interface:widen(width)
-    local target=math.min(PANEL_WIDTH,self.safe_width or PANEL_WIDTH)
+    local target=math.max(1,math.min(PANEL_WIDTH,self.safe_width or PANEL_WIDTH))
     self.horizontal_scale=target/math.max(1,width)
     self.font_scale=math.min(1.18,math.sqrt(
         self.horizontal_scale*(self.vertical_scale or 1)))
