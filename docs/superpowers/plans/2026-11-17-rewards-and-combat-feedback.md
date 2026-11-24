@@ -1,11 +1,17 @@
-# Rewards and combat readability, 0.10.0
+# Награды и читаемость боя, версия 0.10.0
 
-User priorities: stronger informative hurt/movement sounds, visible incoming damage sources with history, rare valuable map clumps, quality/weapon-passive evolution inspired by Vampire Survivors, numerical build comparisons/statistics. Additional steering: clearly mark edible enemies; wide touch scrollbar and close X on every menu.
+> Исторический план прежнего прототипа; он сохранён как архив проектных решений.
 
-- Preserve size-first combat, animated body contact digestion, original save identity, native procedural visual quality and no videos.
-- Quality is an original setting adaptation: four named grades with real strength factors 1/1.12/1.25/1.45; old saves have ordinary quality. Six evolution recipes require organ rank6 + matching passive rank3 and a valuable cyst reward. Existing ten immediate synergies remain.
-- Root owns simulation: actual damage attribution and bounded aggregated history, actual damage/healing/blocked/kill totals, persistent cysts and stable atomic queued reward choices, damage tags on all attacks, sources on hostile projectiles/fields/collisions. Grades apply through model helpers to keep tooltips and combat aligned.
-- Independent domains: core grade/evolution/inspection; UI numerical comparisons/stats/close/deferred choices/scrollbar; audio cached louder differentiated damage + movement loop and pure statistics; world eligible/enemy markers, source arrows and cysts/minimap; immutable baseline profiling.
-- Mandatory choice menus can be closed temporarily; a pending action badge reopens them. No automatic reopen loop, no loss or reroll from closing/reloading. Reward claim validates slot replacement before any mutation or queue pop.
-- Verify old save migration and single-grant reward restoration, DOT history conservation, source propagation, real-vs-nominal damage labels, quality/evolution numerical equivalence, marker eligibility, pause/mute/voice bounds, native touch and static menu/game renders.
-- Profile identical late-run scenes and long-run resource growth; include concrete optimization (cached synergies, actor organ recipes, once-per-draw clones), never infer Android FPS from desktop Mesa.
+## Приоритеты пользователя
+
+Более выразительные и информативные звуки повреждения/движения; видимые источники входящего урона и история; редкие ценные скопления на карте; развитие качества и сочетаний оружия/пассивных способностей по мотивам Vampire Survivors; числовое сравнение сборок и статистика. Дополнительные указания: ясно отмечать съедобных врагов; сделать широкую сенсорную полосу прокрутки и кнопку закрытия X в каждом меню.
+
+## Согласованные ограничения и устройство работ
+
+- Сохранить бой, в котором размер важнее всего, а контактное переваривание тела анимировано; не менять идентичность сохранений, нативное процедурное качество графики и правило отсутствия видеороликов.
+- Качество — адаптация оригинальной настройки: четыре именованных уровня с реальными коэффициентами силы 1 / 1,12 / 1,25 / 1,45; в старых сохранениях качество считается обычным. Шесть рецептов эволюции требуют ранг 6 соответствующего органа и ранг 3 подходящей пассивной способности, а также ценную награду цисты. Существующие десять немедленных синергий сохраняются.
+- Корневой модуль отвечает за симуляцию: фактическую атрибуцию урона и ограниченную агрегированную историю, реальные итоги урона/лечения/блокирования/убийств, постоянные цисты и стабильные атомарные очереди выбора наград, метки урона для всех атак, источники для вражеских снарядов/полей/столкновений. Уровни качества применяются через вспомогательные методы модели, чтобы подсказки и бой совпадали.
+- Независимые области: качество/эволюция/осмотр в ядре; числовые сравнения, статистика, закрытие, отложенный выбор и полоса прокрутки в UI; кэшированный более громкий различимый урон, цикл движения и чистая статистика в аудио; маркеры допустимых врагов/источников, цисты и мини-карта в мире; неизменяемый профиль производительности для сравнения.
+- Обязательные меню выбора можно временно закрыть; значок ожидающего действия открывает их снова. Нет автоматического цикла повторного открытия, потери или переброса при закрытии/перезагрузке. Получение награды проверяет замену слота до любого изменения состояния или удаления элемента из очереди.
+- Проверить миграцию старых сохранений и однократное восстановление награды, сохранение истории периодического урона, передачу источников, различие фактического и номинального урона, числовое соответствие качества/эволюций, допустимость маркеров, границы паузы/беззвучного режима/голосов, нативный ввод и статические кадры меню/игры.
+- Профилировать одинаковые поздние сцены и рост ресурсов в длительном забеге; включить конкретные оптимизации (кэш синергий, рецепты органов акторов, позиции клонов один раз за кадр). Не делать выводы о FPS Android по настольному Mesa.
