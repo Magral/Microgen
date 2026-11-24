@@ -1,30 +1,30 @@
 # Microgen · Defold 1.5.7
 
-**Status:** released  
-**Engine:** Defold 1.5.7  
-**Android build/version code:** 157  
-**Architecture:** ARM64 (`arm64-v8a`)  
-**Package:** `org.magral.microgen.defold`  
-**Minimum Android API:** 26  
-**Orientation:** landscape
+**Статус:** выпущена  
+**Движок:** Defold 1.5.7  
+**Номер сборки/версии Android:** 157  
+**Архитектура:** ARM64 (`arm64-v8a`)  
+**Идентификатор пакета:** `org.magral.microgen.defold`  
+**Минимальная версия Android:** API 26  
+**Ориентация:** альбомная
 
-## Changes
+## Изменения
 
-- Expanded compact windows in landscape mode.
-- Increased text size and touch targets in the codex, organ lists, legacy screens and other menus.
-- Moved the organism summary tabs to the bottom, making more room for the heading and cards.
-- Enlarged the map on the transition screen while preserving its proportions.
+- Расширены компактные окна в альбомной ориентации.
+- Увеличены размер текста и сенсорные области в кодексе, списках органов, экранах наследия и других меню.
+- Вкладки сводки организма перенесены вниз, чтобы освободить больше места для заголовка и карточек.
+- Карта на экране перехода увеличена с сохранением пропорций.
 
-## Development baseline
+## Исходная версия для разработки
 
-- Tag: `defold-1.5.7`
-- Commit: `95f1925571010b0b7ee552d387f5e41450c13e1b`
-- Project directory: `prototypes/defold`
+- Тег: `defold-1.5.7`
+- Коммит: `95f1925571010b0b7ee552d387f5e41450c13e1b`
+- Каталог проекта: `prototypes/defold`
 
-## Follow-up
+## Следующий этап
 
-The next priority is a systematic interface adaptation pass across Android resolutions, aspect ratios, pixel densities and safe areas. Poco X8 Pro is the control device for hands-on checks; it is not the only supported target.
+Следующий приоритет — системная адаптация интерфейса под разрешения, соотношения сторон, плотность пикселей и безопасные области Android. Poco X8 Pro используется для практической проверки, но не является единственным целевым устройством.
 
-These release changes are targeted improvements, not a claim of complete cross-device UI validation.
+Изменения этого релиза — точечные улучшения, а не подтверждение полной проверки интерфейса на всех устройствах.
 
-[Release page](https://github.com/Magral/Microgen/releases/tag/defold-1.5.7) · [Roadmap](ROADMAP.md)
+[Страница релиза](https://github.com/Magral/Microgen/releases/tag/defold-1.5.7) · [Дорожная карта](ROADMAP.md)
