@@ -1,15 +1,28 @@
-# Organic assimilation implementation plan
+# План реализации органического поглощения
 
-Goal: fragments visibly cross the living membrane and dissolve inside; unique readable infection/four synergy effects; menu exit.
-Architecture: keep deterministic gameplay, procedural Godot rendering and original Android identity. Pure absorption geometry maps saved progress through contact/crossing/dissolution and local membrane bulge. After crossing, fragment is internal and follows player until digestion completes. Transient capped combat effects report real triggers; no RNG consumption for decorations.
+> Исторический план прежнего прототипа. Технологические решения и пути файлов ниже относятся к старой реализации, а не к текущей версии на Defold.
 
-- [ ] Red tests: physical internal capture follows movement and saves/restores; delayed conserved rewards. Pure pose crosses actual contour, late inclusion inside, bounded triangulatable body. Real synergy/infection trigger events, capped effects and pause expiry. Menu exit present.
-- [ ] Implement game/absorption.gd geometry, simulation internal state/effect triggers, organism_painter.gd layered inclusions and deforming membrane. World uses common pose for corpses/live engulf and renders no generic progress ring.
-- [ ] game/organic_fx.gd draws organic threads/spore mycelium/chromatic layered waves and motes; infected enemy tissue; mutation and digestion tissue pulse. Integrate events with world, preserve pause and budgets.
-- [ ] Add menu exit using existing save/quit behavior. Version0.4.0/code4. Add deterministic engine preview of absorption and combat effects; test headless/native/display, inspect extracted frames, review, build/release and verify APK.
+**Цель:** показать, как фрагменты проходят через живую мембрану и растворяются внутри; добавить различимые эффекты заражения и четырёх синергий, а также выход в меню.
 
-Design choices: translucent microscopic body horror from the user's “Нечто” reference, readable colored living tissues. No image assets or dependencies needed for procedural shape animation. Whole-body membrane absorption; no mouth-only pickup. Visible mutation response is feedback, not a new random upgrade rule.
+**Архитектура:** сохранить детерминированный игровой процесс, процедурную отрисовку прежнего движка и исходную идентичность Android. Чистая геометрия поглощения преобразует сохранённый прогресс через этапы контакта, пересечения мембраны и растворения, включая локальное выпячивание мембраны. После пересечения фрагмент становится внутренним и следует за игроком до завершения переваривания. Временные боевые эффекты сообщают о реальных срабатываниях и имеют ограниченное количество; декоративные эффекты не расходуют игровой генератор случайных чисел.
 
-Scope update from user: cumulative pigment mixing after absorbing colored tissue. core/pigment.gd stores weighted optical density and finite body pigment turnover, with JSON defaults for old saves. Merged corpse payload conserves incoming pigment mass and density. Color is applied to body and clone cytoplasm; incoming tissue shows its own pigment before dissolution. This is an artistic approximation of translucent pigments.
+## План работ
 
-Verification: all local suites pass (core26, simulation131, genome15064, jelly3929, harvest34, absorption8001 assertions; UI/input/fluid/FX/pigment/native zero failures); importer6 pass. Displayed 360-frame real digestion/combat capture inspected as contact sheets. Reviewer findings fixed: omitted engulfed prey stay visible; central fragments do not jump outward at capture; capped remains conserve full pigment density/mass. Menu layout adjusted after screenshot showed exit initially below fold; exit now shares visible row with gallery. UI/native rechecked after layout change. Physical Android performance remains unverified.
+- [ ] Сначала написать падающие тесты: внутренний захваченный фрагмент следует за движением и сохраняется/восстанавливается; награда выдаётся с задержкой и без потери ресурсов. Геометрическая поза действительно пересекает контур и в конце полностью оказывается внутри; тело остаётся ограниченным и пригодным для триангуляции. Проверить реальные события срабатывания синергий и заражения, ограничение числа эффектов и истечение эффектов на паузе. Проверить наличие выхода в меню.
+- [ ] Реализовать геометрию в `game/absorption.gd`, внутреннее состояние и события эффектов в симуляции, многослойные включения и деформацию мембраны в `organism_painter.gd`. Мир использует общую позу для поглощения останков и живых организмов; универсальное кольцо прогресса не рисуется.
+- [ ] В `game/organic_fx.gd` отрисовать органические нити, споровый мицелий, многослойные цветные волны и частицы; добавить заражённую ткань врагов, пульсацию тканей при мутациях и переваривании. Подключить события к миру, сохранить корректную паузу и ограничения ресурсов.
+- [ ] Добавить выход в меню с использованием существующей логики сохранения и завершения. Версия 0.4.0/code4. Подготовить детерминированный просмотр поглощения и боевых эффектов; проверить headless, нативный и экранный режимы, изучить извлечённые кадры, провести ревью, собрать выпуск и проверить APK.
+
+## Принятые художественные решения
+
+Полупрозрачный микроскопический боди-хоррор по мотивам пользовательского референса «Нечто», с хорошо различимыми цветными живыми тканями. Для процедурной анимации формы не требуются растровые изображения или внешние зависимости. Мембрана поглощает всё тело; подбор добычи не ограничивается одной пастью. Видимая реакция мутации служит обратной связью, а не новым случайным правилом получения улучшений.
+
+## Уточнение требований пользователя
+
+После поглощения окрашенной ткани пигменты должны накапливаться и смешиваться. `core/pigment.gd` хранит взвешенную оптическую плотность и конечный оборот пигмента тела; для старых сохранений предусмотрены значения по умолчанию в JSON. Объединённый payload останков сохраняет массу и плотность поступившего пигмента. Цвет тела и цитоплазмы клона обновляется; поступившая ткань сохраняет собственный цвет до растворения. Это художественное приближение поведения полупрозрачных пигментов.
+
+## Проверка исторической реализации
+
+Все локальные наборы тестов прошли: core — 26, simulation — 131, genome — 15064, jelly — 3929, harvest — 34, absorption — 8001 утверждение; UI, ввод, жидкость, FX, пигмент и нативные проверки — без ошибок; импортёр — 6 успешных проверок. Просмотрена контактная подборка из 360 кадров реального переваривания и боя.
+
+Исправлены замечания ревью: пропущенная добыча оставалась видимой; центральные фрагменты не выпрыгивали наружу в момент захвата; ограниченное число останков сохраняло полную плотность и массу пигмента. Выход из меню был сначала ниже видимой области; после просмотра снимка экрана его переместили в один видимый ряд с галереей. Интерфейс и нативные проверки после этого повторили. Физическая производительность на Android осталась непроверенной.
