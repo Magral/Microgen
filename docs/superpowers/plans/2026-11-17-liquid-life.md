@@ -1,27 +1,36 @@
-# Liquid Life 0.3.0 implementation plan
+# План реализации «Живая жидкость» 0.3.0
 
-Goal: movement from any free screen point, directional jelly anatomy in visibly flowing liquid, and a slower harvest-based combat loop.
-User requirements: no left-only control, living membranes respond to movement, microscopic space feels liquid, dead enemies leave parts consumed gradually, fewer and tougher foes.
+> Исторический план прежнего прототипа; текущая разработка Microgen ведётся на Defold.
 
-## Modules and interfaces
-- main.gd / ui/hud.gd: unhandled touches anywhere in viewport start joystick; actual buttons keep GUI priority. Passive HUD must not consume touches. Update instructions.
-- game/jelly_motion.gd: RefCounted visual spring; init(rest_angle), step(dt, actual_velocity), deform_point(p,phase), deform_points(points,phase), angle_delta(). Substeps and bounded strain; no gameplay RNG/collision changes.
-- game/organism_painter.gd: optional JellyMotion argument; common deformation for membrane, tissues and organ attachment anchors. No per-frame recipe regeneration.
-- game/fluid_view.gd + assets/liquid.gdshader: liquid background, coherent suspended particles and bounded wake history. update(dt,sim,viewport_size), emit_wake(world_pos,velocity,radius). Pause freezes effects; no gameplay forces from shader.
-- game/world_view.gd: track actual world displacement for player/enemies/clones; prune motion states; draw soft body fragments and absorption progress.
-- game/simulation.gd: player_velocity, remains:Array, digesting_id:int; fragment dictionaries with id,pos,vel,r,genome,part,dna,bio,progress (0..1),duration,infected. Enemy.engulf normalized progress. Slow movement with drag, reduced/tougher waves, progressive living absorption, corpse harvest before rewards. Save/restore all progress with safe old-save defaults. Named ENEMY_CAP=28, REMAINS_CAP=96; preserve material value when compacting at cap.
+**Цель:** движение одним пальцем из любой свободной точки экрана, направленная анатомия желе в заметно текущей жидкости и более медленный боевой цикл, основанный на сборе добычи.
 
-## Tasks and checks
-1. Test input at right/top/bottom/passive HUD, outside bounds, release/multitouch, button priority. Observe red; remove restriction and fix passive blockers.
-2. Test jelly directional elongation, heading turn, idle local wave, stop overshoot/settling, dt invariance, bounded triangulatable outlines. Observe red, implement spring/deformer, integrate all anatomy.
-3. Test fluid vector finiteness/coherence, bounded particles/wakes and pause; render real animation frames for inspection.
-4. Test delayed rewards, lingering fragments, interrupted/resumed digestion, progressive prey absorption, material conservation at cap, fewer tougher enemies and player inertia. Update old instant-consumption assumptions rather than weaken assertions. Core/simulation/genome suites stay green.
-5. Update 0.3.0/code3 with same package/key; native touch and graphics tests; inspect moving frames/clip, review, push tested source and verify GitHub Actions signed APK/release.
+**Требования пользователя:** управление не должно быть привязано только к левой стороне экрана; живые мембраны реагируют на движение; микроскопическое пространство ощущается жидким; погибшие враги оставляют фрагменты, которые постепенно поглощаются; противников меньше, но они прочнее.
 
-## Execution notes
-Fresh clone of Magral/Microgen at d3f24e2, branch fix/free-touch-jelly. Baseline core/simulation/genome/UI pass. Native run locally needs Xorg dummy because xvfb-run is absent; CI provides Xvfb. Independent simulation/tests work may proceed separately from input/rendering with the interfaces above; only the coordinator edits shared render/UI/CI files or commits.
+## Модули и интерфейсы исторической реализации
 
-## Verification outcome
-Implemented all five tasks. Native displayed tests cover free points on each side, passive health HUD, second-finger ownership/release, and pause with finger 1 while finger 0 holds the joystick. Ignore synthesized mouse presses in joystick handling; GUI retains engine emulation.
-Final local checks: core26, simulation131, genome15064, jelly3929, harvest30 assertions; UI/input/fluid/native suites zero failures; six importer tests pass. Real game/gallery frames and 180-frame motion recording render without engine errors. Inspected six motion frames showing local membrane deformation, changing heading, tissue attachment and wake trails. Review found and fixed a regenerating-enemy residual-engulf immunity regression using shared eligibility.
-Local graphics use Xorg dummy/llvmpipe; performance on physical Android remains unverified. GitHub Actions builds with original development signing key and publishes APK/source/previews.
+- `main.gd` / `ui/hud.gd`: необработанные касания в любой точке области просмотра запускают джойстик; настоящие кнопки сохраняют приоритет GUI. Пассивный HUD не должен перехватывать касания. Обновить подсказки.
+- `game/jelly_motion.gd`: визуальная пружинная модель RefCounted; методы `init(rest_angle)`, `step(dt, actual_velocity)`, `deform_point(p,phase)`, `deform_points(points,phase)`, `angle_delta()`. Подшаги и ограниченное растяжение; без изменений игрового генератора случайных чисел и столкновений.
+- `game/organism_painter.gd`: необязательный аргумент JellyMotion; общая деформация мембраны, тканей и опорных точек органов. Не пересоздавать рецепт каждый кадр.
+- `game/fluid_view.gd` и `assets/liquid.gdshader`: жидкий фон, согласованные взвешенные частицы и ограниченная история следов. Методы `update(dt,sim,viewport_size)`, `emit_wake(world_pos,velocity,radius)`. Пауза замораживает эффекты; шейдер не создаёт игровых сил.
+- `game/world_view.gd`: отслеживать фактическое перемещение игрока, врагов и клонов; удалять устаревшие состояния движения; рисовать мягкие фрагменты тела и прогресс поглощения.
+- `game/simulation.gd`: `player_velocity`, `remains:Array`, `digesting_id:int`; словари фрагментов с полями `id,pos,vel,r,genome,part,dna,bio,progress` (0..1), `duration,infected`. Нормализованный прогресс поглощения врага. Замедленное движение с сопротивлением, уменьшенные волны более прочных врагов, постепенное поглощение, переваривание останков до выдачи наград. Сохранять и восстанавливать весь прогресс, задавая безопасные значения по умолчанию для старых сохранений. Именованные ограничения `ENEMY_CAP=28`, `REMAINS_CAP=96`; при уплотнении на пределе сохранять ценность материалов.
+
+## Задачи и проверки
+
+1. Проверить ввод справа, сверху, снизу, поверх пассивного HUD, за пределами экрана, отпускание и несколько касаний, приоритет кнопок. Сначала увидеть падение теста, затем снять ограничение и устранить пассивные перехватчики.
+2. Проверить направленное растяжение желе, поворот направления, локальную волну в покое, отсутствие перелёта и затухание, независимость от dt, ограниченные контуры, пригодные для триангуляции. Сначала зафиксировать падение, затем реализовать пружину/деформатор и подключить всю анатомию.
+3. Проверить конечность и согласованность векторов жидкости, ограничение частиц/следов и паузу; отрисовать реальные анимированные кадры для просмотра.
+4. Проверить задержанные награды, сохраняющиеся фрагменты, прерывание и продолжение переваривания, постепенное поглощение добычи, сохранение материалов при достижении лимита, уменьшение количества более прочных врагов и инерцию игрока. Обновить старые предположения о мгновенном поглощении, не ослабляя проверки. Наборы core/simulation/genome должны оставаться зелёными.
+5. Обновить версию до 0.3.0/code3 с теми же пакетом и ключом; проверить нативный сенсорный ввод и графику, изучить движущиеся кадры/клип, провести ревью, отправить проверенные исходники и проверить подписанный APK/релиз в GitHub Actions.
+
+## Примечания по выполнению
+
+Свежий клон Magral/Microgen на ревизии `d3f24e2`, ветка `fix/free-touch-jelly`. Базовые наборы core/simulation/genome/UI прошли. Для локального нативного запуска требовался Xorg dummy, поскольку `xvfb-run` отсутствовал; CI предоставляет Xvfb. Независимые работы над симуляцией и тестами могли выполняться отдельно от ввода/отрисовки по указанным интерфейсам; только координатор изменял общие файлы рендеринга/UI/CI и создавал коммиты.
+
+## Результат исторической проверки
+
+Реализованы все пять задач. Нативные отображаемые тесты охватывают свободные точки на каждой стороне экрана, пассивный HUD здоровья, владение вторым пальцем/отпускание и паузу при удержании джойстика пальцем 0 и касании пальцем 1. Синтезированные нажатия мыши игнорируются обработчиком джойстика; GUI сохраняет штатную эмуляцию движка.
+
+Итоговые локальные проверки: core — 26, simulation — 131, genome — 15064, jelly — 3929, harvest — 30 утверждений; UI, ввод, жидкость и нативные наборы — без ошибок; шесть проверок импортёра прошли. Реальные кадры игры/галереи и запись 180 кадров движения отрисованы без ошибок движка. Изучены шесть кадров движения: локальная деформация мембраны, смена направления, крепление тканей и следы. Ревью выявило и помогло исправить регрессию: повторно появляющийся враг сохранял остаточную невосприимчивость к поглощению; исправление использовало общую проверку допустимости цели.
+
+Локальная графика использовала Xorg dummy/llvmpipe; производительность на физическом Android-устройстве осталась непроверенной. GitHub Actions собирал APK с исходным ключом подписи разработки и публиковал APK, исходники и предварительные материалы.
