@@ -1,30 +1,35 @@
-# Render cost reduction implementation plan
+# План сокращения стоимости отрисовки
 
-**Goal:** Reduce repeated CPU work in the current living visuals before expanding the ecosystem.
-**Architecture:** Preserve simulation and authored visual budgets. Build volume positions with native packed-array transforms; cache exact quantized-normal shading in a bounded cache. If profiling supports it, replace repeated effect trigonometry with equivalent reusable bases.
-**Tech stack:** Godot 4.6.3, GDScript, GL compatibility.
-**Spec:** ROADMAP.md unchanged visual/optimization requirements and docs/performance/1.0.0.md measured regression.
+> Исторический план оптимизации прежнего прототипа. Он не является инструкцией для текущей версии Defold.
 
-## Constraints and review focus
+**Цель:** сократить повторяющуюся работу CPU в текущей живой графике до расширения экосистемы.
 
-- No balance, save format, controls or population-cap changes; no videos.
-- Preserve torn/irregular triangulation, pigment, health shading, animated deformation and functional organ counts.
-- Cache must distinguish changed palette, phase, light normals and detail, remain bounded, and survive caller mutation via explicit packed-array copies.
-- Compare with immutable 1.0 `526922c` using the same replay checkpoints. Desktop results are not Android FPS.
-- Work on `perf/volume-fx`; no automatic 1.0 republishing from main.
+**Архитектура:** сохранить симуляцию и заданные бюджеты визуальных эффектов. Строить позиции объёма с помощью преобразований packed arrays на стороне движка; кэшировать точное затенение по квантованным нормалям в кэше с ограниченным размером. Если профилирование подтвердит пользу, заменить повторяющуюся тригонометрию эффектов эквивалентными повторно используемыми базисами.
 
-## Tasks
+**Технологии прежней реализации:** Godot 4.6.3, GDScript, GL Compatibility.
 
-- [x] Add a regression for repeated lighting reuse plus changing contour, pigment, health, phase/detail and bounded cache; retain an independent reference for original mesh math. Run RED.
-- [x] Implement volume packed transforms and exact shading reuse; run GREEN plus volume, tissue, feeding and native art checks.
-- [x] Inspect paired timings; retain effect-basis optimization only if needed and verified against original formulas.
-- [x] Run full suite and ten-minute/native profile comparison, inspect native snapshots, review the diff, record limits and measured results.
-- [ ] Commit and push the isolated improvement branch for a reviewable checkpoint. User steering adds the fullscreen non-scrolling home fix; prepare and verify 1.0.1/code101 before stable publication.
+**Спецификация:** неизменённые визуальные/оптимизационные требования ROADMAP.md и измеренная регрессия docs/performance/1.0.0.md.
 
-Progress: Baseline profile started from immutable 1.0. Prior 1.0 complete CI was green; this branch begins clean. Current scope is renderer optimization, not a claim that the next ecosystem stage is finished.
+## Ограничения и на что обратить внимание при ревью
 
-User steering: main screen must never scroll and its background must cover the viewport. Add dedicated HUD home layout, keep all actions (including pending/continue/exit), verify fit at 1280×720, 1600×720 and 1280×640, and native touch. No new dependency or image asset is required.
+- Не менять баланс, формат сохранений, управление или лимиты количества объектов; не создавать видеоролики.
+- Сохранить рваную/нерегулярную триангуляцию, пигмент, затенение по здоровью, анимированную деформацию и число функциональных органов.
+- Кэш должен различать изменившиеся палитру, фазу, нормали освещения и детализацию, иметь ограниченный размер и защищаться от изменения массивов вызывающим кодом через явные копии packed arrays.
+- Сравнивать с неизменяемой версией 1.0 `526922c`, используя те же контрольные точки повтора. Настольные результаты не являются FPS Android.
+- Работать в `perf/volume-fx`; не допускать автоматической повторной публикации 1.0 из main.
 
-Review: independent read-only review found two issues and both were fixed: use complete cache keys rather than 32-bit hash identity (concrete collision RED→GREEN), and resize logical viewport in layout tests. No remaining reported blockers or minors. Native home screenshot inspected at 1280×640 with both optional actions visible. Repeated lighting tests, original mesh/color reference, 354162 volume assertions and native touch are green. Optional effect-basis work is deferred: this correction remains scoped to menu layout and volume computation; mixed timing results are documented without claiming overall speedup.
+## Задачи
 
-Verification: complete ci/run_tests.py exit0, zero SCRIPT ERROR/ERROR; six importer tests pass; native home/touch/art/cache and 13 captures pass. Baseline and final native profile logs have no script errors; the 10-minute replay has matching checkpoint kills and bounded counters. Final publication gate remains signed Android CI.
+- [x] Добавить регрессионную проверку повторного использования освещения с изменением контура, пигмента, здоровья, фазы и детализации, а также ограниченности кэша; сохранить независимый эталон исходной математики сетки. Сначала получить RED.
+- [x] Реализовать преобразования packed arrays объёма и точное повторное использование затенения; получить GREEN, а также пройти проверки объёма, ткани, кормления и нативной графики.
+- [x] Изучить парные измерения; оптимизацию базисов эффектов оставлять только при подтверждённой необходимости и совпадении с исходными формулами.
+- [x] Выполнить полный набор и десятиминутное/нативное сравнение профилей, изучить нативные снимки, проверить diff, записать ограничения и результаты измерений.
+- [ ] Зафиксировать и отправить изолированную ветку улучшения для ревью. По дополнительному указанию пользователя также исправить полноэкранный главный экран без прокрутки; подготовить и проверить 1.0.1/code101 перед стабильной публикацией.
+
+Прогресс: исходный профиль начат с неизменяемой версии 1.0. Предыдущий полный CI для 1.0 был успешен; эта ветка начинается с чистого состояния. Текущая область работ — оптимизация отрисовщика, а не утверждение, что следующий этап экосистемы завершён.
+
+Уточнение пользователя: главный экран никогда не должен прокручиваться, а фон должен покрывать всю область просмотра. Добавить отдельную компоновку HUD для главного экрана, сохранить все действия (включая ожидающие/продолжение/выход), проверить размещение при 1280×720, 1600×720 и 1280×640, а также нативный сенсорный ввод. Новые зависимости и изображения не требуются.
+
+Ревью: независимая проверка только для чтения выявила две проблемы, обе исправлены: использовать полные ключи кэша, а не идентичность 32-битного хэша (конкретная коллизия RED → GREEN), и изменять логическую область просмотра в тестах компоновки. Других блокирующих/малых замечаний не осталось. Нативный снимок главного экрана 1280×640 проверен: видны оба дополнительных действия. Повторные проверки освещения, эталонной сетки/цвета, 354162 проверки объёма и нативный сенсорный ввод прошли. Дополнительная оптимизация базисов эффектов отложена: исправление ограничено компоновкой меню и вычислением объёма; смешанные результаты измерений задокументированы без заявления об общем ускорении.
+
+Проверка: полный `ci/run_tests.py` завершился с кодом 0, SCRIPT ERROR/ERROR отсутствуют; шесть проверок импортёра прошли; нативные проверки главного экрана/ввода/графики/кэша и 13 снимков прошли. В итоговых нативных журналах базовой и новой версии ошибок скриптов нет; десятиминутный повторный прогон имеет совпадающие убийства на контрольных точках и ограниченные счётчики. Итоговое условие публикации — успешный подписанный Android CI.
