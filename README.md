@@ -5,7 +5,7 @@
 ## Основа проекта
 
 - **Движок:** Defold
-- **Принятая исходная версия:** [релиз Defold 1.5.7](https://github.com/Magral/Microgen/releases/tag/defold-1.5.7)
+- **Принятая исходная версия:** [релиз Defold 1.5.7](https://github.com/Magral/Microgen/releases/tag/defold-1.5.7) · [исходники проекта в этом релизе](https://github.com/Magral/Microgen/tree/defold-1.5.7/prototypes/defold)
 - **Контрольный коммит:** `95f1925571010b0b7ee552d387f5e41450c13e1b`
 - **Каталог проекта:** `prototypes/defold`
 - **Платформа:** Android, ARM64 (`arm64-v8a`)
@@ -27,7 +27,7 @@ Poco X8 Pro используется для практической прове�
 
 Эти улучшения не означают, что каждый экран уже проверен на всех классах Android-устройств. Следующий приоритет разработки — универсальная адаптация интерфейса.
 
-Заметки к релизу: [Defold 1.5.7](prototypes/defold/RELEASE_NOTES.md) · [Все релизы](https://github.com/Magral/Microgen/releases)
+Заметки к релизу: [Defold 1.5.7](https://github.com/Magral/Microgen/blob/defold-1.5.7/prototypes/defold/RELEASE_NOTES.md) · [Все релизы](https://github.com/Magral/Microgen/releases)
 
 ## Игровой процесс и визуальное направление
 
@@ -44,7 +44,7 @@ Poco X8 Pro используется для практической прове�
 ## Сборка и открытие проекта
 
 1. Установите Defold Editor.
-2. Откройте файл `prototypes/defold/game.project`.
+2. Откройте файл [`prototypes/defold/game.project`](https://github.com/Magral/Microgen/blob/defold-1.5.7/prototypes/defold/game.project) из принятого релиза Defold 1.5.7.
 3. Используйте настройки экспорта Android и предусмотренные проектом процедуры сборки.
 
 Параметры Android находятся в `prototypes/defold/game.project`. Подтверждённые значения: базовая область интерфейса 2460×1080, полноэкранный режим, альбомная ориентация, пакет `org.magral.microgen.defold`, номер версии 157 и минимальный Android API 26.
@@ -54,5 +54,5 @@ Poco X8 Pro используется для практической прове�
 - [ROADMAP.md](ROADMAP.md) — текущие приоритеты и критерии готовности.
 - [RELEASE_NOTES.md](RELEASE_NOTES.md) — описание текущего релиза.
 - [CHANGELOG.md](CHANGELOG.md) — история изменений проекта.
-- [Заметки к Defold 1.5.7](prototypes/defold/RELEASE_NOTES.md) — сведения о релизе в каталоге проекта.
+- [Заметки к Defold 1.5.7](https://github.com/Magral/Microgen/blob/defold-1.5.7/prototypes/defold/RELEASE_NOTES.md) — сведения о релизе в каталоге проекта.
 - [Адаптация интерфейса](docs/development/ui-adaptation.md) — технический аудит и план адаптации.
