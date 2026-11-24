@@ -1,14 +1,22 @@
-# Size-based interaction and organic anatomy
+# Взаимодействие по размеру и органическая анатомия
 
-Goal: size ratio governs capture HP, pull speed, impact damage and enemy speed; all attraction remains smooth; less geometric tissue, effective directed mouth. User also requires builds without videos.
+> Исторический план прежнего прототипа. Описанные показатели производительности не относятся к текущей сборке Defold.
 
-Core rules: tiny food can be consumed healthy, smaller competitors at high HP, peers at lower HP; slightly larger peers inflict small collision damage, big foes inflict more and swim slower. Ordinary large foes resist all pull; only severely damaged borderline larger targets yield to developed pull. Mouth has a front cone matching facing, adds damage and raises capture threshold, faster frontal digestion. Side membrane absorption remains possible under stricter baseline rules.
+**Цель:** отношение размеров определяет порог поглощения, скорость притяжения, урон от столкновения и скорость врагов; притяжение всегда плавное; геометрии ткани меньше, направленная пасть эффективнее. Пользователь также требует выпускать сборки без видеороликов.
 
-- Test pure ratio profiles, monotonic thresholds/speed/impact, no ordinary giant pull, no-position-change in acid-grasp attack, smooth continuous movement, directed mouth advantage; verify save facing.
-- Implement core/size_rules.gd; simulation continuous drag/pull rather than position shifts, directional bite, size-driven capture and collision, facing persistence. Keep corpse/loot guaranteed contact capture.
-- Simplify permanent anatomy to soft tissue/one subdued nucleus and faint granules; remove hard circles/plates/vesicles inside; organic detailed opening/folds/radula mouth and transient dissolving chunks.
-- Remove movie generation, ffmpeg dependency and mp4 release assets; retain native and static rendering verification. Version0.6.0; review/build signed APK with source and change notes.
+## Основные правила
 
-User refinement: organs must merge into one mutating organism; optimization required because phone lags. Renderer now uses rooted appendages and body-pigment folds, one subdued nucleus, transient chunks. Profiled identical600-frame dense scenes before/after; renderingCPU32.329→18.790ms, nativecalls5464.7→1899.5. These are desktop softwareGL measurements, not AndroidFPS. Fixed rare fragment polygon errors via precomputed valid hulls.
+Мелкую пищу можно поглощать при полном здоровье, соперников поменьше — при высоком здоровье, равных — при более низком. Немного более крупные соперники наносят небольшой урон при столкновении, большие враги наносят больше урона и плавают медленнее. Обычные крупные враги сопротивляются любому притяжению; уступают только сильно повреждённые цели, немного превосходящие игрока, и только при развитом притяжении. Пасть имеет передний конус, соответствующий направлению взгляда, добавляет урон и повышает порог захвата, ускоряет фронтальное переваривание. Боковое поглощение мембраной остаётся возможным, но по более строгим базовым правилам.
 
-Review fixed size-threshold monotonicity at ratio0.95 and aligned physical/visible mouth heading with resolved movement at walls. SIZE_RULES120assertions pass; mouth23; fragment540valid procedural polygons. Full native/headless/static suite rerun before release. No movie/ffmpeg/mp4 generation or release assets remain.
+## План работ
+
+- Проверить чистые профили отношения размеров, монотонность порогов/скорости/урона от столкновения, отсутствие обычного притяжения гигантов, отсутствие мгновенного перемещения при кислотном захвате, непрерывность плавного движения и преимущество направленной пасти; проверить сохранение направления в сохранениях.
+- Реализовать `core/size_rules.gd`; в симуляции использовать непрерывное сопротивление/притяжение вместо скачков позиции, направленный укус, захват и столкновения по размеру, сохранение направления. Гарантировать захват останков/добычи при контакте.
+- Упростить постоянную анатомию до мягкой ткани, одного приглушённого ядра и едва заметных гранул; убрать жёсткие круги/пластины/пузырьки внутри; добавить органичную детализированную раскрывающуюся пасть, складки, радулу и временные растворяющиеся фрагменты.
+- Удалить создание видеороликов, зависимость от ffmpeg и MP4 из релизов; сохранить нативную и статическую проверку отрисовки. Версия 0.6.0; ревью и сборка подписанного APK с исходниками и заметками об изменениях.
+
+## Уточнение пользователя и результат
+
+Органы должны сливаться в один изменяющийся организм; требовалась оптимизация из-за задержек на телефоне. Отрисовщик использовал укоренённые отростки и складки пигмента тела, одно приглушённое ядро и временные фрагменты. Сравнение одинаковых плотных сцен из 600 кадров до/после показало: CPU отрисовки 32,329 → 18,790 мс, нативные вызовы 5464,7 → 1899,5. Это измерения настольного программного GL, а не FPS Android. Редкие ошибки полигонов фрагментов исправили предварительным вычислением корректных выпуклых оболочек.
+
+Ревью исправило монотонность порога размера при отношении 0,95 и согласовало физическое/видимое направление пасти с разрешённым движением у стен. Прошли 120 утверждений SIZE_RULES, 23 проверки пасти и 540 проверок корректных процедурных полигонов фрагментов. Полный нативный/headless/статический набор повторили перед выпуском. Создание видео, зависимость ffmpeg и MP4 в материалах релиза отсутствуют.
