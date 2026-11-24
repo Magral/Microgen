@@ -1,15 +1,17 @@
 # Профиль Tecno POVA 5
 
+> Архивный отчёт по прежнему контрольному устройству. Tecno POVA 5 больше не является актуальным контрольным устройством проекта; текущая контрольная модель — Poco X8 Pro. Все измерения ниже относятся к историческим сборкам прежнего прототипа, а не к текущему Defold.
+
 По [спецификации TECNO](https://ru.tecno-mobile.com/phones/tech-specs/tecspecs/pova-5/) у телефона Helio G99, 8 ГБ памяти и экран 2460×1080 в альбомной ориентации с частотой до 120 Гц. Цель игры — 60 кадров в секунду после прогрева, около 16,7 мс на кадр.
 
 Мир занимает весь экран. Мир и интерфейс рисуются отдельно, так что уменьшение буфера мира сохраняет резкость текста, размер кнопок и координаты касания.
 
-| Режим мира | Примерный размер буфера | Доля пикселей экрана |
-| --- | --- | ---: |
-| Стартовый | 1229×540 | 25% |
-| Первая ступень | 983×432 | 16% |
-| Вторая ступень | 765×336 | 10% |
-| Нижний предел | 615×270 | 6% |
+|Режим мира|Примерный размер буфера|Доля пикселей экрана|
+|---|---|---:|
+|Стартовый|1229×540|25%|
+|Первая ступень|983×432|16%|
+|Вторая ступень|765×336|10%|
+|Нижний предел|615×270|6%|
 
 Автоматика снижает разрешение после двух двухсекундных окон, если FPS ниже 57 и 10% кадров дольше 18,5 мс. При FPS ниже 35 хватает одного окна. Частота рендеринга не снижается преднамеренно.
 
@@ -17,37 +19,35 @@
 
 ## Что проверили по Godot и Android
 
-| Наблюдение | Применение в «Микрогене» |
-| --- | --- |
-| [Godot 4.6 и Swappy](https://docs.godotengine.org/en/4.6/classes/class_projectsettings.html#class-projectsettings-property-display-window-frame-pacing-android-swappy-mode) | Автоматический режим может закрепить частоту на 30 FPS при частых промахах. Сохраняем цель 60 и сравниваем времена кадров на телефоне. |
-| [Godot об отрисовке на мобильных GPU](https://docs.godotengine.org/en/4.6/tutorials/performance/gpu_optimization.html) и [счётчики Mali-G57](https://support.arm.com/documentation/102659/0109/Content-behavior?lang=en) | Сокращаем количество полупрозрачных слоёв и пикселей. Для сравнения отдельно записываем высоту буфера, чтобы различить эффект разрешения и работы CPU. |
-| [CanvasItem и триангуляция](https://docs.godotengine.org/en/4.6/classes/class_canvasitem.html) и [обсуждение draw_mesh на GitHub](https://github.com/godotengine/godot/issues/117312) | Неподвижным элементам подходит кэш геометрии. Для живого контура сокращаем число слоёв и проверяем замеры перед заменой команд рисования на Mesh. |
-| [GPU-срезы Android](https://developer.android.com/agi/sys-trace/long) и [рекомендации ADPF](https://developer.android.com/games/optimize/adpf/best-practices-adpf) | При низком FPS и свободном CPU снимаем системный трейс на Android. Сравниваем начало забега и тот же бой после прогрева. |
+|Наблюдение|Применение в «Микрогене»|
+|---|---|
+|[Godot 4.6 и Swappy](https://docs.godotengine.org/en/4.6/classes/class_projectsettings.html#class-projectsettings-property-display-window-frame-pacing-android-swappy-mode)|Автоматический режим может закрепить частоту на 30 FPS при частых промахах. Сохраняем цель 60 и сравниваем времена кадров на телефоне.|
+|[Godot об отрисовке на мобильных GPU](https://docs.godotengine.org/en/4.6/tutorials/performance/gpu_optimization.html) и [счётчики Mali-G57](https://support.arm.com/documentation/102659/0109/Content-behavior?lang=en)|Сокращаем количество полупрозрачных слоёв и пикселей. Для сравнения отдельно записываем высоту буфера, чтобы различить эффект разрешения и работы CPU.|
+|[CanvasItem и триангуляция](https://docs.godotengine.org/en/4.6/classes/class_canvasitem.html) и [обсуждение draw_mesh на GitHub](https://github.com/godotengine/godot/issues/117312)|Неподвижным элементам подходит кэш геометрии. Для живого контура сокращаем число слоёв и проверяем замеры перед заменой команд рисования на Mesh.|
+|[GPU-срезы Android](https://developer.android.com/agi/sys-trace/long) и [рекомендации ADPF](https://developer.android.com/games/optimize/adpf/best-practices-adpf)|При низком FPS и свободном CPU снимаем системный трейс на Android. Сравниваем начало забега и тот же бой после прогрева.|
 
-Комментируемый [спад FPS на Mali-G52](https://github.com/godotengine/godot/issues/109251) воспроизводили в вулканическом 3D-примере. Для нашей 2D-сцены сначала нужен замер Compatibility (OpenGL ES) на самом POVA 5. Смена рендерера уместна как отдельное сравнение на том же телефоне и в той же сцене.
+Комментируемый [спад FPS на Mali-G52](https://github.com/godotengine/godot/issues/109251) воспроизводили в вулканическом 3D-примере. Для прежней 2D-сцены сначала требовался замер Compatibility (OpenGL ES) на самом POVA 5. Смена рендерера уместна как отдельное сравнение на том же телефоне и в той же сцене.
 
 ## Настольные результаты стабильной 1.4.1
 
-Godot 4.6.3, программный OpenGL Mesa llvmpipe с двумя потоками и одинаковое окно 2460×1080. База — `4ff1560` до оптимизации, затем тот же сценарий с мобильным профилем и буфером 1639×720.
+Godot 4.6.3, программный OpenGL Mesa llvmpipe с двумя потоками и одинаковое окно 2460×1080. База — 4ff1560 до оптимизации, затем тот же сценарий с мобильным профилем и буфером 1639×720.
 
-| Сцена | CPU на подготовку отрисовки, мс | Медиана кадра, мс | p95 кадра, мс |
-| --- | ---: | ---: | ---: |
-| Бой через 360 с | 41,4 → 38,9 | 134,1 → 129,3 | 162,7 → 205,1 |
-| Сцена с заполненными лимитами | 192,0 → 64,4 | 492,4 → 215,6 | 540,4 → 252,5 |
+|Сцена|CPU на подготовку отрисовки, мс|Медиана кадра, мс|p95 кадра, мс|
+|---|---:|---:|---:|
+|Бой через 360 с|41,4 → 38,9|134,1 → 129,3|162,7 → 205,1|
+|Сцена с заполненными лимитами|192,0 → 64,4|492,4 → 215,6|540,4 → 252,5|
 
-В сцене с заполненными лимитами подготовка отрисовки быстрее на 66%, а p95 кадра ниже на 53%. В обычном бою средняя нагрузка отрисовки снизилась, но вырос p95. За 36 000 шагов симуляции среднее время шага составило 2,53 → 2,55 мс. Все пять сохранённых срезов совпали после нормализации идентификатора забега.
+В сцене с заполненными лимитами подготовка отрисовки быстрее на 66%, а p95 кадра ниже на 53%. В обычном бою средняя нагрузка отрисовки снизилась, но вырос p95. За 36 000 шагов симуляции среднее время шага составило 2,53 → 2,55 мс. Все пять сохранённых срезов совпали после нормализации идентификатора забега.
 
-## Замер на телефоне
+## Замер на телефоне в историческом тесте
 
 В тестовой сборке открой **Пауза → Показ FPS**. В бою появятся средняя частота, время для 95% кадров, высота буфера мира, время шага симуляции и время построения динамической графики на CPU. Последний показатель охватывает команды игрового мира, а время работы GPU снимается системным профайлером. Сравни обычный бой, бой через 5–10 минут и встречу с боссом после прогрева. Частота экрана и режим энергопотребления при сравнении сборок должны совпадать.
 
 ## Воспроизведение настольного сравнения
 
-```sh
-LP_NUM_THREADS=2 python3 tools/performance/run_profile.py --commit 4ff1560 --output /tmp/microgen-base
-LP_NUM_THREADS=2 python3 tools/performance/run_profile.py --commit 4ff1560 --output /tmp/microgen-base-wide --snapshots /tmp/microgen-base --native --render-only --pova-size --stress-only
-LP_NUM_THREADS=2 python3 tools/performance/run_profile.py --output /tmp/microgen-pova --snapshots /tmp/microgen-base --native --pova-size --mobile-profile --stress-only
-```
+    LP_NUM_THREADS=2 python3 tools/performance/run_profile.py --commit 4ff1560 --output /tmp/microgen-base
+    LP_NUM_THREADS=2 python3 tools/performance/run_profile.py --commit 4ff1560 --output /tmp/microgen-base-wide --snapshots /tmp/microgen-base --native --render-only --pova-size --stress-only
+    LP_NUM_THREADS=2 python3 tools/performance/run_profile.py --output /tmp/microgen-pova --snapshots /tmp/microgen-base --native --pova-size --mobile-profile --stress-only
 
 Широкое окно и программный OpenGL позволяют сравнить одинаковую сцену. Эти данные не измеряют производительность Mali на физическом телефоне.
 
@@ -57,10 +57,8 @@ LP_NUM_THREADS=2 python3 tools/performance/run_profile.py --output /tmp/microgen
 
 Вторая сборка заменяет мобильные волны и мелкие слои ткани текстурными масками, упрощает геометрию стен. Применение синергий, урон, поглощение и сохранения используют тот же код. Контуры опасных полей остаются видимыми. На стенде с фиксированным буфером 615×270 и 52 эффектами подготовка графики сократилась с 38,1 до 11,1 мс. Медиана кадра в программном OpenGL сократилась со 106 до 46 мс. Это искусственная сцена позднего забега, требующая отдельного замера на POVA 5.
 
-```sh
-MICROGEN_LATE_PROFILE=1 LP_NUM_THREADS=2 python3 tools/performance/run_profile.py --commit 10ce3ce --output /tmp/microgen-late-base --snapshots /tmp/microgen-base --native --render-only --pova-size --mobile-profile --stress-only
-MICROGEN_LATE_PROFILE=1 LP_NUM_THREADS=2 python3 tools/performance/run_profile.py --output /tmp/microgen-late-current --snapshots /tmp/microgen-base --native --render-only --pova-size --mobile-profile --stress-only
-```
+    MICROGEN_LATE_PROFILE=1 LP_NUM_THREADS=2 python3 tools/performance/run_profile.py --commit 10ce3ce --output /tmp/microgen-late-base --snapshots /tmp/microgen-base --native --render-only --pova-size --mobile-profile --stress-only
+    MICROGEN_LATE_PROFILE=1 LP_NUM_THREADS=2 python3 tools/performance/run_profile.py --output /tmp/microgen-late-current --snapshots /tmp/microgen-base --native --render-only --pova-size --mobile-profile --stress-only
 
 ## Третий тест производительности
 
