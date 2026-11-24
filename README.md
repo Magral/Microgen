@@ -1,59 +1,58 @@
 # Microgen · Defold
 
-**Microgen** — Android roguelike auto-battler about the evolution of an amoeba in a procedural micro-world. The player steers the organism with one finger from anywhere on the screen; attacks are automatic. Growth, organs, mutations, pigments, tissue damage and absorption shape both the organism and its build.
+**Microgen** — roguelike auto-battler для Android об эволюции амёбы в процедурном микромире. Игрок управляет организмом одним пальцем из любой точки экрана, а атаки выполняются автоматически. Рост, органы, мутации, пигменты, повреждение тканей и поглощение определяют развитие организма и его боевую сборку.
 
-## Project baseline
+## Основа проекта
 
-- **Engine:** Defold
-- **Current development baseline:** [Defold 1.5.7 release](https://github.com/Magral/Microgen/releases/tag/defold-1.5.7)
-- **Baseline commit:** `95f1925571010b0b7ee552d387f5e41450c13e1b`
-- **Project directory:** `prototypes/defold`
-- **Platform:** Android, ARM64 (`arm64-v8a`)
-- **Package:** `org.magral.microgen.defold`
-- **Android minimum API:** 26
-- **Orientation:** landscape
-- **Build/version code:** 157
-- **Control device:** Poco X8 Pro
+- **Движок:** Defold
+- **Принятая исходная версия:** [релиз Defold 1.5.7](https://github.com/Magral/Microgen/releases/tag/defold-1.5.7)
+- **Контрольный коммит:** `95f1925571010b0b7ee552d387f5e41450c13e1b`
+- **Каталог проекта:** `prototypes/defold`
+- **Платформа:** Android, ARM64 (`arm64-v8a`)
+- **Идентификатор пакета:** `org.magral.microgen.defold`
+- **Минимальная версия Android:** API 26
+- **Ориентация:** альбомная
+- **Номер сборки/версии:** 157
+- **Контрольное устройство:** Poco X8 Pro
 
-The Poco X8 Pro is the reference device for hands-on checks, not the only target device. The goal is broad compatibility with supported Android phones across different resolutions, aspect ratios, pixel densities and display safe areas.
+Poco X8 Pro используется для практической проверки, но не является единственным целевым устройством. Цель — совместимость с поддерживаемыми Android-смартфонами с разными разрешениями, соотношениями сторон, плотностью пикселей и безопасными областями экрана.
 
-## Current release · 1.5.7
+## Текущий релиз · 1.5.7
 
-The Defold 1.5.7 release includes:
-- Wider compact windows in landscape mode.
-- Larger text and touch targets in the codex, organ lists, legacy screens and other menus.
-- Organism summary tabs moved to the bottom to make room for the title and cards.
-- A larger transition map that preserves its proportions.
+В релиз Defold 1.5.7 вошли:
+- Расширение компактных окон в альбомной ориентации.
+- Увеличение текста и областей нажатия в кодексе, списках органов, экранах наследия и других меню.
+- Перенос вкладок сводки организма вниз, чтобы освободить место для заголовка и карточек.
+- Увеличение карты перехода с сохранением пропорций.
 
-These improvements do not yet mean that every screen has been validated across all Android display classes. Universal interface adaptation is the next development priority.
+Эти улучшения не означают, что каждый экран уже проверен на всех классах Android-устройств. Следующий приоритет разработки — универсальная адаптация интерфейса.
 
-Release notes: [Defold 1.5.7](prototypes/defold/RELEASE_NOTES.md) · [All releases](https://github.com/Magral/Microgen/releases)
+Заметки к релизу: [Defold 1.5.7](prototypes/defold/RELEASE_NOTES.md) · [Все релизы](https://github.com/Magral/Microgen/releases)
 
-## Gameplay and visual direction
+## Игровой процесс и визуальное направление
 
-- Procedural biomes, organisms, threats, resources and bosses.
-- Organs, mutations and synergies that change combat and anatomy.
-- DNA, biomass, legacy nuclei and organium as progression resources.
-- Smaller organisms can be pulled in and absorbed; comparable organisms resist, while larger ones must be weakened.
-- Absorbed tissue contributes to the organism and its pigment palette.
-- A living, wet, translucent membrane with a visible core, fibers, pores, vessels, deformation, wounds and organic recovery.
-- On death, tissue fragments retain their original colors and material character; rejoining restores the organism's silhouette.
+- Процедурные биомы, организмы, угрозы, ресурсы и боссы.
+- Органы, мутации и синергии, меняющие бой и анатомию.
+- ДНК, биомасса, ядра наследия и органиум как ресурсы развития.
+- Мелкие организмы притягиваются и поглощаются; сопоставимые по силе сопротивляются, а крупных нужно ослабить.
+- Поглощённая ткань становится частью организма и влияет на его палитру пигментов.
+- Живая влажная полупрозрачная мембрана с видимым ядром, волокнами, порами, сосудами, деформацией, ранами и органическим восстановлением.
+- После гибели фрагменты тканей сохраняют исходные цвета и материальные свойства; соединение фрагментов восстанавливает силуэт организма.
 
-The visual identity is part of the game design: organic tissue should remain cohesive and readable. Generic white geometric debris is not an acceptable substitute for tissue fragments.
+Визуальная целостность — часть игрового дизайна: органическая ткань должна оставаться цельной и читаемой. Обычные белые геометрические обломки не заменяют фрагменты живой ткани.
 
-## Build and open the project
+## Сборка и открытие проекта
 
-1. Install Defold Editor.
-2. Open `prototypes/defold/game.project`.
-3. Use the project's Android export settings and build workflows.
+1. Установите Defold Editor.
+2. Откройте файл `prototypes/defold/game.project`.
+3. Используйте настройки экспорта Android и предусмотренные проектом процедуры сборки.
 
-The Android package settings are maintained in `prototypes/defold/game.project`. Current values include a 2460×1080 design area, immersive mode, landscape orientation, package `org.magral.microgen.defold`, version code 157 and minimum Android API 26.
+Параметры Android находятся в `prototypes/defold/game.project`. Подтверждённые значения: базовая область интерфейса 2460×1080, полноэкранный режим, альбомная ориентация, пакет `org.magral.microgen.defold`, номер версии 157 и минимальный Android API 26.
 
-## Documentation
+## Документация
 
-- [ROADMAP.md](ROADMAP.md) — active priorities and completion criteria.
-- [RELEASE_NOTES.md](RELEASE_NOTES.md) — current release summary.
-- [CHANGELOG.md](CHANGELOG.md) — project change history.
-- [prototypes/defold/RELEASE_NOTES.md](prototypes/defold/RELEASE_NOTES.md) — release-specific Defold notes.
-- [docs/development/ui-adaptation.md](docs/development/ui-adaptation.md) — interface audit and adaptation work.
-
+- [ROADMAP.md](ROADMAP.md) — текущие приоритеты и критерии готовности.
+- [RELEASE_NOTES.md](RELEASE_NOTES.md) — описание текущего релиза.
+- [CHANGELOG.md](CHANGELOG.md) — история изменений проекта.
+- [Заметки к Defold 1.5.7](prototypes/defold/RELEASE_NOTES.md) — сведения о релизе в каталоге проекта.
+- [Адаптация интерфейса](docs/development/ui-adaptation.md) — технический аудит и план адаптации.
