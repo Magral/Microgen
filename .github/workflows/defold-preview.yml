@@ -167,6 +167,7 @@ jobs:
               grep -Fq "MICROGEN BOSS REWARD READY" "$log"
               grep -Fq "MICROGEN LEGACY SCREEN READY" "$log"
               grep -Fq "MICROGEN TISSUE FRACTURE READY" "$log"
+              grep -Fq "MICROGEN TISSUE LIFECYCLE READY" "$log"
               if grep -E "ERROR:SCRIPT|ERROR:RENDER|FATAL" "$log"; then exit 1; fi
               kill -0 "$pid"
               kill -KILL "$pid" 2>/dev/null || true
