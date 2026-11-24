@@ -1,78 +1,79 @@
-# Release 1.2.0 implementation plan
+# План реализации выпуска 1.2.0
 
-**Goal:** Implement roadmap stages 3–4: enduring organ development, specializations, recovery by dismantling and run-only mutations.
-**Architecture:** Keep organ instances in the family equipment model; add family-owned organium and materials to the active profile; apply mathematically bounded growth to the existing combat build. Keep temporary mutations in the live checkpoint and clear them only when the life ends.
-**Tech Stack:** Godot 4.6.3, GDScript, current Android export pipeline.
-**Spec:** docs/superpowers/specs/2026-11-18-release-two-design.md
+> Исторический план прежнего прототипа; текущая версия проекта основана на Defold.
 
-## Implementation and release checkpoint
+**Цель:** реализовать этапы 3–4 дорожной карты: долговременное развитие органов, специализации, восстановление ресурсов разборкой и мутации только текущего забега.
 
-- Added family-owned organium and tissue counters with zero-value migration defaults.
-- Added endless saved organ ranks with a bounded soft-cap for combat math, rising upgrade prices, and visible specialization anatomy.
-- Added atomic upgrade/specialize/dismantle transactions in the organism window; organelles from digested remains are saved in batches to reduce profile writes.
-- Each organ now has two named specializations with its own effect description, synergy bonus and anatomy motif.
-- Reduced organ, mutation and shop cards to core numbers; added a paged Codex for full organ, adaptation, synergy, specialization and evolution descriptions.
-- Complete: temporary mutation choices and anatomy markers, overflow review/install/dismantle/archive, old-checkpoint migration, concise cards with a paged Codex, full visual/native input suite, and ten-minute comparative profiling.
-- Complete locally: full CI test runner and Godot resource import pass. Android export and signature verification are delegated to the repository's pinned GitHub Actions toolchain because Android SDK/build-tools are absent from this environment.
-- Release branch metadata is now 1.2.0/code120. The workflow publishes only tag `v1.2.0`; pushing the branch does not create or replace a stable release.
+**Архитектура прежней реализации:** сохранять экземпляры органов в модели экипировки семейства; добавить принадлежащие семейству органиум и материалы в активный профиль; применять математически ограниченный рост к существующей боевой сборке. Временные мутации остаются в текущей контрольной точке и очищаются только после завершения жизни.
 
-## Global constraints
+**Технологии:** Godot 4.6.3, GDScript, текущий конвейер экспорта Android.
 
-- Existing 1.1.0 family saves and live checkpoints migrate without losing organs or resources.
-- One living heir remains active per family; family resources never cross families.
-- Organ rank has no design maximum; the four rarity grades remain bounded, while all combat values and prices stay finite.
-- Organ exchange remains free; specialization and upgrades have a clear family-resource price.
-- Dismantling requires explicit confirmation and commits with its material refund atomically.
-- Temporary mutations affect the current life only and reset on death.
-- Compact menus, touch sizing, persistent family progression, procedural discoveries, no videos.
+**Спецификация:** docs/superpowers/specs/2026-11-18-release-two-design.md
 
-## Review focus
+## Контрольная точка реализации и выпуска
 
-- Maximum JSON-safe rank/quality, cost overflow and diminishing-return precision.
-- Failed saves during upgrade, specialization, dismantle and reward credit.
-- Old live checkpoints resumed after migration and then ended in death/victory.
-- Same-kind organ instances with different specializations, ranks and qualities.
-- Temporary effects removed on every death path while family currency survives.
+- Добавлены принадлежащие семейству счётчики органиума и ткани с миграцией старых сохранений к нулевым значениям по умолчанию.
+- Добавлены бесконечные сохраняемые ранги органов с ограниченным мягким пределом для боевой математики, растущими ценами улучшения и видимой анатомией специализаций.
+- Добавлены атомарные транзакции улучшения/специализации/разборки в окне организма; органеллы переваренных останков сохраняются пакетами, чтобы уменьшить число записей профиля.
+- У каждого органа теперь две именованные специализации с собственным описанием эффекта, бонусом синергии и анатомическим мотивом.
+- Карточки органов, мутаций и магазина сокращены до основных чисел; добавлен постраничный Кодекс с полными описаниями органов, адаптаций, синергий, специализаций и эволюций.
+- Завершены: временные мутации и анатомические маркеры, проверка/установка/разборка/архивирование избытка, миграция старых контрольных точек, краткие карточки с постраничным Кодексом, полный визуальный/нативный набор ввода и сравнительное десятиминутное профилирование.
+- Локально завершено: полный тестовый запуск CI и импорт ресурсов Godot. Экспорт Android и проверка подписи поручены закреплённому набору инструментов GitHub Actions, поскольку в этой среде отсутствуют Android SDK/build-tools.
+- Метаданные ветки выпуска обновлены до 1.2.0/code120. Рабочий процесс публикует только тег `v1.2.0`; отправка ветки не создаёт и не заменяет стабильный релиз.
 
-## Task 1: Unbounded organ math and family materials
+## Общие ограничения
 
-**Files:** `core/catalog.gd`, `core/organism_equipment.gd`, `core/build_model.gd`, `core/save_store.gd`.
+- Сохранения семейств 1.1.0 и живые контрольные точки мигрируют без потери органов или ресурсов.
+- В каждом семействе остаётся одно активное живое наследие; ресурсы семейств не смешиваются.
+- Ранг органа не имеет проектного максимума; четыре уровня редкости ограничены, все боевые значения и цены остаются конечными.
+- Обмен органами остаётся бесплатным; специализация и улучшения имеют понятную стоимость ресурсов семьи.
+- Разборка требует явного подтверждения и атомарно фиксирует возврат материалов.
+- Временные мутации влияют только на текущую жизнь и сбрасываются после смерти.
+- Компактные меню, размеры сенсорных областей, постоянный прогресс семьи, процедурные открытия, отсутствие видеороликов.
 
-- Define JSON-safe cap `9007199254740991` for stored organ ranks; rarity stays at four clear grades.
-- Define a bounded diminishing-return curve for organ rank and clamp combat multipliers before float overflow.
-- Add family-owned `organium` and per-organ materials to defaults/normalization with zero migration defaults.
-- Keep existing instance identities and aggregate all equipped instances without silently dropping ranks.
+## На что обращать внимание при ревью
 
-## Task 2: Upgrade, specialization and dismantle transactions
+Максимальный JSON-безопасный ранг/качество, переполнение стоимости и точность убывающей отдачи. Неудачные сохранения при улучшении, специализации, разборке и зачислении награды. Возобновление старых живых контрольных точек после миграции с последующим завершением смертью/победой. Экземпляры одного типа органа с разными специализациями, рангами и качеством. Удаление временных эффектов при каждом пути завершения жизни при сохранении семейной валюты.
 
-**Files:** `core/organism_equipment.gd`, `ui/organism_flow.gd`, `main.gd`, `ui/organism_view.gd`.
+## Задача 1. Математика рангов органов и семейные материалы
 
-- Add pure transaction APIs `upgrade(state,id,materials)`, `specialize(state,id,specialization,materials)`, and `dismantle(state,id,materials)` returning `{ok,error,state,materials}`.
-- Use a monotonic price curve and bounded salvage fraction; preview exact prices/refunds.
-- Persist organ changes and live checkpoint together; apply runtime only after successful write.
-- Add compact organ tabs/actions and confirmation for dismantling.
+Файлы прежней реализации: `core/catalog.gd`, `core/organism_equipment.gd`, `core/build_model.gd`, `core/save_store.gd`.
 
-## Task 3: Run rewards and persistent salvage
+- Задать JSON-безопасный предел `9007199254740991` для сохраняемых рангов органов; редкость остаётся на четырёх понятных уровнях.
+- Задать ограниченную кривую убывающей отдачи для ранга органа и ограничивать боевые множители до переполнения float.
+- Добавить принадлежащие семье `organium` и материалы каждого органа в значения по умолчанию/нормализацию с нулевыми миграционными значениями.
+- Сохранять идентификаторы экземпляров и агрегировать все экипированные экземпляры без незаметного отбрасывания рангов.
 
-**Files:** `game/simulation.gd`, `main.gd`, `ui/organism_flow.gd`, `core/save_store.gd`.
+## Задача 2. Транзакции улучшения, специализации и разборки
 
-- Add per-run mutation records and typed family-material discovery events with stable run tokens.
-- Present new organs, materials and temporary mutations through concise level/cyst choices.
-- Preserve found organs/materials through death and prevent duplicate reward credit on restore.
-- Clear temporary mutations on every ended-life path; restore them with an unfinished live checkpoint.
+Файлы: `core/organism_equipment.gd`, `ui/organism_flow.gd`, `main.gd`, `ui/organism_view.gd`.
 
-## Task 4: Visual distinction and compact screens
+- Добавить чистые API-транзакции `upgrade(state,id,materials)`, `specialize(state,id,specialization,materials)`, `dismantle(state,id,materials)`, возвращающие `{ok,error,state,materials}`.
+- Использовать монотонную кривую цен и ограниченную долю возврата; показывать точную стоимость/возврат заранее.
+- Сохранять изменения органов и живую контрольную точку вместе; применять состояние в рантайме только после успешной записи.
+- Добавить компактные вкладки/действия органов и подтверждение разборки.
 
-**Files:** `ui/organism_view.gd`, `ui/organism_flow.gd`, `game/organism_painter.gd`, `game/world_view.gd`, `core/build_inspector.gd`.
+## Задача 3. Награды забега и постоянное восстановление ресурсов
 
-- Show diminishing-return value, next price, specialization, dismantle refund and active synergy changes.
-- Render specialization and temporary mutation as bounded anatomy/effect details.
-- Keep page contents bounded regardless of inventory size.
+Файлы: `game/simulation.gd`, `main.gd`, `ui/organism_flow.gd`, `core/save_store.gd`.
 
-## Task 5: Release integration
+- Добавить записи временных мутаций на забег и типизированные события обнаружения семейных материалов со стабильными токенами забега.
+- Показывать новые органы, материалы и временные мутации в кратких вариантах повышения уровня/выбора цисты.
+- Сохранять найденные органы/материалы после смерти и предотвращать повторное зачисление награды при восстановлении.
+- Очищать временные мутации при любом пути завершения жизни; восстанавливать их из незавершённой контрольной точки.
 
-**Files:** `README.md`, `RELEASE_NOTES.md`, `ROADMAP.md`, `.github/workflows/android.yml`, `project.godot`, `export_presets.cfg`, performance documentation.
+## Задача 4. Визуальные различия и компактные экраны
 
-- [x] Update 1.2.0/code120 and workflow release metadata.
-- [x] Run the established local verification, native screen review, and profile against immutable 1.1.0 baseline.
-- [ ] Push the release branch, wait for GitHub Android export/signature checks, then publish tag v1.2.0 only after they pass.
+Файлы: `ui/organism_view.gd`, `ui/organism_flow.gd`, `game/organism_painter.gd`, `game/world_view.gd`, `core/build_inspector.gd`.
+
+- Показывать убывающую отдачу, следующую цену, специализацию, возврат при разборке и изменения активных синергий.
+- Отображать специализацию и временную мутацию в виде ограниченных анатомических/эффектных деталей.
+- Сохранять ограниченный размер содержимого страницы независимо от размера инвентаря.
+
+## Задача 5. Интеграция выпуска
+
+Файлы: `README.md`, `RELEASE_NOTES.md`, `ROADMAP.md`, `.github/workflows/android.yml`, `project.godot`, `export_presets.cfg`, документация производительности.
+
+- [x] Обновить 1.2.0/code120 и метаданные выпуска в рабочем процессе.
+- [x] Выполнить установленную локальную проверку, ревью нативных экранов и профилирование относительно неизменяемой базы 1.1.0.
+- [ ] Отправить ветку выпуска, дождаться проверок экспорта/подписи Android в GitHub, затем публиковать тег v1.2.0 только после их успешного завершения.
