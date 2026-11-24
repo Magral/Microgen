@@ -1,18 +1,32 @@
-# Growth, contact capture and body damage
+# Рост, захват при контакте и повреждение тела
 
-Goal: early giants become smaller relative to a growing player, contact always captures food quickly with organic animation, attraction unlocks later, bright healing tissue and visible HP damage.
+> Исторический план прежнего прототипа. Описанные ниже файлы и технические решения не относятся к текущей реализации Defold.
 
-Architecture: body radius grows from22 to96 with level/nutrient mass; camera zoom eases out using actual radius, keeping UI fixed and the same enemies/terrain in world space. Persistent regional giants (fixed radius, identity and position) exist from new-run start; nearby ones activate, distant ones render as silhouettes, resume with saved run. Size ratio determines threat/food, with devour permitting weakened peer targets; large enemies damage smaller player more, flee when outgrown. Soft body compresses through existing corridors without changing generation.
+**Цель:** по мере роста игрока прежние гиганты становятся относительно меньше; контакт быстро захватывает пищу с органической анимацией; притяжение открывается позднее; заживляющая ткань ярко видна, а повреждения здоровья отражаются на теле.
 
-Contact: swept segment from previous to current player position tests real membrane outline (same genome/jelly contour from renderer, headless fallback); all touched remains/pickups latch immediately, including full-HP healing food retained on ground. Captured payloads follow organism and finish in0.45–0.75s; delayed reward exactly once. Magnet upgrade attracts uncaptured matter with growing range; base has no remote pull. Preserve legacy checkpoints.
+**Архитектура:** радиус тела растёт с 22 до 96 в зависимости от уровня и массы питательных веществ; камера плавно отдаляется по фактическому радиусу, а интерфейс остаётся неподвижным, как и размеры врагов/ландшафта в мировых координатах. Постоянные региональные гиганты с фиксированными радиусом, идентификатором и позицией существуют с начала нового забега. Ближние активируются, дальние видны силуэтами, а состояние восстанавливается из сохранённого забега. Относительный размер определяет угрозу и пригодность в пищу; ослабленных соперников можно поглотить. Крупные враги сильнее повреждают маленького игрока и убегают, если тот их перерастает. Мягкое тело сжимается в существующих проходах, не меняя генерацию мира.
 
-- Red tests for growth/unchanged foe size, size-tier prey/giants, persistent silhouettes, swept contact capture of all fragments, healing and no full-HP waste, independent simultaneous digestion, attraction upgrades, capture persistence.
-- Implement radius/growth and contact handling in simulation, zoom in world/fluid views, feed multiple captured pieces through existing absorption renderer; add actual HP deformation/scars to painter.
-- Add bright restorative particles in world and corpse drops, effect feedback; HUD shows body growth and warns on low HP.
-- Verify headless/native/render/movie, review, release0.5.0 with original package/signature. No new external dependencies.
+## Контакт и поглощение
 
-User refinement: initial on-screen body doubled by starting camera zoom around3.09 (world radius22, screen radius68). Target screen radius rises toward86 as world body grows to96; same enemies/terrain keep fixed world dimensions. World/fluid transforms preserve HUD/joystick pixel coordinates. Normal fixed middle tier44–48 and regional72–78 giants bridge food-chain progression; boss140 remains apex.
+Перемещённый отрезок от предыдущей до текущей позиции игрока проверяет настоящий контур мембраны (тот же контур генома/желе, что использует отрисовщик; для headless-режима предусмотрен запасной вариант). Все затронутые останки и предметы сразу захватываются, включая пищу для лечения при полном здоровье, которая иначе осталась бы на земле. Захваченные данные следуют за организмом и завершают переваривание за 0,45–0,75 секунды; награда выдаётся ровно один раз.
 
-Verification: full local suites pass: core26, simulation131, genome15064, jelly3929, harvest33, absorption8001, growth/contact20 and tissue damage36491 assertions; UI/input/fluid/FX/pigment/native zero failures; importer6 pass. Real12-second engine clip inspected as a contact sheet showing initial enlarged body, accelerated scale change against same giant, and near-death damage. Review fixes verified: actual damaged/breathing/feeding contact shape, returned unneeded healing, legacy internal digestion<=0.65. Legacy harvest tests now assert irreversible fast capture rather than slow contact interruption, per user's corrected requirements. Fixed-size test fixtures keep material conservation independent of generated tier.
+Улучшение магнита притягивает ещё не захваченную материю с растущего расстояния; базовая форма не притягивает добычу удалённо. Старые контрольные сохранения должны оставаться совместимыми.
 
-Known limitation: soft body retains compact terrain collision to pass original narrow corridors; full physical wall compression not implemented. Physical Android performance and final feel need phone verification.
+## План работ
+
+- Написать падающие тесты роста и неизменности размера врагов, размерных категорий добычи и гигантов, постоянных силуэтов, захвата всех фрагментов при пересечении контура, лечения и отсутствия потерь при полном здоровье, независимого одновременного переваривания, улучшений притяжения и сохранения состояния захвата.
+- Реализовать радиус/рост и обработку контакта в симуляции, масштабирование камеры в отрисовщиках мира и жидкости, передавать несколько захваченных фрагментов через существующий отрисовщик поглощения; добавить фактическую деформацию HP и шрамы в отрисовщик организма.
+- Добавить яркие частицы восстановления в мир и выпадающие останки, обратную связь эффектов; HUD показывает рост тела и предупреждает о низком здоровье.
+- Проверить headless, нативную отрисовку и рендеринг, провести ревью, выпустить 0.5.0 с исходными пакетом и подписью. Новые внешние зависимости не добавлять.
+
+## Уточнения пользователя
+
+Начальный организм на экране должен быть примерно вдвое крупнее: начальный масштаб камеры около 3,09 (радиус тела в мире 22, на экране — 68). По мере роста радиус на экране увеличивается примерно до 86, когда мировой радиус тела достигает 96; те же враги и ландшафт сохраняют размеры в мировых координатах. Преобразования мира и жидкости не затрагивают пиксельные координаты HUD/джойстика. Обычные противники среднего размера — 44–48, региональные гиганты — 72–78, босс — 140.
+
+## Историческая проверка
+
+Все локальные наборы прошли: core — 26, simulation — 131, genome — 15064, jelly — 3929, harvest — 33, absorption — 8001, growth/contact — 20, повреждение тканей — 36491 утверждение; UI, ввод, жидкость, FX, пигмент и нативные проверки — без ошибок; импортёр — 6 успешных проверок. Просмотрен реальный 12-секундный клип как контактная подборка кадров: начальный увеличенный организм, ускоренное изменение масштаба относительно того же гиганта и повреждение тела при почти нулевом здоровье.
+
+Исправления ревью проверены: реальная форма тела при повреждении, дыхании и контакте с пищей; ненужное лечение возвращается; внутреннее переваривание старого сохранения длится не более 0,65 секунды. Старые тесты сбора теперь проверяют необратимый быстрый захват, а не медленное прерывание контакта, в соответствии с уточнёнными требованиями пользователя. Тестовые фикстуры фиксированного размера сохраняют независимость материального баланса от генерируемой категории добычи.
+
+Известное ограничение: мягкое тело использует компактную геометрию столкновений с ландшафтом, чтобы проходить прежние узкие коридоры; полноценное физическое сжатие у стен не реализовано. Производительность на физическом Android-устройстве и окончательные ощущения от управления требуют проверки на телефоне.
