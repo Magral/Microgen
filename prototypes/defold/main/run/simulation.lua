@@ -619,17 +619,32 @@ function Simulation:_store_fragment(fragment)
     V.combine(receiver.pigment, fragment.pigment)
 end
 
+local function tissue_piece(enemy, start, finish, distance)
+    local body_angle = enemy.genome.rotation or 0
+    local anchor = offset(point(), body_angle + (start + finish) * 0.5, distance)
+    return {
+        body_id = enemy.id, body_kind = enemy.kind, body_radius = enemy.r,
+        genome = copy(enemy.genome), body_infected = (enemy.infect or 0) > 0,
+        cut_start = start, cut_end = finish,
+        anchor = anchor, rotation = body_angle, turn = 0,
+        pos = point(enemy.pos.x + anchor.x, enemy.pos.y + anchor.y),
+    }
+end
+
 function Simulation:_fracture_membrane(enemy)
     enemy.fractured = true
     local x, y, length = V.normal(self.player.x - enemy.pos.x, self.player.y - enemy.pos.y)
     local angle = length > 0 and V.angle(x, y) or 0
     local edge = offset(enemy.pos, angle, enemy.r * 0.74)
     local radius = clamp(enemy.r * 0.17, 6, 15)
-    self:_store_fragment({
-        id = self:_id(), pos = edge, vel = offset(point(), angle + 0.3, 19), r = radius, genome = copy(enemy.genome),
-        part = 1, quality = 2, material = "membrane", dna = 2, bio = 1, progress = 0, duration = 0.65,
-        internal = false, infected = false, pigment = V.pigment(Genome.colors(enemy.genome)[1], max(0.5, radius * 0.12)),
-    })
+    local cut_width = 0.58
+    local cut_start = (angle - (enemy.genome.rotation or 0) - cut_width * 0.5) % TAU
+    local part = tissue_piece(enemy, cut_start, cut_start + cut_width, enemy.r * 0.74)
+    part.id, part.vel, part.r = self:_id(), offset(point(), angle + 0.3, 19), radius
+    part.part, part.quality, part.material = 1, 2, "membrane"
+    part.dna, part.bio, part.progress, part.duration = 2, 1, 0, 0.65
+    part.pigment = V.pigment(Genome.colors(enemy.genome)[1], max(0.5, radius * 0.12))
+    self:_store_fragment(part)
     self:_effect("membrane_break", edge, radius * 1.8, 0.65, { ["end"] = offset(edge, angle, radius) })
 end
 
@@ -642,7 +657,6 @@ function Simulation:_leave_remains(enemy)
     local count = clamp(floor(enemy.r / 18) + 1, 2, 8)
     local angle_step = TAU / count
     local radius = max(5, enemy.r * 0.36 / sqrt(count / 3))
-    local visual_scale = clamp(0.95 / sqrt(count / 3), 0.52, 1.2)
     local materials = {"organelle", "membrane", "plasma"}
     local body_angle = enemy.genome.rotation or 0
     local boundaries = {[0] = 0, [count] = TAU}
@@ -660,20 +674,31 @@ function Simulation:_leave_remains(enemy)
         local piece_scale = self.rng:randf_range(0.78, 1.22)
         local radial_angle = angle + self.rng:randf_range(-cut_width * 0.10, cut_width * 0.10)
         local piece_grade = i == 1 and max(1, grade) or max(0, grade - 1)
-        self:_store_fragment({
-            id = self:_id(), pos = offset(enemy.pos, radial_angle, enemy.r * self.rng:randf_range(0.28, 0.46)),
-            vel = offset(point(), radial_angle, self.rng:randf_range(12, 25)), r = radius * piece_scale,
-            genome = copy(enemy.genome), part = sector % #materials, quality = piece_grade,
-            piece_count = count, piece_index = sector, cut_angle = cut_center,
-            cut_half_angle = cut_width * self.rng:randf_range(0.92, 0.99),
-            body_radius = enemy.r, visual_scale = visual_scale * piece_scale,
-            rotation = body_angle + self.rng:randf_range(-0.18, 0.18), spin = self.rng:randf_range(-0.65, 0.65),
-            material = materials[sector % #materials + 1], dna = dna_share, bio = bio_share,
-            progress = 0, duration = self.rng:randf_range(1.2, 2),
-            internal = false, infected = enemy.infect > 0 and i == 1,
-            pigment = V.pigment(Genome.colors(enemy.genome)[1], max(0.5, radius * 0.12)),
-        })
+        local part = tissue_piece(enemy, cut_start, cut_end, enemy.r * self.rng:randf_range(0.28, 0.46))
+        part.id, part.r = self:_id(), radius * piece_scale
+        part.vel = offset(point(), radial_angle, enemy.r * 0.95 + self.rng:randf_range(12, 25))
+        part.part, part.quality = sector % #materials, piece_grade
+        part.piece_count, part.piece_index = count, sector
+        part.spin, part.release_delay = self.rng:randf_range(-0.65, 0.65), 0.10
+        part.material = materials[sector % #materials + 1]
+        part.dna, part.bio, part.progress = dna_share, bio_share, 0
+        part.duration = self.rng:randf_range(1.2, 2)
+        part.infected = enemy.infect > 0 and i == 1
+        part.pigment = V.pigment(Genome.colors(enemy.genome)[1], max(0.5, radius * 0.12))
+        self:_store_fragment(part)
     end
+end
+
+local function boss_pieces(enemy)
+    local count, pieces = 7, {}
+    for i = 0, count - 1 do
+        local start, finish = TAU * i / count, TAU * (i + 1) / count
+        local part = tissue_piece(enemy, start, finish, enemy.r * 0.42)
+        part.id = i
+        part.spin = math.sin(i * 2.1) * 0.36
+        pieces[i + 1] = part
+    end
+    return pieces
 end
 
 function Simulation:flush_family_materials()
@@ -707,7 +732,7 @@ function Simulation:_die(index, absorbed)
         local attack = self:boss_attack()
         self.stage_transition, self.pending_stage_seed = true, self.rng:randi()
         self.boss_reward = { name = self:_enemy_label(enemy), organ = attack.organ, genome = copy(enemy.genome), claimed = false }
-        self.boss_breakup = { pos = enemy.pos, radius = enemy.r, time = 0, color = attack.color }
+        self.boss_breakup = { pos = enemy.pos, radius = enemy.r, pieces = boss_pieces(enemy) }
         self:flush_family_materials()
         self:_event("core", { token = self.run_id .. ":boss:" .. self.stage_index, amount = 12 + min(20, self.stage_index) })
         self:_event("stage_clear", { token = self.run_id .. ":stage-clear:" .. self.stage_index, stage = self.stage_index })
@@ -721,7 +746,7 @@ function Simulation:_die(index, absorbed)
     elseif self.kills % 18 == 0 then
         self:_drop(enemy.pos, "core", 1)
     end
-    self:_effect("burst", enemy.pos, enemy.r + 20, 0.4)
+    if absorbed then self:_effect("burst", enemy.pos, enemy.r + 20, 0.4) end
 end
 
 local function approach(item, p, distance)
@@ -737,11 +762,16 @@ function Simulation:_update_remains(dt)
     local pulling = rank > 0 or (self.upgrades.collect or 0) > 0
     for i = #self.remains, 1, -1 do
         local part = self.remains[i]
-        if not part.captured then
+        if (part.release_delay or 0) > 0 then
+            part.release_delay = max(0, part.release_delay - dt)
+        elseif not part.captured then
             part.pos = point(self.world:move_body(part.pos.x, part.pos.y, part.vel.x * dt, part.vel.y * dt, part.r * 0.5))
             local decay = exp(-dt / 0.8)
             part.vel = point(part.vel.x * decay, part.vel.y * decay)
-            if part.spin then part.rotation = (part.rotation or 0) + part.spin * dt end
+            if part.spin then
+                part.rotation = (part.rotation or 0) + part.spin * dt
+                if part.anchor then part.turn = (part.turn or 0) + part.spin * dt end
+            end
             if self:_touches(part.pos, part.r) then self:_capture(part)
             elseif pulling and distance_squared(self.player, part.pos) < attraction^2 then approach(part, self.player, dt * (70 + rank * 25)) end
         end

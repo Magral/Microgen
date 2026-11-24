@@ -6,7 +6,6 @@ local pi, tau = math.pi, V.tau
 local point, offset, heading = V.point, V.offset, V.angle
 local thread_frames = {"thread_0", "thread_1", "thread_2"}
 local bolt_frames = {"bolt_0", "bolt_1", "bolt_2"}
-local shard_frames = {"shard_0", "shard_1", "shard_2"}
 
 local function clamp(value)
     return max(0, min(1, value))
@@ -303,16 +302,6 @@ end
 function Effects.draw_breakup(scene, data, elapsed, time)
     if not data or not data.pos then return end
     local t = clamp((elapsed or data.time or 0) / 1.35)
-    local drift = 1 - (1 - t)^3
-    local r, color = data.radius, data.color or "ffb57c"
-    if t < 1 then
-        for i = 0, 6 do
-            local angle = i * tau / 7
-            local p = offset(data.pos, angle, r * (0.48 + drift * 0.74))
-            scene:draw_combat(scene.effects, shard_frames[i % #shard_frames + 1], p, r, r, rgb(color, (1 - t) * 0.92),
-                angle + sin(i * 2.1) * t * 0.25)
-        end
-    end
     wave(scene, "reward", data.pos, 25 + sin((time or 0) * 2.5) * 1.6, "ffdb9b", 0.96, t * 0.45)
 end
 

@@ -272,19 +272,20 @@ local function feeding_contact(sim)
     return x/length,y/length,math.min(1,length/total)
 end
 
-function Scene:draw_body(sim, actor, is_player, serial)
-    local radius = is_player and sim:body_radius() or actor.r
-    local options = FRAMES[actor.kind] or FRAMES.hunter
-    local variant = (actor.id or serial or 1) % #options + 1
-    local genome=is_player and sim.player_genome or actor.genome
-    local frame, dimensions, source_radius
-    if is_player or (genome and actor.kind~="boss" and actor.kind~="miniboss") then
+local function body_art(kind, id, genome, is_player)
+    if is_player or (genome and kind~="boss" and kind~="miniboss") then
         local family=genome and genome.family or 0
-        frame, dimensions, source_radius="body_"..family,BodyArt[family+1],108
-    else
-        frame=options[variant]
-        dimensions, source_radius=Art[frame],Fixture.actors[frame_index(frame)+1].radius/1.18
+        return "body_"..family,BodyArt[family+1],108
     end
+    local options=FRAMES[kind] or FRAMES.hunter
+    local frame=options[id % #options + 1]
+    return frame,Art[frame],Fixture.actors[frame_index(frame)+1].radius/1.18
+end
+
+function Scene:draw_body(sim, actor, is_player, serial)
+    local radius=is_player and sim:body_radius() or actor.r
+    local genome=is_player and sim.player_genome or actor.genome
+    local frame,dimensions,source_radius=body_art(actor.kind,actor.id or serial or 1,genome,is_player)
     local body_position, shrink, opacity=actor.pos,1,1
     if actor.captured then
         body_position,shrink,opacity=feeding_pose(sim,actor,actor.engulf or 0)
@@ -325,15 +326,24 @@ function Scene:draw_body(sim, actor, is_player, serial)
     local health=hp and hp/math.max(1,maxhp) or 1
     local pigment=infected and "#bfdb6b" or (is_player and self.player_pigment or slot.pigment_hex)
     local relative=math.sqrt((actor.pos.x-self.x)^2+(actor.pos.y-self.y)^2)
+    local tint=opacity==1 and WHITE or color_at(opacity,WHITE)
     if not is_player and not actor.captured and radius>sim:body_radius()*2
             and (actor.boss_windup or 0)<=0 and (actor.boss_exposed or 0)<=0 then
         local threshold=sim:body_radius()*6+radius
         local haze=smoothstep(threshold*.9,threshold*1.45,relative)
-        gui.set_color(slot.node,vmath.vector4(1-haze*.72,1-haze*.62,1-haze*.53,opacity*(1-haze*.30)))
-    else gui.set_color(slot.node,opacity==1 and WHITE or color_at(opacity,WHITE)) end
+        tint=vmath.vector4(1-haze*.72,1-haze*.62,1-haze*.53,opacity*(1-haze*.30))
+    end
+    gui.set_color(slot.node,tint)
     Tissue.update(slot.pose,motion,phase,angle,dimensions[1]/(2*source_radius),dimensions[2]/(2*source_radius),
         cx,cy,bite,infected and .55 or (is_player and .67 or .4),pigment,health,is_player and self.reaction or 0,
         not is_player and radius*self.scale<32)
+    if not is_player and actor.id and slot.pose then
+        local look=slot.body_look or {}
+        slot.body_look=look
+        look.frame,look.dimensions,look.source_radius=frame,dimensions,source_radius
+        look.angle,look.tint,look.pose,look.frozen=angle,tint,slot.pose,nil
+        self.next_body_looks[actor.id]=look
+    end
     if not is_player and not actor.captured and actor.max_hp and actor.hp < actor.max_hp then
         local bar = take(self.effects)
         sprite(bar,"cells","speck")
@@ -357,6 +367,69 @@ function Scene:draw_body(sim, actor, is_player, serial)
     return slot.pose
 end
 
+local function fragment_slice(part)
+    if part.cut_start then return part.cut_start,part.cut_end end
+    if part.piece_count then
+        local index=part.piece_index or 0
+        return TAU*index/part.piece_count,TAU*(index+1)/part.piece_count
+    end
+    return 0,math.pi*.25
+end
+
+function Scene:fragment_look(part)
+    local look=self.fragment_looks[part]
+    if look then return look end
+    local genome=part.genome
+    local body=self.body_looks[part.body_id]
+    if body then
+        if not body.frozen then
+            local pose={}
+            for key,value in pairs(body.pose) do pose[key]=value end
+            body.frozen={frame=body.frame,dimensions=body.dimensions,source_radius=body.source_radius,
+                angle=body.angle,tint=body.tint,pose=pose}
+        end
+        look=body.frozen
+    else
+        local frame,dimensions,source_radius=body_art(part.body_kind,part.body_id or part.id or 1,genome)
+        local color=tonumber(part.body_infected and "bfdb6b" or Genome.colors(genome)[1],16)
+        local r,g,b=math.floor(color/65536)/255,(math.floor(color/256)%256)/255,(color%256)/255
+        look={frame=frame,dimensions=dimensions,source_radius=source_radius,angle=genome.rotation or 0,
+            tint=WHITE,stain=vmath.vector4(r,g,b,part.body_infected and .55 or .40)}
+    end
+    self.fragment_looks[part]=look
+    return look
+end
+
+function Scene:draw_fragment(part,p,shrink,opacity,turn)
+    if not part.genome then return end
+    local look=self:fragment_look(part)
+    if not self.atlas[look.frame] then return end
+    local dimensions=look.dimensions
+    local radius=part.body_radius or (part.r or 9)*1.8
+    local stretch=self.scale*radius/look.source_radius*Tissue.OVERSCAN*shrink
+    local angle=look.angle+(part.rotation or part.genome.rotation or 0)-(part.genome.rotation or 0)
+    local origin=p
+    if part.anchor then
+        local spin=(part.turn or 0)+(turn or 0)
+        local c,s=math.cos(spin),math.sin(spin)
+        origin={x=p.x-(part.anchor.x*c-part.anchor.y*s)*shrink,
+            y=p.y-(part.anchor.x*s+part.anchor.y*c)*shrink}
+    end
+    local x,y=self:project(origin)
+    if not visibly_inside(x,y,math.max(dimensions[1],dimensions[2])*stretch*.7) then return end
+    local slot=take(self.fragments)
+    if slot.fragment~=part then
+        local first,last=fragment_slice(part)
+        sprite(slot,"cells",look.frame)
+        slot.pose=Tissue.attach_fragment(self.atlas,slot.node,look,first,last,part.genome.phase or 0)
+        slot.fragment=part
+    end
+    position(slot.node,x,y)
+    size(slot.node,dimensions[1]*stretch,dimensions[2]*stretch)
+    gui.set_rotation(slot.node,vmath.vector3(0,0,-math.deg(angle+(turn or 0))))
+    gui.set_color(slot.node,color_at(opacity*look.tint.w,look.tint))
+end
+
 function Scene:render(sim, breakup_time)
     self.x,self.y=sim.player.x,sim.player.y
     local target=math.min(WIDTH/1280,HEIGHT/720)*sim:view_zoom()
@@ -365,7 +438,10 @@ function Scene:render(sim, breakup_time)
         self.scale,self.visual_time,self.elapsed,self.reaction=target,0,sim.elapsed,0
         self.motions=setmetatable({},{__mode="k"})
         self.clones={}
+        self.body_looks,self.next_body_looks={},{}
+        self.fragment_looks=setmetatable({},{__mode="k"})
     end
+    for id in pairs(self.next_body_looks) do self.next_body_looks[id]=nil end
     local dt=math.min(.1,math.max(0,sim.elapsed-self.elapsed))
     self.elapsed,self.dt=sim.elapsed,dt
     self.visual_time=self.visual_time+dt
@@ -397,37 +473,14 @@ function Scene:render(sim, breakup_time)
     for _,fragment in ipairs(sim.remains) do
         local p,shrink,opacity=fragment.pos,1,1
         if fragment.captured then p,shrink,opacity=feeding_pose(sim,fragment,fragment.progress) end
-        local quality=fragment.quality or 0
-        if fragment.piece_count and fragment.genome then
-            local family=math.max(0,math.min(#BodyArt-1,fragment.genome.family or 0))
-            local frame="body_"..family
-            local dimensions=BodyArt[family+1]
-            local x,y=self:project(p)
-            local source_radius=fragment.body_radius or 108
-            local stretch=self.scale*source_radius/108*(fragment.visual_scale or 1)*shrink
-            local padding=math.max(dimensions[1],dimensions[2])*stretch*.7
-            if visibly_inside(x,y,padding) then
-                local slot=take(self.fragments)
-                if slot.frame~=frame or not slot.pose or not slot.is_fragment or slot.fragment_id~=fragment.id then
-                    slot.pose=Tissue.attach_fragment(self.atlas,slot.node,frame,
-                        dimensions[1]/(2*108),dimensions[2]/(2*108),fragment.cut_angle or 0,
-                        fragment.cut_half_angle or math.pi/3,quality,
-                        ((fragment.id or 1)*.61803398875)%TAU,
-                        "#"..Genome.colors(fragment.genome)[1])
-                    slot.frame,slot.is_fragment,slot.fragment_id=frame,true,fragment.id
-                end
-                position(slot.node,x,y)
-                size(slot.node,dimensions[1]*stretch,dimensions[2]*stretch)
-                gui.set_color(slot.node,color_at(opacity,WHITE))
-                gui.set_rotation(slot.node,vmath.vector3(0,0,-math.deg(fragment.rotation or 0)))
-            end
-        else
-            local tint=quality>=3 and vmath.vector4(1,.78,.45,opacity) or quality==2 and vmath.vector4(.84,.56,.99,opacity)
-                or quality==1 and vmath.vector4(.65,.79,1,opacity) or vmath.vector4(.89,.55,.64,opacity)
-            local side=(fragment.r or 9)*2.8*shrink
-            local shard=(fragment.part or fragment.id)%3
-            self:draw_combat(fragment.captured and self.effects or self.objects,"shard_"..shard,p,
-                side,side,tint,time*.24+(fragment.progress or 0)*1.4)
+        self:draw_fragment(fragment,p,shrink,opacity)
+    end
+    if breakup_time and sim.boss_breakup.pieces then
+        local t=math.min(1,breakup_time/1.35)
+        local drift=(1-(1-t)^3)*1.6
+        for _,part in ipairs(sim.boss_breakup.pieces) do
+            local p={x=part.pos.x+part.anchor.x*drift,y=part.pos.y+part.anchor.y*drift}
+            self:draw_fragment(part,p,1,1-t*t,part.spin*t)
         end
     end
     for _,cyst in ipairs(sim.cysts) do
@@ -468,6 +521,7 @@ function Scene:render(sim, breakup_time)
     Effects.draw_player(self,sim,sim.elapsed)
     Effects.draw_damage_sources(self,sim,sim.elapsed)
     if breakup_time then Effects.draw_breakup(self,sim.boss_breakup,breakup_time,time) end
+    self.body_looks,self.next_body_looks=self.next_body_looks,self.body_looks
     self.ocean:draw(self.x,self.y,self.scale)
     for _,group in ipairs({self.bed,self.walls,self.landmarks,self.fields,self.organisms,self.fragments,self.objects,self.effects,self.labels}) do finish(group) end
 end

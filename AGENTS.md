@@ -1,11 +1,11 @@
-# Microgen project preferences
+# Правила и предпочтения проекта Microgen
 
-- Pavel requests builds without videos. Do not generate movies or attach MP4/AVI assets to releases unless he explicitly requests one. Use native tests and static screenshots for visual verification.
-- Size ratio is the primary combat rule. All attraction is continuous; never reposition a foe instantly on attack.
-- The amoeba and organs must read as one living mutating tissue. Preserve contact-driven animated digestion and cumulative pigment state.
-- Profile before claiming optimization. Desktop stress measurements do not establish Android FPS.
-
-- Every release must include a concrete optimization and measured long-run comparison; visual quality and readable builds remain the priorities.
-
-- Do not publish releases for small fixes. Accumulate them until a substantial advance on ROADMAP.md; current stable remains available meanwhile. Never push a small-fix branch to main while the main workflow auto-publishes.
-- Pavel wants more clarifying questions, especially about controls, progression, visual choices and substantial roadmap decisions. Ask targeted questions before settling ambiguous behavior; continue independent authorized fixes while awaiting answers.
+- Сборки выпускаются без видеороликов. Не создавать видео и не прикладывать MP4/AVI к релизам, если пользователь прямо этого не попросил. Для визуальной проверки использовать нативные тесты и статические снимки экрана.
+- Размер — основное правило боя. Притяжение всегда происходит плавно; нельзя мгновенно перемещать противника при атаке.
+- Амёба и органы должны восприниматься как единая живая изменяющаяся ткань. Сохранять контактное анимированное переваривание и накопление состояния пигментов.
+- Прежде чем заявлять об оптимизации, проводить измерения. Настольные стресс-тесты не подтверждают FPS на Android.
+- Каждый релиз должен включать конкретную оптимизацию и измеримое сравнение длительной нагрузки; визуальное качество и читаемость сборок остаются приоритетами.
+- Не выпускать релизы ради мелких исправлений. Накапливать их до существенного продвижения по ROADMAP.md; стабильная версия остаётся доступной. Не отправлять ветку мелких исправлений в main, если основной процесс автоматически публикует релиз.
+- Перед неоднозначными решениями об управлении, развитии, визуале и крупных изменениях дорожной карты задавать уточняющие вопросы. Пока ожидается ответ, можно продолжать независимые разрешённые исправления.
+- Принятая основа разработки игры — Defold, исходная версия — релиз 1.5.7. Не использовать старые прототипы и их инструменты сборки как основу текущей разработки.
+- Вся новая и обновляемая документация проекта должна быть написана на русском языке. Имена файлов, API, параметры, команды и идентификаторы в коде сохранять в исходном написании.
