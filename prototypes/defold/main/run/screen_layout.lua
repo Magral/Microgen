@@ -42,7 +42,7 @@ function M.test()
         {inset_left=40,inset_right=60,inset_top=24,inset_bottom=16})
     near(left, 42 + 40 / (2800 / 2460))
     near(right, 2418 - 60 / (2800 / 2460))
-    near(top, 1029)
+    near(top, 1023)
     near(bottom, 49)
 
     -- Taller landscape: vertical inset conversion must not reuse X scale.
