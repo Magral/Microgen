@@ -1,13 +1,13 @@
-# Aquatic depth and living volume, 0.9.0
+# Водная глубина и живой объём, версия 0.9.0
 
-Pavel wants visibly richer water and environment, and amoebas with convincing volume, using Pathogenic and Spore's cell stage as visual references. Visual quality is first; each release must also contain measured optimization. Existing authorization delegates implementation choices and release preparation.
+Пользователь хочет более выразительную воду и окружение, а также убедительный объём амёб. Визуальные ориентиры — клеточный этап Pathogenic и Spore. На первом месте визуальное качество; каждый выпуск также должен содержать измеренную оптимизацию. Ранее данное разрешение позволяет самостоятельно выбирать детали реализации и готовить выпуск.
 
-## Approach
+## Подход
 
-Keep native Godot 2D gameplay and continuous jelly/contact geometry. Create pseudo-3D volume with directional tissue shading, recessed anatomy and wet rim highlights. Full 3D conversion would replace working deformation and increase Android cost; a pile of flat translucent circles would retain the reported flat look. Use bounded gradient geometry and cached environment detail instead.
+Сохранить нативный игровой процесс Godot 2D и непрерывную геометрию желе/контакта. Создать псевдо-3D объём за счёт направленного затенения ткани, углублённой анатомии и влажных бликов по краям. Полный переход на 3D заменил бы работающую деформацию и увеличил стоимость на Android; набор плоских полупрозрачных кругов сохранил бы уже отмеченное ощущение плоскости. Вместо этого использовать ограниченную градиентную геометрию и кэшируемые детали окружения.
 
-Water gets a brighter teal/blue depth palette, broad caustic light filaments, deep parallax organic silhouettes, suspended plankton and near lens motes. Body edges and danger cues remain legible. Environment formations gain wet lighting, pores and tissue fibers, with distinct biome palettes. Decoration is noncolliding and seeded independently of gameplay.
+Вода получает более яркую бирюзово-синюю палитру глубины, широкие световые нити каустик, глубокие органические силуэты с параллаксом, взвешенный планктон и частицы возле линзы. Края тела и сигналы опасности остаются читаемыми. Формы окружения получают влажное освещение, поры и волокна ткани; палитры биомов различаются. Декоративные элементы не участвуют в столкновениях и используют отдельный от игрового процесса seed.
 
-## Constraints
+## Ограничения
 
-Preserve size combat, pigment mixing, wounds, mouth/feeding, builds, save identity, offline Android and no videos. Avoid full-screen screen-texture refraction and per-enemy expensive shader passes. Cache static geometry and bounded textures; use per-layer motion rather than increasing particle count without limit. Measure 0/180/360/600-second scenes against 0.8, plus bounded adversarial stress, distinguish draw CPU from full software frame time and Android FPS.
+Сохранить бой с приоритетом размера, смешивание пигментов, раны, пасть/питание, сборки, идентичность сохранений, автономную работу Android и отсутствие видеороликов. Избегать полноэкранной рефракции текстуры экрана и дорогих проходов шейдера для каждого врага. Кэшировать статическую геометрию и текстуры с ограниченным размером; использовать движение слоёв вместо бесконечного увеличения числа частиц. Измерять сцены на отметках 0/180/360/600 секунд относительно версии 0.8, а также ограниченный неблагоприятный сценарий; различать CPU-стоимость отрисовки, полное время кадра программного рендеринга и FPS Android.
