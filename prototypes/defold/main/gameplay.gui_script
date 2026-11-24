@@ -12,6 +12,7 @@ local Diagnostics = require "main.run.diagnostics"
 local Equipment = require "main.run.organism_equipment"
 local Slots = require "main.run.organism_slots"
 local Interface = require "main.run.interface"
+local ScreenLayout = require "main.run.screen_layout"
 local Legacy = require "main.run.genome_legacy"
 local Minimap = require "main.run.minimap"
 local MapView = require "main.run.map_view"
@@ -768,12 +769,10 @@ function App:start(seed)
 end
 
 local function safe_edges()
-    local w,h=window.get_size()
+    local window_width,window_height=window.get_size()
     local area=window.get_safe_area()
-    if not area or w<=0 or h<=0 then return 42,2418,1047,33 end
-    local ratio=math.min(w/WIDTH,h/HEIGHT)
-    return 42+(area.inset_left or 0)/ratio,2418-(area.inset_right or 0)/ratio,
-        1047-(area.inset_top or 0)/ratio,33+(area.inset_bottom or 0)/ratio
+    local scene_width,scene_height=gui.get_width(),gui.get_height()
+    return ScreenLayout.safe_bounds(window_width,window_height,scene_width,scene_height,area,42,33)
 end
 
 function App:show_run()
@@ -1578,6 +1577,7 @@ function init(self)
     local app=setmetatable({},App)
     self.app=app
     local smoke=sys.get_config_string("microgen.smoke_run","0")=="1"
+    if smoke then assert(ScreenLayout.test()) end
     app.store=Save.new(smoke and "native_smoke" or nil)
     app.store:load_profile()
     app.audio=Audio.new()
