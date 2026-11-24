@@ -171,7 +171,7 @@ jobs:
               kill "$pid"
               wait "$pid" || true
               trap - EXIT
-              printf 'Passed %s profile (%sx%s)\n' "$profile" "$width" "$height"
+              printf "Passed %s profile (%sx%s)\\n" "$profile" "$width" "$height"
             done
           ' bash "${executables[0]}" "$RUNNER_TEMP/defold-smoke"
 
