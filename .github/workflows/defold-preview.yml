@@ -135,32 +135,44 @@ jobs:
           mkdir -p "$RUNNER_TEMP/defold-smoke"
           mapfile -t executables < <(find "$RUNNER_TEMP/defold-linux" -type f -executable ! -name '*.so*')
           test "${#executables[@]}" -eq 1
-          xvfb-run -a -s '-screen 0 2460x1080x24' bash -euo pipefail -c '
+          xvfb-run -a -s '-screen 0 2800x1200x24' bash -euo pipefail -c '
             cd "$(dirname "$1")"
-            ALSOFT_DRIVERS=null "$1" --graphics-adapter=opengl --config=microgen.smoke_run=1 --config=microgen.smoke_cards=1 > "$2/linux-smoke.log" 2>&1 &
-            pid=$!
-            trap "kill $pid 2>/dev/null || true" EXIT
-            for attempt in {1..50}; do
-              if grep -Fq "MICROGEN PREVIEW READY" "$2/linux-smoke.log"; then break; fi
+            for profile in standard wide taller; do
+              case "$profile" in
+                standard) width=1230; height=540 ;;
+                wide) width=1400; height=540 ;;
+                taller) width=1200; height=600 ;;
+              esac
+              profile_home="$2/home-$profile"
+              log="$2/linux-smoke-$profile.log"
+              mkdir -p "$profile_home"
+              HOME="$profile_home" ALSOFT_DRIVERS=null "$1" --graphics-adapter=opengl \
+                --config=display.window_width="$width" --config=display.window_height="$height" \
+                --config=microgen.smoke_run=1 --config=microgen.smoke_cards=1 > "$log" 2>&1 &
+              pid=$!
+              trap "kill $pid 2>/dev/null || true" EXIT
+              for attempt in {1..60}; do
+                if grep -Fq "MICROGEN PREVIEW SAMPLE" "$log"; then break; fi
+                kill -0 "$pid"
+                sleep 0.2
+              done
+              grep -Fq "MICROGEN PREVIEW READY" "$log"
+              grep -Fq "MICROGEN PREVIEW SAMPLE" "$log"
+              grep -Fq "MICROGEN RUN READY" "$log"
+              grep -Fq "MICROGEN MUTATION CARDS READY" "$log"
+              grep -Fq "MICROGEN ORGANISM PANEL READY" "$log"
+              grep -Fq "MICROGEN MENU CARDS READY" "$log"
+              grep -Fq "MICROGEN REPLACEMENT CARDS READY" "$log"
+              grep -Fq "MICROGEN BOSS REWARD READY" "$log"
+              grep -Fq "MICROGEN LEGACY SCREEN READY" "$log"
+              grep -Fq "MICROGEN TISSUE FRACTURE READY" "$log"
+              if grep -E "ERROR:SCRIPT|ERROR:RENDER|FATAL" "$log"; then exit 1; fi
               kill -0 "$pid"
-              sleep 0.2
+              kill "$pid"
+              wait "$pid" || true
+              trap - EXIT
+              printf 'Passed %s profile (%sx%s)\n' "$profile" "$width" "$height"
             done
-            grep -Fq "MICROGEN PREVIEW READY" "$2/linux-smoke.log"
-            for attempt in {1..50}; do
-              if grep -Fq "MICROGEN PREVIEW SAMPLE" "$2/linux-smoke.log"; then break; fi
-              kill -0 "$pid"
-              sleep 0.2
-            done
-            grep -Fq "MICROGEN PREVIEW SAMPLE" "$2/linux-smoke.log"
-            grep -Fq "MICROGEN RUN READY" "$2/linux-smoke.log"
-            grep -Fq "MICROGEN MUTATION CARDS READY" "$2/linux-smoke.log"
-            grep -Fq "MICROGEN ORGANISM PANEL READY" "$2/linux-smoke.log"
-            grep -Fq "MICROGEN MENU CARDS READY" "$2/linux-smoke.log"
-            grep -Fq "MICROGEN REPLACEMENT CARDS READY" "$2/linux-smoke.log"
-            grep -Fq "MICROGEN BOSS REWARD READY" "$2/linux-smoke.log"
-            grep -Fq "MICROGEN LEGACY SCREEN READY" "$2/linux-smoke.log"
-            kill -0 "$pid"
-            if grep -E "ERROR:SCRIPT|ERROR:RENDER|FATAL" "$2/linux-smoke.log"; then exit 1; fi
           ' bash "${executables[0]}" "$RUNNER_TEMP/defold-smoke"
 
       - name: Upload native smoke results
