@@ -1,67 +1,85 @@
-# Microgen First Playable Implementation Plan
+# План реализации первой играбельной версии Microgen
 
-> Execute inline with executing-plans. Track checks below.
+> Исторический план создания первого прототипа. Он не описывает текущую технологическую основу Defold.
 
-**Goal:** Installable offline Android Godot prototype with two biomes, eight organs, four synergies, shops, a boss and persistent progression.
-**Architecture:** Data-driven build model and versioned save store independent of a deterministic world simulation. A Node2D renderer and Control UI consume the simulation; touch and desktop input share a movement vector.
-**Tech Stack:** Godot 4.6.3, GDScript, compatibility renderer, prebuilt Android export template.
-**Spec:** ../specs/2026-11-17-microworld-design.md
+**Цель:** устанавливаемый автономный Android-прототип на прежнем движке с двумя биомами, восемью органами, четырьмя синергиями, магазинами, боссом и постоянным развитием.
 
-## Global Constraints
-- Six combat slots, four adaptations; eight organs/four adaptations in prototype.
-- Free three-choice level-up, biomass rerolls and replacements; no internet.
-- Short ten-minute test run, two connected biomes, one boss and legacy rewards.
-- Preserve discovery and progress across death and app restart; no copied reference art.
+**Архитектура:** модель сборки на основе данных и версионированное хранилище сохранений, независимые от детерминированной симуляции мира. Отрисовщик Node2D и интерфейс Control используют симуляцию; сенсорное и настольное управление передают общий вектор движения.
 
-## Review Focus
-- Full slots and replacement lose dependent synergies and never create rank/currency.
-- Insufficient currency and exhausted offers do not charge the player.
-- Corrupt/interrupted saves recover previous profile; rewards are idempotent.
-- Foreground/background and menus freeze combat without losing touch release.
-- Procedural placement leaves mandatory routes usable and caps combat effect counts.
+**Технологии исторического прототипа:** Godot 4.6.3, GDScript, renderer Compatibility, готовый шаблон экспорта Android.
 
-### Task 1: Build rules and persistence
-Files: core/catalog.gd, core/build_model.gd, core/save_store.gd; tests/test_core.gd.
-Interfaces: Catalog.organs/adaptations/synergies; BuildModel.apply(id,replace_id), offers(rng), active_synergies(); SaveStore.load_profile(), write_profile(profile), bank(amount), unlock(id).
-- [x] Write tests for six-slot replacement, ranks, synergy activation/removal, insufficient funds and corruption fallback.
-- [x] Run headless tests; observe missing implementation failure.
-- [x] Implement data catalogue, model and atomic save/backup.
-- [x] Run tests green and commit.
+**Спецификация:** ../specs/2026-11-17-microworld-design.md
 
-### Task 2: World and combat
-Files: game/simulation.gd, game/world_view.gd; tests/test_simulation.gd.
-Interfaces: Simulation.new_run(seed), step(delta,direction), snapshot(), restore(data); state for player/enemies/pickups/colonies and events for UI.
-- [x] Write seeded-world, movement, pause, combat, boss-reward and snapshot tests; run red.
-- [x] Implement bounded world, connected open biomes, absorption, automatic abilities and four concrete synergy effects.
-- [x] Verify tests and late-wave soak; commit.
+## Общие ограничения
 
-### Task 3: Playable interface
-Files: main.gd, main.tscn, ui/hud.gd, assets/icon.svg, project.godot.
-Interfaces: UI callbacks to simulation/model transactions; modal state gates simulation.
-- [x] Implement Russian start menu, joystick, HUD/minimap, mutation/replacement, shop, map, pause, genome, atlas and results screens.
-- [x] Add lifecycle checkpoint/resume and touch-release handling.
-- [x] Run Godot import and integration smoke; inspect real rendered frames at mobile aspect ratios.
-- [x] Fix blocking issues and commit.
+- Шесть боевых слотов и четыре адаптации; в прототипе — восемь органов и четыре адаптации.
+- Бесплатный выбор одного из трёх вариантов повышения уровня, перебросы и замены за биомассу; интернет не требуется.
+- Короткий десятиминутный тестовый забег, два связанных биома, один босс и награды наследия.
+- Сохранять открытия и прогресс после смерти и перезапуска приложения; не копировать референсную графику.
 
-### Task 4: Android delivery
-Files: export_presets.cfg, README.md, CHANGELOG.md, build artifacts.
-- [x] Obtain matching Android template/SDK, export APK using Godot CLI.
-- [x] Verify signature, package, ABI, permissions and archive contents.
-- [x] Run full tests and independent final review; address material findings.
-- [x] Package source and signed test APK; persist deliverables.
+## На что обращать внимание при проверке
 
-## Execution ledger
-Native inline execution: user approved development; no extra approval gate for routine plan details. Fresh standalone project, no existing repository to isolate.
-Pre-flight: model/catalogue interfaces feed simulation; snapshot contains model and simulation but profile rewards are banked independently. Runtime must not credit a pickup twice after restoring checkpoint.
+- При заполненных слотах замена удаляет зависимые синергии и никогда не создаёт ранг или валюту.
+- Недостаток валюты и исчерпание предложений не списывают ресурсы игрока.
+- Повреждённые или прерванные сохранения восстанавливают предыдущий профиль; награды начисляются идемпотентно.
+- Переход приложения в фон/на передний план и меню замораживают бой, не теряя отпускание сенсорного ввода.
+- Процедурное размещение сохраняет проходимость обязательных маршрутов и ограничивает число боевых эффектов.
 
+## Задача 1. Правила сборки и сохранения
 
-## Verification ledger — 17 November 2026
-- Task 1 complete: core suite 26 assertions, zero failures. Missing implementation observed first; locking of division made explicit in test fixture.
-- Task 2 complete: simulation suite 131 assertions, zero failures; seeded terrain, reachable landmarks across 20 seeds, late-wave caps and all four synergy mechanics.
-- Task 3 complete: UI integration suite zero failures; actual displayed input suite covers start menu, start, mutation, shop and joystick motion/release. Headless input dispatch cannot validate Input.parse_input_event, so the touch suite runs on a graphical display.
-- Task 4 complete: APK exported, v2/v3 signature verified, org.magral.microgen 0.1.0, min API24, target36, arm64-v8a, no requested permissions. Delivery packaging and persistence performed after verification.
-- Independent code review found five issues: native touch support, terminal checkpoint outcome, failed-write rewards, rare pickups at cap, and moving boss marker. Each has a reproduced failure and a passing regression after correction. Audio warnings were eliminated from the headless UI suite by disabling audio in that fixture.
-- Ruling: this is a first test build with temporary code-rendered graphics; generated concept sheet remains a visual discussion artifact until the user selects a direction.
-- Ruling: 20–30 minute full game remains the subsequent milestone; this approved prototype introduces its boss at ten active minutes.
-- Ruling: no existing repository/base branch exists; keep the standalone feature branch and deliver source without remote publication.
-- Physical Android device testing is outstanding and is stated in the README and delivery.
+Файлы прежней реализации: `core/catalog.gd`, `core/build_model.gd`, `core/save_store.gd`; тесты: `tests/test_core.gd`.
+
+Интерфейсы: `Catalog.organs/adaptations/synergies`; `BuildModel.apply(id,replace_id)`, `offers(rng)`, `active_synergies()`; `SaveStore.load_profile()`, `write_profile(profile)`, `bank(amount)`, `unlock(id)`.
+
+- [x] Написать тесты замены в шести слотах, рангов, включения/удаления синергий, нехватки средств и восстановления после повреждения.
+- [x] Запустить headless-тесты и сначала увидеть ожидаемое отсутствие реализации.
+- [x] Реализовать каталог данных, модель и атомарное сохранение с резервной копией.
+- [x] Добиться успешного прохождения тестов и зафиксировать изменения.
+
+## Задача 2. Мир и бой
+
+Файлы: `game/simulation.gd`, `game/world_view.gd`; тесты: `tests/test_simulation.gd`.
+
+Интерфейсы: `Simulation.new_run(seed)`, `step(delta,direction)`, `snapshot()`, `restore(data)`; состояние игрока, врагов, предметов, колоний и события для интерфейса.
+
+- [x] Написать тесты генерации мира с seed, движения, паузы, боя, награды босса и снимка/восстановления; сначала получить ожидаемое падение.
+- [x] Реализовать ограниченный мир, связанные открытые биомы, поглощение, автоматические способности и четыре конкретных эффекта синергий.
+- [x] Проверить тесты и длительную нагрузку поздних волн; зафиксировать изменения.
+
+## Задача 3. Играбельный интерфейс
+
+Файлы: `main.gd`, `main.tscn`, `ui/hud.gd`, `assets/icon.svg`, `project.godot`.
+
+Интерфейсы: обратные вызовы UI выполняют транзакции симуляции/модели; модальное состояние блокирует симуляцию.
+
+- [x] Реализовать русскоязычное стартовое меню, джойстик, HUD/мини-карту, мутации и замены, магазин, карту, паузу, геном, атлас и экран итогов.
+- [x] Добавить контрольные сохранения жизненного цикла и обработку отпускания касания.
+- [x] Выполнить импорт ресурсов Godot и интеграционную smoke-проверку; изучить реальные кадры при мобильных пропорциях сторон.
+- [x] Исправить блокирующие проблемы и зафиксировать изменения.
+
+## Задача 4. Поставка Android-сборки
+
+Файлы: `export_presets.cfg`, `README.md`, `CHANGELOG.md`, артефакты сборки.
+
+- [x] Подготовить совместимый шаблон Android и SDK, экспортировать APK через CLI прежнего движка.
+- [x] Проверить подпись, пакет, ABI, разрешения и содержимое архива.
+- [x] Выполнить полный набор тестов и независимое итоговое ревью; устранить существенные замечания.
+- [x] Упаковать исходники и подписанный тестовый APK, сохранить результаты поставки.
+
+## Журнал выполнения
+
+Выполнение плана было одобрено пользователем; отдельное согласование обычных деталей плана не требовалось. Создавался отдельный проект без существующего репозитория для изоляции.
+
+Перед началом: интерфейсы модели и каталога используются симуляцией; снимок содержит модель и симуляцию, а награды профиля зачисляются независимо. Среда выполнения не должна повторно начислять предмет после восстановления контрольного сохранения.
+
+## Журнал проверки — 17 ноября 2026 года
+
+- Задача 1 завершена: 26 проверок ядра, ошибок нет. Сначала зафиксировано ожидаемое отсутствие реализации; блокировка деления явно указана в тестовом наборе.
+- Задача 2 завершена: 131 проверка симуляции, ошибок нет; проверены генерация с seed, достижимые ориентиры на 20 seed, ограничения поздних волн и все четыре механики синергий.
+- Задача 3 завершена: интеграционные UI-проверки без ошибок; реальный набор отображаемого ввода охватывает стартовое меню, начало игры, мутацию, магазин и движение/отпускание джойстика. Headless-отправка событий не проверяет `Input.parse_input_event`, поэтому сенсорный набор запускается на графическом дисплее.
+- Задача 4 завершена: APK экспортирован, подписи v2/v3 проверены, пакет `org.magral.microgen`, версия 0.1.0, минимальный API 24, целевой API 36, ABI arm64-v8a, запрашиваемых разрешений нет. Упаковка и сохранение результатов выполнены после проверки.
+- Независимое ревью кода выявило пять проблем: нативная сенсорная поддержка, итог контрольного сохранения при завершении, награды при неудачной записи, редкие предметы при заполненном лимите и движущийся маркер босса. Для каждой проблемы воспроизведено падение и добавлена успешно проходящая регрессионная проверка. Предупреждения аудио устранены отключением звука в headless-наборе UI.
+- Решение: это первая тестовая сборка с временной графикой, созданной кодом; лист концептов остаётся материалом для обсуждения визуального направления до выбора пользователем.
+- Решение: полноценная игра на 20–30 минут остаётся следующим этапом; одобренный прототип вводит босса после десяти активных минут.
+- Решение: существующего репозитория/базовой ветки тогда не было; отдельную ветку прототипа следовало сохранить и передать исходники без публикации в удалённый репозиторий.
+- Проверка на физическом Android-устройстве оставалась незавершённой; это указано в README и описании поставки.
