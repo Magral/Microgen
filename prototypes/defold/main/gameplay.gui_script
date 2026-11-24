@@ -63,6 +63,7 @@ end
 function App:overlay(kind)
     self:clear_pointer()
     self.modal:clear()
+    self.modal:fit_safe_area()
     self.scene:set_labels_visible(kind == "run")
     if self.fixed then self.fixed:visible(kind == "run") end
     if kind ~= "run" then
