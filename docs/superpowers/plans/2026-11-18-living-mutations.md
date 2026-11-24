@@ -1,35 +1,44 @@
-# Living mutations implementation plan
+# План реализации живых мутаций
 
-**Goal:** Make all 18 skills visible as living anatomy; show healing and infection clearly; celebrate cyst rewards and rare tissue.
-**Architecture:** Extend immediate-mode painter with optional appearance state (quality/evolution/lash tips/activity). Shared Catalog limb count drives combat and anatomy. Reward reveal is a pausable UI Control driven only by saved options, with no gameplay RNG or early grants.
-**Tech stack:** Existing Godot 4.6, GDScript, GL Compatibility; no new dependencies.
-**Spec:** Pavel's 18 November request in this conversation and AGENTS.md.
+> Исторический план прежнего прототипа; он сохранён как запись проектных решений.
 
-## Constraints
-Preserve slow size-first combat, smooth attraction, integrated tissue, offline saves, all modal X buttons, no videos. No new particle nodes per tick. Benchmark immutable 0.10.0 against candidate over ten simulated minutes; desktop measurements are not Android FPS.
+**Цель:** показать все 18 навыков в виде живой анатомии; наглядно отображать лечение и заражение; выделять награды цист и редкую ткань.
 
-## Decisions
-Native execution within existing isolated branch. Prior authorization delegates implementation and release choices. Tentacles increase one per rank (1–10), each can hit a target; divide existing total volley damage among limbs to preserve combat timing. Quality colors blue/purple/gold tint each corresponding organ, evolution adds a double living vein. All passive effects have anatomy. Reveal ~2.6 seconds; skip reveals immediately; X defers safely; closing never rerolls or grants a reward.
+**Архитектура:** расширить отрисовщик immediate mode необязательным состоянием внешнего вида (качество/эволюция/кончики отростков/активность). Общее число конечностей из Catalog управляет боем и анатомией. Раскрытие награды — приостанавливаемый UI Control, который использует только сохранённые варианты и не расходует игровой генератор случайных чисел, а также не выдаёт награду заранее.
 
-## Review focus
-- Single foe gets full existing volley damage; multiple foes share total, no teleport.
-- Healing displays actual restored HP including small continuous regeneration, not overheal.
-- Reveals cannot claim early, duplicate grants, consume RNG or block X/replacement.
-- All 18 organs and three qualities draw safely at low/high ranks and during attacks.
-- Long sessions bound effects/caches and maintain damage-label visibility.
+**Технологии исторической реализации:** Godot 4.6, GDScript, GL Compatibility; новые зависимости не добавляются.
 
-## Tasks
-- [x] Test healing aggregation, multi-limb target selection/damage, and reveal outcome stability; observe failures.
-- [x] Implement Catalog count, simulation shared volley, healing numbers; update numerical text.
-- [x] Implement living anatomy/rarity/attack anchoring, explicit hostile infections and enzyme indicators, rare fragments.
-- [x] Implement cyst reveal and acquisition highlight; animated body preview and quality card frames.
-- [x] Run full native suite/screenshots, immutable long-run comparison, review fixes.
-- [ ] Update 0.11.0 docs/version, publish signed APK after green CI.
+**Спецификация:** запрос пользователя от 18 ноября и AGENTS.md.
 
-## Verification ledger
+## Ограничения
 
-RED→GREEN: missing heal popup/multi-limb targeting (8 failures → 0), cyst early claim/reveal (2 → 0), shell half geometry across all tiers/ages (12 → 0), same-volley total damage popup (2 → 0). Native full suite and all-18-skill animated-pose render passed; native screenshots inspected. Six source-importer tests passed.
+Сохранить медленный бой с приоритетом размера, плавное притяжение, единую ткань, автономные сохранения, крестики закрытия всех модальных окон и отсутствие видеороликов. Не создавать новые узлы частиц на каждом тике. Сравнить неизменяемую версию 0.10.0 с кандидатом на десяти симулируемых минутах; настольные измерения не являются FPS Android.
 
-Fresh reviewer found the shell triangulation bug and delayed multi-hit popup totals. Both received regression tests and fixes. Reveal/X/replacement stability reviewed. Final reward layout keeps rays out of the subtitle. Ten-minute immutable baseline/candidate plus same-checkpoint native and frozen saturated measurements are recorded in docs/performance/0.11.0.md; no overall performance win claimed.
+## Принятые решения
 
-Ruling: Shared volley damage is aggregated by target before applying hit_enemy, preserving actual damage and immediate popup totals while retaining one visual strike per limb. Cosmetic reveal does not consume gameplay RNG. Final device-level performance remains a user check.
+Работа выполняется в существующей изолированной ветке. Предыдущее разрешение распространяется на реализацию и выбор выпуска. Число щупалец увеличивается на одно за ранг (1–10), каждое может попасть по цели; существующий общий урон залпа делится между конечностями, чтобы сохранить темп боя. Синие/фиолетовые/золотые оттенки качества окрашивают соответствующий орган, эволюция добавляет двойной живой сосуд. Все пассивные эффекты имеют анатомическое отображение. Раскрытие длится около 2,6 секунды; пропуск раскрывает награду сразу; X безопасно откладывает выбор; закрытие не запускает переброс и не выдаёт награду.
+
+## На что обращать внимание при ревью
+
+- Одна цель получает весь существующий урон залпа; при нескольких целях общий урон делится между ними, телепортации нет.
+- Лечение показывает фактически восстановленное здоровье, включая небольшую непрерывную регенерацию, но не избыточное лечение.
+- Анимация раскрытия не позволяет забрать награду раньше времени, не дублирует выдачу, не расходует игровой генератор случайных чисел и не блокирует X/замену.
+- Все 18 органов и три уровня качества безопасно отрисовываются на низких/высоких рангах и во время атак.
+- Длительные сессии ограничивают эффекты/кэши и сохраняют видимость меток урона.
+
+## Задачи
+
+- [x] Проверить агрегацию лечения, выбор цели несколькими конечностями и стабильность результата раскрытия; сначала зафиксировать ошибки.
+- [x] Реализовать число конечностей Catalog, общий залп симуляции и числа лечения; обновить числовые подписи.
+- [x] Реализовать живую анатомию, редкость и точки крепления атак, явные индикаторы вражеского заражения и ферментов, редкие фрагменты.
+- [x] Реализовать раскрытие цисты и подсветку получения; анимированный предпросмотр тела и рамки карточек качества.
+- [x] Выполнить полный нативный набор/снимки, сравнение длительной нагрузки с неизменяемой базой и исправления ревью.
+- [ ] Обновить документы/версию 0.11.0, опубликовать подписанный APK после успешного CI.
+
+## Журнал проверки
+
+RED → GREEN: отсутствовали всплывающие числа лечения/выбор цели несколькими конечностями (8 ошибок → 0), преждевременное получение награды цисты/раскрытие (2 → 0), половинная геометрия оболочки на всех уровнях/возрастах (12 → 0), всплывающий общий урон одного залпа (2 → 0). Полный нативный набор и рендеринг анимированных поз всех 18 навыков прошли; нативные снимки изучены. Шесть проверок импортёра исходников прошли.
+
+Независимое ревью обнаружило ошибку триангуляции оболочки и задержку суммирования всплывающего урона от нескольких попаданий. Для обеих добавлены регрессионные проверки и исправления. Проверена стабильность раскрытия/X/замены. В итоговой компоновке награды лучи не заходят на подзаголовок. Сравнение неизменяемой базы и кандидата на десятиминутном прогоне, нативные измерения тех же контрольных точек и замороженной насыщенной сцены записаны в docs/performance/0.11.0.md; общего выигрыша производительности не заявлено.
+
+Решение: общий урон залпа суммируется по цели до применения `hit_enemy`, сохраняя фактический урон и немедленные итоги во всплывающих числах, при этом визуально остаётся один удар каждой конечностью. Декоративное раскрытие не расходует игровой генератор случайных чисел. Итоговую производительность на устройстве проверяет пользователь.
