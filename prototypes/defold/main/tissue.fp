@@ -74,16 +74,9 @@ void main()
     mediump float circulation = dot(source, tissue_flow.xy);
     mediump float stain = tissue_pigment.w * (0.24 + 0.24 * membrane + 0.55 * circulation);
     rgba.rgb = mix(rgba.rgb, tissue_pigment.rgb * brightness, stain);
-    if (tissue_size.z <= 0.5) {
-        // Work in deformed tissue coordinates so the folds travel with the body.
-        mediump vec2 folds = vec2(source.x + 0.36 * source.y * source.y,
-                                  source.y - 0.24 * source.x * source.y);
-        mediump float bands = sin(28.0 * folds.x + 13.0 * folds.y + 3.0 * circulation);
-        mediump float fibers = bands * sin(17.0 * folds.y - 5.0 * folds.x);
-        mediump float rim = smoothstep(0.62, 0.92, radius2) * (1.0 - smoothstep(0.94, 1.24, radius2));
-        rgba.rgb *= 1.0 + fibers * (0.12 - rim * 0.045);
-        rgba.rgb += vec3(0.06, 0.12, 0.13) * (bands * 0.5 + 0.5) * rim * rgba.a;
-    }
+    // Do not overlay periodic procedural fibers: their intersecting bands create
+    // a visible square/grid pattern on the membrane. The source portrait already
+    // carries the intended soft organic surface detail.
     mediump float wound = clamp(cut * (0.50 + 0.13 * tissue_wounds.z) * membrane, 0.0, 0.48);
     rgba.rgb = mix(rgba.rgb, vec3(0.56, 0.23, 0.34) * brightness, wound);
     rgba.rgb = min(rgba.rgb * (1.0 + bite * (0.23 + 0.12 * tissue_contact.w)), vec3(rgba.a));
