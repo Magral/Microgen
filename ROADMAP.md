@@ -1,89 +1,89 @@
-# Microgen — Defold roadmap
+# Microgen — дорожная карта Defold
 
-## Current baseline
+## Принятая основа
 
-All active game development uses **Defold**. The accepted baseline is Android release **Defold 1.5.7**:
+Вся дальнейшая разработка игры ведётся на **Defold**. Принятая исходная версия — Android-релиз **Defold 1.5.7**:
 
-- Release/tag: `defold-1.5.7`
-- Baseline commit: `95f1925571010b0b7ee552d387f5e41450c13e1b`
-- Project: `prototypes/defold`
-- Control device: **Poco X8 Pro**
-- Platform: Android ARM64, landscape
-- Package: `org.magral.microgen.defold`
-- Minimum Android API: 26
+- Релиз/тег: `defold-1.5.7`
+- Контрольный коммит: `95f1925571010b0b7ee552d387f5e41450c13e1b`
+- Каталог проекта: `prototypes/defold`
+- Контрольное устройство: **Poco X8 Pro**
+- Платформа: Android ARM64, альбомная ориентация
+- Идентификатор пакета: `org.magral.microgen.defold`
+- Минимальная версия Android: API 26
 
-Poco X8 Pro is a control device, not the sole target. The objective is a consistent experience across supported Android phones with different screen sizes, aspect ratios, pixel densities and safe areas.
+Poco X8 Pro — контрольное устройство, а не единственная цель. Необходимо обеспечить согласованную работу на поддерживаемых Android-смартфонах с разными размерами экранов, соотношениями сторон, плотностью пикселей и безопасными областями.
 
-## Released baseline · 1.5.7
+## Выпущенная основа · 1.5.7
 
-- Expanded compact windows in landscape mode.
-- Increased text and touch targets in the codex, organ lists, legacy screens and other menus.
-- Moved organism summary tabs to the bottom.
-- Enlarged the transition map while preserving its proportions.
+- Расширены компактные окна в альбомной ориентации.
+- Увеличены текст и области нажатия в кодексе, списках органов, экранах наследия и других меню.
+- Вкладки сводки организма перенесены вниз.
+- Карта перехода увеличена с сохранением пропорций.
 
-This release contains targeted interface improvements; it is not a claim that all screens have been verified on all display classes.
+Это целевые улучшения интерфейса, а не утверждение, что все экраны уже проверены на всех вариантах дисплеев.
 
-## Priority 1 — universal Android interface adaptation
+## Приоритет 1 — универсальная адаптация интерфейса Android
 
-**Goal:** every important screen remains legible, reachable and visually coherent on supported Android phones in landscape orientation.
+**Цель:** каждый важный экран должен оставаться читаемым, доступным и визуально цельным на поддерживаемых Android-смартфонах в альбомной ориентации.
 
-### Work plan
+### План работ
 
-1. Audit every gameplay screen, menu, overlay and modal window in the Defold 1.5.7 baseline.
-2. Document the existing coordinate system, base design area, panel-width adaptation, text fitting and scaling behavior.
-3. Check multiple resolutions and aspect ratios, including wide and narrow landscape layouts.
-4. Apply safe-area insets consistently so controls and important content avoid cutouts and inaccessible edges.
-5. Review font sizes, cards, modal dimensions, buttons and touch targets together; prevent clipping, overlap and undersized controls.
-6. Preserve the established Microgen visual language and landscape orientation.
-7. Use Poco X8 Pro for hands-on validation and add coverage for other screen proportions through devices and/or emulators.
-8. Make small, reviewable changes. Avoid unrelated changes to gameplay rules, balance, simulation or save formats.
+1. Проверить все игровые экраны, меню, наложения и модальные окна исходной версии Defold 1.5.7.
+2. Зафиксировать существующую систему координат, базовую область интерфейса, адаптацию ширины панелей, подгонку текста и масштабирование.
+3. Проверить несколько разрешений и соотношений сторон, включая широкие и относительно узкие альбомные экраны.
+4. Последовательно учесть безопасные отступы, чтобы элементы управления и важное содержимое не попадали под вырезы и недоступные края.
+5. Проверить размеры шрифтов, карточек, модальных окон, кнопок и сенсорных областей совместно; исключить обрезание, наложения и слишком мелкие элементы.
+6. Сохранить визуальный стиль Microgen и альбомную ориентацию.
+7. Использовать Poco X8 Pro для практической проверки и добавить проверку других пропорций экранов на устройствах и/или эмуляторах.
+8. Вносить небольшие проверяемые изменения. Не менять без необходимости правила игры, баланс, симуляцию и формат сохранений.
 
-### Known audit findings
+### Уже выявленные особенности
 
-- The interface already has a 2460×1080 design coordinate area and existing panel-width/text-fitting helpers; a full UI rewrite is not the starting assumption.
-- The gameplay GUI has a safe-area calculation, but the current call path applies it to the in-run HUD. Modal windows still need a separate safe-area review.
-- Existing smoke checks cover selected menu/modal layouts against the base design area. They do not replace validation across real Android resolutions and aspect ratios.
+- Интерфейс использует базовую область координат 2460×1080 и уже содержит вспомогательные механизмы адаптации ширины панелей и подгонки текста; полная переработка интерфейса с нуля не требуется как исходное решение.
+- В игровом GUI есть расчёт безопасной области, но текущий путь вызова применяет его к HUD во время забега. Модальные окна требуют отдельной проверки.
+- Имеющиеся smoke-тесты охватывают отдельные меню и модальные окна в пределах базовой области. Они не заменяют проверку на реальных Android-разрешениях и разных соотношениях сторон.
 
-See [UI adaptation audit](docs/development/ui-adaptation.md).
+См. [технический аудит адаптации интерфейса](docs/development/ui-adaptation.md).
 
-### Completion criteria
+### Критерии завершения
 
-- All major screens and modal windows have been checked at several resolutions and aspect ratios.
-- Important controls remain visible and reachable, including near display edges and cutouts.
-- Text and cards do not clip or overlap.
-- Safe-area insets are handled consistently.
-- Touch targets remain practical.
-- The interface retains a coherent visual style and landscape orientation.
-- Existing gameplay flows and saves continue to work.
+- Все основные экраны и модальные окна проверены на нескольких разрешениях и соотношениях сторон.
+- Важные элементы управления остаются видимыми и доступными, в том числе возле краёв экрана и вырезов.
+- Текст и карточки не обрезаются и не перекрывают друг друга.
+- Безопасные отступы учитываются единообразно.
+- Сенсорные области имеют практичный размер.
+- Интерфейс сохраняет единый визуальный стиль и альбомную ориентацию.
+- Основные игровые сценарии и сохранения продолжают работать.
 
-## Priority 2 — preserve the released game
+## Приоритет 2 — сохранение работоспособности выпущенной игры
 
-Interface work must not regress:
-- run continuation and recovery;
-- families, legacy and permanent progression;
-- organs, adaptations, specializations, mutations and synergies;
-- rewards, resources, bosses and stage transitions;
-- application updates and save compatibility.
+Работы над интерфейсом не должны нарушать:
+- продолжение и восстановление забега;
+- семьи, наследие и постоянное развитие;
+- органы, адаптации, специализации, мутации и синергии;
+- награды, ресурсы, боссов и переходы между этапами;
+- обновление приложения и совместимость сохранений.
 
-Changes to game logic or save data require a separate reason and targeted regression checks.
+Изменения игровой логики или данных сохранения требуют отдельного обоснования и целевых регрессионных проверок.
 
-## Priority 3 — continue game development
+## Приоритет 3 — дальнейшее развитие игры
 
-After the universal UI pass, reconcile the next content scope against the current Defold implementation. Long-term directions include:
-- more procedural biomes, regions, organisms and ecological interactions;
-- additional organs, mutations, evolutions and ability combinations;
-- more varied bosses, threats, rewards and stage conditions;
-- richer organic body rendering, tissue damage and absorption;
-- balance and long-run integrity of runs and meta-progression.
+После универсальной адаптации интерфейса следующий объём игрового содержимого нужно согласовать с фактической реализацией Defold. Долгосрочные направления:
+- новые процедурные биомы, области, организмы и экологические взаимодействия;
+- дополнительные органы, мутации, эволюции и сочетания способностей;
+- более разнообразные боссы, угрозы, награды и условия этапов;
+- более развитая органическая отрисовка тела, повреждения и поглощение тканей;
+- баланс и устойчивость длительных забегов и метапрогрессии.
 
-These are development directions, not a promise that every item is already implemented or assigned to a numbered release.
+Это направления дальнейшей разработки, а не обещание, что каждый пункт уже реализован или назначен конкретному релизу.
 
-## Rules for every change
+## Правила для каждого изменения
 
-- Start from the accepted Defold 1.5.7 baseline unless a newer Defold baseline is explicitly selected.
-- Keep the Android landscape experience universal rather than optimizing only for the control device.
-- Preserve save compatibility.
-- Do not change gameplay rules to solve a presentation-only issue.
-- Validate affected screens and flows after each change.
-- Do not present desktop profiling as Android frame-rate evidence.
-- Organic visual coherence, legibility and touch usability are core quality requirements.
+- Начинать с принятой основы Defold 1.5.7, пока явно не выбрана более новая версия Defold.
+- Обеспечивать универсальность альбомного интерфейса Android, а не оптимизировать его только под контрольное устройство.
+- Сохранять совместимость сохранений.
+- Не менять правила игры ради исправления исключительно визуальной проблемы.
+- После каждого изменения проверять затронутые экраны и сценарии.
+- Не выдавать профилирование настольной версии за измерение частоты кадров на Android.
+- Органическая цельность изображения, читаемость и удобство касаний — обязательные требования качества.
