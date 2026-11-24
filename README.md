@@ -51,7 +51,7 @@ Poco X8 Pro используется для практической прове�
 2. Откройте файл [`prototypes/defold/game.project`](https://github.com/Magral/Microgen/blob/defold-1.5.7/prototypes/defold/game.project) из принятого релиза Defold 1.5.7.
 3. Используйте настройки экспорта Android и предусмотренные проектом процедуры сборки.
 
-Параметры Android находятся в `prototypes/defold/game.project`. Подтверждённые значения: базовая область интерфейса 2460×1080, полноэкранный режим, альбомная ориентация, пакет `org.magral.microgen.defold`, номер версии 157 и минимальный Android API 26.
+Параметры Android находятся в `prototypes/defold/game.project`. Параметры платформы: базовая область интерфейса 2460×1080, полноэкранный режим, альбомная ориентация, пакет `org.magral.microgen.defold` и минимальный Android API 26. Выпущенная версия 1.5.7 использует номер сборки 157; подготовленная 1.5.8 — 158.
 
 ## Документация
 
