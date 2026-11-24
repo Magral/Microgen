@@ -66,8 +66,10 @@ end
 
 function Interface:box(x,y,w,h,color)
     x = self:layout_x(x)
+    y = self:layout_y(y)
     w = w * (self.horizontal_scale or 1)
-    local node = self:remember(gui.new_box_node(vmath.vector3(x,y,0),vmath.vector3(w*(self.horizontal_scale or 1),h*(self.vertical_scale or 1),0)))
+    local node = self:remember(gui.new_box_node(
+        vmath.vector3(x,y,0),vmath.vector3(w,h*(self.vertical_scale or 1),0)))
     gui.set_color(node,color or DARK)
     return node
 end
