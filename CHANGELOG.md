@@ -1,3 +1,17 @@
+# Changelog
+
+## Defold 1.5.7
+
+- Adopted Defold as the active and accepted engine baseline for Microgen.
+- Android ARM64 landscape release, build/version code 157, package `org.magral.microgen.defold`, minimum API 26.
+- Expanded compact windows in landscape mode.
+- Increased text and touch targets in the codex, organ lists, legacy screens and other menus.
+- Moved organism summary tabs to the bottom.
+- Enlarged the transition map while preserving its proportions.
+- Established universal Android interface adaptation as the next development priority; Poco X8 Pro is the control device, not the only target.
+
+The detailed release baseline is documented in [RELEASE_NOTES.md](RELEASE_NOTES.md). Earlier entries below are retained as project history.
+
 ## 1.0.1 · Главное меню и отрисовка
 
 - Главный экран без прокрутки и рамки модального окна: микромир служит полноэкранным фоном, действия помещаются одновременно.
