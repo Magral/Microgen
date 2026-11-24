@@ -1,17 +1,28 @@
-# Functional living evolutions implementation plan
+# План реализации функциональных живых эволюций
 
-**Goal:** Implement the three approved living evolutions, starting with the hunting crown, without releasing or changing the app version.
-**Architecture:** Keep existing saved evolution IDs/recipes and the 30% organ bonus. Add bounded state to existing enemy dictionaries and simulation checkpoint; anatomy consumes that state. Share eligibility and geometry rules in a small helper.
-**Spec:** Approved concepts from this conversation: hunting crown (tentacle+magnet), dissolving mantle (acid+armor), spore womb (infection+metabolism); ROADMAP.md.
-**Constraints:** Continuous attraction, size-first combat, boss protection, contact digestion, unified tissue, no videos, no APK/release/main push. Preserve existing recipes and save migrations.
+> Исторический план прежнего прототипа; текущая разработка ведётся на Defold.
 
-- [x] Add RED tests for crown eligibility, continuous mouth-directed steering, expiry/healing/giant protection; mantle trigger/cooldown; spore charge/one-time burst and JSON persistence.
-- [x] Implement helper rules and three bounded simulation behaviors; preserve damage attribution and tissue budget.
-- [x] Implement crown collar/roots/sensory combs, mantle folds/contraction, spore chambers/charge, hybrid tint/functional contact effects; exact on-body attack anchors and native screenshots.
-- [x] Update recipe/inspector/reward descriptions; baseline legacy evolutions retain their previous numerical effect.
-- [x] Full headless/native/touch checks, adversarial geometry/long-run bounds, fresh code review.
-- [ ] Save verified changes on a feature branch; no release.
+**Цель:** реализовать три одобренные живые эволюции, начиная с охотничьего венца, без выпуска релиза и изменения версии приложения.
 
-Decisions: mantle activates only on actual close enemy collision, at most every 2s. It creates a local acid patch using existing tissue-limited damage. Spore womb fills only from fully digested infected material, three meals per burst, with no charge from hits or repeated contact. A single enemy meal counts once. Charge is 0–2 between bursts and serialized. Crown selects at most two eligible targets; lashing all other foes remains ordinary damage. Current recipes at organ 6 + passive 3 stay unchanged.
+**Архитектура:** сохранить существующие идентификаторы/рецепты эволюций в сохранениях и бонус органа 30%. Добавить ограниченное состояние в существующие словари врагов и контрольную точку симуляции; анатомия использует это состояние. Правила допустимости цели и геометрии вынести в небольшой общий вспомогательный модуль.
 
-Verification: full native/headless suite passed, including touch and 30 evolving art poses; 10-minute evolved replay and JSON restores passed (max2 holds,42 effects). Fresh reviewer cleared corrected allocation, anchors and cache invalidation. No release.
+**Спецификация:** одобренные в обсуждении концепции: охотничий венец (щупальце + магнит), растворяющая мантия (кислота + броня), споровая матка (заражение + метаболизм); см. ROADMAP.md.
+
+**Ограничения:** непрерывное притяжение, бой с приоритетом размера, защита босса, контактное переваривание, единая ткань, отсутствие видеороликов. Сохранить существующие рецепты и миграцию сохранений.
+
+## Выполненные задачи
+
+- [x] Добавлены RED-тесты допустимости целей для венца, непрерывного наведения пасти, окончания эффекта, лечения и защиты гигантов; срабатывания/перезарядки мантии; заряда/однократного выброса спор и сохранения JSON.
+- [x] Реализованы общие правила и три поведения симуляции с ограниченным состоянием; сохранены атрибуция урона и бюджет ткани.
+- [x] Реализованы воротник/корни/сенсорные гребни венца, складки/сокращение мантии, камеры спор/заряд, окраска гибридов и функциональные контактные эффекты; точные точки крепления атак к телу и нативные снимки.
+- [x] Обновлены описания рецептов/осмотра/наград; базовые старые эволюции сохранили прежний числовой эффект.
+- [x] Пройдены полные headless-, нативные и сенсорные проверки, геометрия в неблагоприятных условиях и длительные ограничения; выполнено новое ревью кода.
+- [ ] Сохранить проверенные изменения в отдельной функциональной ветке; релиз не выпускать.
+
+## Принятые решения
+
+Мантия активируется только при фактическом близком столкновении с врагом, не чаще одного раза в 2 секунды. Она создаёт локальную кислотную область, использующую существующий ограниченный бюджет урона ткани. Споровая матка заряжается только от полностью переваренного заражённого материала: три порции на один выброс. Попадания и повторный контакт не дают заряд. Одна порция врага засчитывается один раз. Заряд от 0 до 2 между выбросами сериализуется. Венец выбирает не более двух допустимых целей; удары по остальным врагам остаются обычным уроном. Существующие рецепты ранга 6 органа + ранга 3 пассивной способности не меняются.
+
+## Результат проверки
+
+Полный нативный/headless-набор прошёл, включая сенсорный ввод и 30 анимированных художественных поз; десятиминутный повторный прогон с эволюциями и восстановление JSON прошли (максимум 2 удерживаемые цели, 42 эффекта). Независимый проверяющий подтвердил исправленные выделения памяти, опорные точки и инвалидацию кэша. Релиз не выпускался.
