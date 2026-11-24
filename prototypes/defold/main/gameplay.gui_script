@@ -1778,17 +1778,43 @@ function init(self)
         first.pos={x=first.pos.x+125,y=first.pos.y}
         app.scene:render(fracture_sim)
         assert(gui.get_position(app.scene.fragments.slots[1].node).x>original_position.x)
+
+        -- Проверяем полный цикл останков: задержка высвобождения, захват,
+        -- переваривание и освобождение слота визуального пула.
+        local collected=fracture_sim.remains[1]
+        assert(collected and collected.release_delay>0)
+        fracture_sim:_update_remains(collected.release_delay+0.01)
+        assert(collected.release_delay==0)
+        collected.pos={x=fracture_sim.player.x,y=fracture_sim.player.y}
+        fracture_sim:_update_remains(0.01)
+        assert(collected.captured)
+        local remains_before=#fracture_sim.remains
+        fracture_sim:_update_remains((collected.duration or 1)+0.1)
+        assert(#fracture_sim.remains==remains_before-1)
+        app.scene:render(fracture_sim)
+        assert(app.scene.fragments.slots[5].enabled==false)
+
+        local absorbed_sim=Simulation.new(48)
+        absorbed_sim.enemies={}
+        absorbed_sim.residents={}
+        local absorbed_enemy=absorbed_sim:spawn_enemy(center,"hunter")
+        absorbed_enemy.r=75
+        local biomass_before=absorbed_sim.build.biomass
+        absorbed_sim:_die(1,true)
+        assert(#absorbed_sim.remains==0 and absorbed_sim.build.biomass>biomass_before)
+
         local boss=fracture_sim:spawn_enemy(center,"boss")
         app.scene:render(fracture_sim)
         local boss_frame=app.scene.body_looks[boss.id].frame
         fracture_sim:_die(1,false)
         app.scene:render(fracture_sim,0)
-        assert(#fracture_sim.boss_breakup.pieces==7 and #fracture_sim.remains==5)
-        for index=6,12 do
+        assert(#fracture_sim.boss_breakup.pieces==7 and #fracture_sim.remains==4)
+        for index=5,11 do
             local slot=app.scene.fragments.slots[index]
             assert(slot.enabled and slot.texture=="cells" and slot.frame==boss_frame and slot.pose)
         end
         print("MICROGEN TISSUE FRACTURE READY")
+        print("MICROGEN TISSUE LIFECYCLE READY")
         print("MICROGEN MUTATION CARDS READY")
         app:map()
     end
