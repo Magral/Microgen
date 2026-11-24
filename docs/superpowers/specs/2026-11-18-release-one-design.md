@@ -1,62 +1,64 @@
-# Release one design — families and organism management
+# Проектирование первого выпуска — семейства и управление организмом
 
-Status: preparation, not implemented. User approved stages 1–2 as the first of four releases. Working version label 1.1.0; stable remains 1.0.1. This specification records the approved direction and separates remaining decisions from implementation assumptions.
+> Архивная спецификация прежнего прототипа. Она описывает направление выпуска 1.1.0, а не текущую реализацию Defold.
 
-## Intent and boundaries
+**Статус:** подготовка, ещё не реализация. Пользователь одобрил этапы 1–2 как первый из четырёх выпусков. Рабочая метка версии — 1.1.0; стабильной остаётся 1.0.1. Документ фиксирует одобренное направление и отделяет оставшиеся решения от предположений реализации.
 
-Players retain distinct lineages like characters, continue living organisms exactly, and prepare heirs using a compact body-centered interface. A new family cannot overwrite a previous live checkpoint. Basic forms belong only in the new-organism flow. All accumulated permanent data belongs to its family.
+## Цель и границы
 
-First release delivers family isolation, migration/recovery, alive/dead menu navigation, body/stock capacities, basic equipment exchange, capacity discoveries, compact selectors and inherited expansion. The complete infinite organ economy, dismantling, specialization changes and temporary mutation redesign belong to stages 3–4 in release two. Endless stages and boss redesign belong to later releases. Do not label existing finite ranks or current boss victory as those future systems.
+Игроки сохраняют отдельные родословные как персонажей, могут точно продолжать жизнь организмов и готовить наследников через компактный интерфейс с телом в центре. Новое семейство не может перезаписать прежнюю живую контрольную точку. Базовые формы доступны только в процессе создания нового организма. Все накопленные постоянные данные принадлежат своему семейству.
 
-## Existing implementation
+Первый выпуск обеспечивает изоляцию семейств, миграцию/восстановление, навигацию меню для живых/погибших организмов, вместимость тела/запаса, базовый обмен экипировки, открытия вместимости, компактные селекторы и наследуемое расширение. Полная бесконечная экономика органов, разборка, смена специализаций и переработка временных мутаций относятся к этапам 3–4 второго выпуска. Бесконечные этапы и переработка боссов относятся к более поздним выпускам. Не следует выдавать существующие конечные ранги или текущую победу над боссом за эти будущие системы.
 
-`core/save_store.gd` owns one flat version-1 profile, verified atomic temporary writes and backup recovery. `main.gd` assumes one `store.profile` and one `checkpoint`; changing the menu currently creates a paused demo simulation. `core/genome_legacy.gd` stores research, traits, imprints, pending rewards and history. Those fields must not disappear during family migration.
+## Существующая реализация на момент подготовки
 
-`ui/hud.gd` owns one modal; the current home is centered and fullscreen. `ui/touch_scroll.gd` fixes raw touch gestures but new primary screens should not depend on long scrolling. `Build` stores organ kinds/ranks/quality in dictionaries, with a six-organ limit. Equipment cells must become an explicit independent capacity; old checkpoint load must not silently remove an organ when it exceeds a new form's base.
+`core/save_store.gd` владеет одним плоским профилем версии 1, проверенными атомарными временными записями и восстановлением из резервной копии. `main.gd` предполагает один `store.profile` и одну `checkpoint`; при смене меню сейчас создаётся приостановленная демонстрационная симуляция. `core/genome_legacy.gd` хранит исследования, признаки, отпечатки, ожидающие награды и историю. Эти поля не должны исчезнуть при миграции семейств.
 
-## Approaches
+`ui/hud.gd` владеет одним модальным окном; текущий главный экран центрирован и полноэкранный. `ui/touch_scroll.gd` исправляет жесты сырого сенсорного ввода, но новые основные экраны не должны зависеть от длинной прокрутки. `Build` хранит типы/ранги/качество органов в словарях с лимитом шесть органов. Ячейки экипировки должны стать отдельной явной вместимостью; загрузка старой контрольной точки не должна незаметно удалять орган, если он не помещается в базовую вместимость новой формы.
 
-1. Extend the single flat profile with a family registry and active-family projection. Keeps old systems compatible but needs strict ownership boundaries to avoid saving a demo or another family's state.
-2. Separate manifest plus a save file per family. Saves only the active lineage; requires atomic multi-file selection/migration and broader test-path changes.
-3. Rewrite all simulation/UI code around a new global profile schema. Largest migration risk and unnecessary scope.
+## Рассмотренные подходы
 
-Builder recommendation: use a family registry with the existing active profile as an explicit projection, and keep inactive state separate. Avoid storing a second duplicate active checkpoint in the registry. Exact storage implementation must be reviewed against failure-recovery and measured save costs before choosing it; no approach has been represented as a user-selected technical choice.
+1. Расширить один плоский профиль реестром семейств и проекцией активного семейства. Это сохраняет совместимость старых систем, но требует строгих границ владения, чтобы не сохранять демо-состояние или данные другого семейства.
+2. Разделить манифест и отдельный файл сохранения для каждого семейства. Сохраняется только активная родословная; потребуются атомарный выбор/миграция нескольких файлов и более широкие изменения тестов.
+3. Переписать весь код симуляции/UI вокруг новой глобальной схемы профиля. Это несёт наибольший риск миграции и выходит за необходимые границы задачи.
 
-## User-visible structure
+Рекомендация разработчика: использовать реестр семейств с существующим активным профилем в качестве явной проекции, а неактивное состояние хранить отдельно. Не хранить вторую дублирующую активную контрольную точку в реестре. Конкретная реализация хранилища должна пройти ревью с учётом восстановления после ошибок и измеренной стоимости сохранения; ни один подход не был представлен как выбранная пользователем техническая реализация.
 
-Home: centered title, two compact paged blocks (living organisms and ancestral families), New organism, auxiliary actions and Exit. No unbounded list of families. A selected living organism resumes; a selected ancestral family prepares a descendant; New organism creates a distinct family and then shows base forms.
+## Структура, видимая игроку
 
-Organism: large procedural body with capacity cells, a compact family/status summary and three starting stock cells. Select a body/stock cell to open one short choice window with organ image, occupied cells, actual effects and soft form preference. The old long generation list is removed from the main path. Collection/choice windows use short pages and preserve selection on return. Existing legacy discoveries/research remain available without loss and are identified as compatibility data until release-two migration replaces their UI.
+**Главный экран:** центрированный заголовок, два компактных постраничных блока (живые организмы и предковые семейства), «Новый организм», вспомогательные действия и выход. Без неограниченного списка семейств. Выбор живого организма возобновляет его; выбор предкового семейства подготавливает потомка; «Новый организм» создаёт отдельное семейство и затем показывает базовые формы.
 
-Any equipment exchange pauses the simulation and resumes the same run on close. Capacity and occupied cells are shown before confirmation. Free swapping never discards the replaced organ. Save errors leave the current organism, family selection and pending choices recoverable.
+**Организм:** крупное процедурное тело с ячейками вместимости, компактной сводкой семейства/состояния и тремя начальными ячейками запаса. Выбор ячейки тела/запаса открывает одно короткое окно выбора с изображением органа, занятыми ячейками, фактическими эффектами и мягким предпочтением формы. Старый длинный список поколений удаляется из основного пути. Окна коллекции/выбора используют короткие страницы и сохраняют выбор при возврате. Старые открытия/исследования остаются доступны без потерь и помечаются как данные совместимости, пока миграция второго выпуска не заменит их интерфейс.
 
-Capacity discoveries occur in a run, persist in the owning family and show a short animation/notice of the new tissue chamber. They are not a shop-only upgrade. Exact base capacities, cell costs and discovery rates are provisional builder parameters, to be displayed honestly and tested rather than presented as approved balance.
+Любой обмен экипировки ставит симуляцию на паузу и при закрытии продолжает тот же забег. Вместимость и занятые ячейки показываются до подтверждения. Бесплатная замена никогда не удаляет заменяемый орган без сохранения. Ошибки сохранения должны оставлять возможность восстановить текущий организм, выбор семейства и ожидающие решения.
 
-## Minimal organ records required in release one
+Открытия вместимости происходят во время забега, сохраняются в принадлежащем семье состоянии и показывают короткую анимацию/уведомление о новой камере ткани. Это не улучшение, доступное только в магазине. Точные начальные вместимости, стоимость ячеек и частота открытий — предварительные параметры разработчика; их следует честно показывать и проверять, а не представлять как утверждённый баланс.
 
-Stage-two equipment cannot use the old destructive kind replacement. The first release needs stable per-family organ identity, kind, rank, quality, cell cost and equipped/stock location. It preserves existing values rather than implementing limitless upgrades or new specialization recipes early. Release two expands this foundation into the complete permanent organ economy.
+## Минимальные записи органов для первого выпуска
 
-A run must carry its family ID. Saving an old simulation after selecting a different family is rejected; an active-profile projection alone is insufficient. Body view has an explicit live-run versus preparation-preview context; previews are never saved as checkpoints. Inactive registry records and IDs are validated; corruption must not silently turn an inherited family into a blank one.
+Экипировка второго этапа не может использовать старую разрушительную замену типа органа. Первому выпуску нужны стабильные идентификатор органа в рамках семьи, тип, ранг, качество, стоимость ячеек и расположение (экипирован/запас). Существующие значения сохраняются, без преждевременного внедрения бесконечных улучшений или новых рецептов специализации. Второй выпуск расширяет эту основу до полной постоянной экономики органов.
 
-## Save invariants and migration
+Забег должен содержать ID своего семейства. Сохранение старой симуляции после выбора другого семейства отклоняется; одной проекции активного профиля недостаточно. У представления тела есть явный контекст: текущий живой забег или предпросмотр подготовки; предпросмотры никогда не сохраняются как контрольные точки. Неактивные записи реестра и ID проверяются; повреждение не должно незаметно превращать унаследованное семейство в пустое.
 
-- The old profile becomes the first family exactly once; its cores, purchases, discoveries, archived imprints, pending rewards and history remain.
-- An unfinished checkpoint remains resumable with position, HP, build, RNG, captured food, pigment and pending rewards.
-- An ended-but-uncredited checkpoint must finish its original result flow before a descendant starts.
-- Switching family is atomic; failure cannot charge, duplicate, overwrite another family or change in-memory selection.
-- Credits and reward tokens remain local to a family; menu previews never become gameplay checkpoints.
-- A new family starts independently, while former families stay available.
-- Family deletion is explicit and confirmed; deleting the final family returns to clean new-family preparation without deleting unrelated application files.
-- New capacity defaults cannot strand existing equipped organs; migration preserves enough capacity to hold them.
+## Инварианты сохранения и миграция
 
-## Decisions requiring Pavel
+- Старый профиль ровно один раз становится первым семейством; его ядра, покупки, открытия, архивные отпечатки, ожидающие награды и история сохраняются.
+- Незавершённая контрольная точка остаётся возобновляемой с позицией, HP, сборкой, RNG, захваченной пищей, пигментом и ожидающими наградами.
+- Завершённая, но ещё не засчитанная контрольная точка должна завершить исходный поток итогов до старта потомка.
+- Переключение семейства атомарно; ошибка не может списать ресурсы, создать дубликат, перезаписать другое семейство или изменить выбор в памяти.
+- Начисления и токены наград остаются внутри семейства; предпросмотры меню никогда не становятся игровыми контрольными точками.
+- Новое семейство начинается независимо, прежние семейства остаются доступными.
+- Удаление семейства требует явного подтверждения; удаление последнего семейства возвращает к чистой подготовке нового семейства, не удаляя несвязанные файлы приложения.
+- Новые значения вместимости по умолчанию не должны лишать места уже экипированные органы; миграция сохраняет достаточную вместимость для них.
 
-Pavel confirmed one living heir per family. Several different families can each have one living save. Families may be deleted; deletion must explicitly confirm that the live save and inherited organs/resources are removed. No deletion occurs merely when starting another family.
+## Решения, требующие подтверждения пользователя
 
-## Verification and release gate
+Пользователь подтвердил одно живое наследие на семейство. Несколько разных семейств могут иметь по одному живому сохранению. Семейства можно удалять; удаление должно явно подтверждать удаление живого сохранения, унаследованных органов и ресурсов. Сам по себе старт другого семейства не удаляет предыдущее.
 
-Model tests for migration, cross-family isolation, interrupted writes, live/dead selection and duplicate results. Controller tests for save/reopen/switch/resume/create without loss. Native touch tests for both paged family blocks and body/stock pickers, and no-scroll layout checks at actual logical viewport dimensions. Inspect actual screenshots, not only structural tests.
+## Проверка и условия выпуска
 
-Run the complete existing suite. Profile a ten-minute run and paired native scenes against stable 1.0.1; add a several-family save/switch measurement so new persistence is represented. Preserve package/signing identity and verify the signed APK/version/manifest in CI.
+Тесты модели для миграции, изоляции между семействами, прерванных записей, выбора живого/погибшего состояния и дублирующихся результатов. Тесты контроллера для сохранения/повторного открытия/переключения/возобновления/создания без потерь. Нативные сенсорные тесты для обоих постраничных блоков семейств и селекторов тела/запаса, проверки отсутствия прокрутки при фактических логических размерах области просмотра. Изучать реальные снимки экрана, а не только структурные тесты.
 
-Do not move preparation commits to main while its current workflow publishes automatically. No release until stages 1 and 2 work as a complete player flow and the release gates pass. A plan or new menu alone is not this release.
+Запустить полный существующий набор. Профилировать десятиминутный забег и парные нативные сцены относительно стабильной 1.0.1; добавить измерение сохранения/переключения нескольких семейств, чтобы новая система хранения была представлена в тестах. Сохранить идентичность пакета/подписи и проверить подписанный APK/версию/манифест в CI.
+
+Не переносить подготовительные коммиты в main, пока текущий рабочий процесс автоматически публикует релиз. Не выпускать релиз, пока этапы 1 и 2 не образуют полный путь игрока и не пройдены условия выпуска. Один план или новое меню сами по себе не являются выпуском.
