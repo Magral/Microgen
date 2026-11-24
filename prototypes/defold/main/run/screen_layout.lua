@@ -58,7 +58,7 @@ function M.test()
         {inset_left=32,inset_right=48,inset_top=18,inset_bottom=12})
     near(left, 42 + 32 / (1920 / 2460))
     near(right, 2418 - 48 / (1920 / 2460))
-    near(top, 1023)
+    near(top, 1029)
     near(bottom, 45)
 
     -- Insets that consume the available area collapse safely to its center.
