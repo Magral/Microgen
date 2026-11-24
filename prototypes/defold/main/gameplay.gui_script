@@ -773,7 +773,12 @@ local function safe_edges()
     local window_width,window_height=window.get_size()
     local area=window.get_safe_area()
     local scene_width,scene_height=gui.get_width(),gui.get_height()
-    return ScreenLayout.safe_bounds(window_width,window_height,scene_width,scene_height,area,42,33)
+    local _,right,top,bottom=ScreenLayout.safe_bounds(
+        window_width,window_height,scene_width,scene_height,area,42,33)
+    -- The gameplay vitals panel is intentionally edge-anchored. Its own text
+    -- and meters retain their 23-unit inner padding; other controls still
+    -- respect the platform safe area on the right and vertically.
+    return 0,right,top,bottom
 end
 
 function App:show_run()
