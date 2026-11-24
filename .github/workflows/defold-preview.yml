@@ -124,10 +124,10 @@ jobs:
         timeout-minutes: 6
         working-directory: prototypes/defold
         run: |
-          if ! command -v xvfb-run >/dev/null || ! command -v import >/dev/null || ! ldconfig -p | grep "libGLU.so.1" >/dev/null; then
+          if ! command -v xvfb-run >/dev/null || ! ldconfig -p | grep "libGLU.so.1" >/dev/null; then
             apt_options=(-o Acquire::Retries=1 -o Acquire::http::Timeout=12
               -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/ubuntu.sources -o Dir::Etc::sourceparts=-)
-            if ! sudo apt-get "${apt_options[@]}" install -y --no-install-recommends xvfb xauth imagemagick libglu1-mesa libopenal1; then
+            if ! sudo apt-get "${apt_options[@]}" install -y --no-install-recommends xvfb xauth libglu1-mesa libopenal1; then
               sudo apt-get "${apt_options[@]}" update
               sudo apt-get "${apt_options[@]}" install -y --no-install-recommends xvfb xauth imagemagick libglu1-mesa libopenal1
             fi
@@ -161,7 +161,6 @@ jobs:
             grep -Fq "MICROGEN LEGACY SCREEN READY" "$2/linux-smoke.log"
             kill -0 "$pid"
             if grep -E "ERROR:SCRIPT|ERROR:RENDER|FATAL" "$2/linux-smoke.log"; then exit 1; fi
-            timeout 15s import -window root "$2/Microgen-Defold-Preview.png"
           ' bash "${executables[0]}" "$RUNNER_TEMP/defold-smoke"
 
       - name: Upload native smoke results
