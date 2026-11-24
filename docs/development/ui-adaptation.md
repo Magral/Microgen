@@ -1,54 +1,54 @@
-# Defold UI adaptation — audit and work plan
+# Адаптация интерфейса Defold — аудит и план работ
 
-## Baseline
+## Исходная версия
 
-Audit target: Defold 1.5.7, tag `defold-1.5.7`, commit `95f1925571010b0b7ee552d387f5e41450c13e1b`. Project directory: `prototypes/defold`.
+Объект аудита: Defold 1.5.7, тег `defold-1.5.7`, коммит `95f1925571010b0b7ee552d387f5e41450c13e1b`. Каталог проекта: `prototypes/defold`.
 
-Android configuration confirmed in `game.project`:
-- Design area: 2460×1080.
-- Window area: 1230×540.
-- Dynamic orientation disabled; the game is landscape.
-- Android immersive mode enabled.
-- Package: `org.magral.microgen.defold`.
-- Minimum Android API: 26.
-- Version code: 157.
+Подтверждённые параметры Android в `game.project`:
+- Базовая область интерфейса: 2460×1080.
+- Размер окна: 1230×540.
+- Динамическое изменение ориентации отключено; игра работает в альбомной ориентации.
+- Полноэкранный режим Android включён.
+- Идентификатор пакета: `org.magral.microgen.defold`.
+- Минимальная версия Android: API 26.
+- Номер версии: 157.
 
-## Existing adaptation mechanisms
+## Уже существующие механизмы адаптации
 
-- `main/run/interface.lua` defines the 2460×1080 interface coordinate space.
-- Panel width is adapted through the existing `Interface:widen(width)` helper.
-- Text fitting uses the existing horizontal and font scaling logic.
-- `main/gameplay.gui_script` has a `safe_edges()` helper based on the current window size and safe area.
+- `main/run/interface.lua` задаёт систему координат интерфейса 2460×1080.
+- Ширина панелей адаптируется существующим методом `Interface:widen(width)`.
+- Подгонка текста использует существующую логику горизонтального и шрифтового масштабирования.
+- В `main/gameplay.gui_script` есть функция `safe_edges()`, учитывающая размер окна и безопасную область экрана.
 
-The current implementation is therefore a starting point for targeted improvements, not a reason to rebuild the interface from scratch.
+Таким образом, текущая реализация — основа для точечных улучшений, а не повод переписывать весь интерфейс с нуля.
 
-## Gaps identified
+## Выявленные пробелы
 
-- The safe-area helper is currently used when constructing the in-run HUD.
-- Modal windows require a separate review; the HUD safe-area handling does not automatically establish that every modal is safe on every display.
-- Existing smoke checks exercise selected menus and modals against the base coordinate area. They are not a substitute for a resolution/aspect-ratio test matrix or hands-on Android checks.
+- Вспомогательная функция безопасных отступов сейчас используется при построении HUD во время забега.
+- Модальные окна требуют отдельной проверки: обработка безопасной области HUD сама по себе не гарантирует корректное положение каждого модального окна на любом дисплее.
+- Имеющиеся smoke-тесты проверяют отдельные меню и модальные окна относительно базовой области координат. Они не заменяют матрицу разрешений/соотношений сторон и практическую проверку на Android.
 
-## Work sequence
+## Последовательность работ
 
-1. Inventory every screen, modal and overlay, recording its layout and important touch controls.
-2. Define a small set of representative landscape test profiles: standard, wide and relatively narrow aspect ratios, plus differing resolutions/densities.
-3. Verify coordinate transforms and panel/text scaling at each profile.
-4. Extend safe-area handling consistently to HUD, menus, overlays and modal windows.
-5. Check clipping, overlap, scroll behavior, button size, touch target and text readability.
-6. Validate the main flows on Poco X8 Pro and use emulators or additional devices for other display profiles.
-7. Run relevant functional and save-compatibility checks after each change.
+1. Составить перечень всех экранов, модальных окон и наложений, зафиксировать их компоновку и важные сенсорные элементы управления.
+2. Определить несколько характерных профилей альбомного экрана: стандартный, широкий и относительно узкий, а также разные разрешения и плотности пикселей.
+3. Проверить преобразования координат, масштабирование панелей и текста на каждом профиле.
+4. Последовательно распространить учёт безопасной области на HUD, меню, наложения и модальные окна.
+5. Проверить обрезание, наложения, прокрутку, размер кнопок, сенсорные области и читаемость текста.
+6. Проверить основные сценарии на Poco X8 Pro, а для других пропорций экранов использовать эмуляторы или дополнительные устройства.
+7. После каждого изменения выполнять соответствующие функциональные проверки и проверку совместимости сохранений.
 
-## Non-goals for this pass
+## Что не входит в этот этап
 
-- No gameplay balance or combat-rule changes.
-- No save-format migration unless separately justified.
-- No wholesale visual redesign.
-- No FPS benchmarking as part of this task; performance checks are separate and should only be added if specifically required.
+- Изменение баланса или правил боя.
+- Перенос формата сохранений без отдельного обоснования.
+- Полная визуальная переработка.
+- Измерение FPS: это отдельная задача, и добавлять её следует только по специальному запросу.
 
-## Acceptance criteria
+## Критерии приёмки
 
-- Every major screen and modal has been reviewed on the agreed landscape profiles.
-- No critical text or control is clipped, hidden or placed in an unsafe edge region.
-- Touch targets are practical and consistent.
-- The same screen hierarchy and Microgen visual identity are preserved.
-- Core gameplay and save continuation still work.
+- Каждый основной экран и каждое модальное окно проверены на согласованных альбомных профилях.
+- Важный текст и элементы управления не обрезаются, не скрываются и не попадают в недоступные краевые зоны.
+- Сенсорные области имеют практичный и согласованный размер.
+- Сохраняются иерархия экранов и визуальная идентичность Microgen.
+- Основной игровой процесс и продолжение сохранённого забега работают.
