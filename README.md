@@ -7,7 +7,7 @@
 - **Движок:** Defold.
 - **Контрольная версия:** [Defold 1.5.7](https://github.com/Magral/Microgen/releases/tag/defold-1.5.7), тег `defold-1.5.7`, commit `95f1925571010b0b7ee552d387f5e41450c13e1b`.
 - **Проект Defold:** [`prototypes/defold`](prototypes/defold); открыть `prototypes/defold/game.project` в Defold Editor.
-- **Платформа:** Android, ARM64 (`arm64-v8a)); минимальная версия Android — API 26.
+- **Платформа:** Android, ARM64 (`arm64-v8a`); минимальная версия Android — API 26.
 - **Ориентация:** альбомная.
 - **Идентификатор приложения:** `org.magral.microgen.defold`.
 - **Код сборки 1.5.7:** 157.
