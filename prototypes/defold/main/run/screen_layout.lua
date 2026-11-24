@@ -8,8 +8,8 @@ local function safe_bounds(window_width, window_height, scene_width, scene_heigh
         return margin_x, scene_width - margin_x, scene_height - margin_y, margin_y
     end
 
-    -- GUI coordinates can be stretched independently on each axis. Convert
-    -- pixel insets with the matching axis scale instead of one shared ratio.
+        -- Координаты GUI могут растягиваться независимо по осям. Переводим
+    -- экранные отступы в координаты сцены с соответствующим масштабом оси.
     local scale_x = window_width / scene_width
     local scale_y = window_height / scene_height
     local left = margin_x + math.max(0, area.inset_left or 0) / scale_x
