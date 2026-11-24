@@ -1,15 +1,29 @@
-# Foundation 1.0 implementation and release plan
+# План реализации и выпуска основы 1.0
 
-**Goal:** Ship the agreed first playable foundation with living morphologies, build/evolution choices, three starter forms, meaningful persistent genome research/traits/imprints and readable preparation/results. Existing procedural biomes, growth, minimap and minibosses remain; expanded food-chain ecosystem and new scale tiers are future roadmap stages.
-**Architecture:** Pure Legacy model + atomic Save operations, immutable per-run loadout snapshot, modular genome UI, existing simulation and organic painter extended with trait feedback. Update checker reads a stable GitHub release manifest; download/install is a clearly labelled browser + Android installer handoff. No silent installation.
-**Release gate:** No1.0 publication until all foundation paths, legacy migration/failed-save behavior, native UI/touch/render checks, ten-minute replay and paired profiling, code review, signed Android export pass. Preserve package org.magral.microgen and signing key. No videos.
+> Исторический план этапа 1.0. Текущая принятая основа разработки — Defold 1.5.7; данный документ сохраняет контекст прежнего этапа.
 
-- [x] Legacy model/research/presets/focus/history/pending imprint and migration tests.
-- [x] Run-loadout simulation and visible trait anatomy; honest numerical tradeoffs.
-- [x] New generation/genome/results/imprint UI with live preview and fixedX/44pxscroll.
-- [x] Explicit update check, stable feed validation and transparent browser install handoff.
-- [x] Full headless/native tests, save-resume/atomicity, research progression, ordinary/evolved combat, native snapshots and longrun/performance comparison.
-- [x] Review fixes, 1.0 docs/checklist and release workflow stable manifest/signature.
-- [ ] Only after all checks publish v1.0.0 APK and verify assets/commit/version/signature.
+**Цель:** выпустить согласованную первую играбельную основу с живой морфологией, выбором сборки/эволюции, тремя стартовыми формами, содержательными постоянными исследованиями генома, наследственными признаками и отпечатками, а также понятными экранами подготовки и итогов. Существующие процедурные биомы, рост, мини-карта и мини-боссы сохраняются; расширенная пищевая экосистема и новые ступени масштаба относятся к будущим этапам дорожной карты.
 
-Runtime trait decisions: elastic response0.13s instead0.20s with +8%collision damage; sensory +160 sensing with −5%speed; folds −20%detached tissue digestion time with −10%received healing; receptive preferred-branch weight1.75 instead1.35 with −5%XP. Two slots, ordinary rank1 imprint, no inherited quality/evolution. Costs finite, initial predator available, migration preserves prior purchases. Agents own disjoint model/UI/updater modules; root integrates simulation/main/workflow and verifies everything.
+**Архитектура исторической реализации:** чистая модель Legacy и атомарные операции Save, неизменяемый снимок комплектации на один забег, модульный интерфейс генома, существующая симуляция и органический отрисовщик с обратной связью от наследственных признаков. Проверка обновлений читает манифест стабильного релиза GitHub; загрузка/установка явно передаётся браузеру и установщику Android. Скрытой установки нет.
+
+**Условия выпуска:** не публиковать 1.0, пока не пройдены все пути основы, миграция старых сохранений и поведение при неудачной записи, нативные проверки UI/касания/отрисовки, десятиминутный повторный прогон и парное профилирование, ревью кода и подписанный экспорт Android. Сохранить пакет `org.magral.microgen` и ключ подписи. Видеоролики не создавать.
+
+## Выполненные задачи
+
+- [x] Тесты модели Legacy, исследований, наборов, фокуса, истории, ожидающего отпечатка и миграции.
+- [x] Снимок комплектации на забег и видимая анатомия наследственных признаков; честные числовые компромиссы.
+- [x] Интерфейс нового поколения, генома, итогов и отпечатка с живым предпросмотром, фиксированным X и прокруткой 44 px.
+- [x] Явная проверка обновлений, валидация стабильного канала и прозрачная передача установки браузеру.
+- [x] Полные headless-/нативные тесты, сохранение/возобновление и атомарность, развитие исследований, обычный/эволюционировавший бой, нативные снимки и длительное сравнение производительности.
+- [x] Исправления ревью, документы/контрольный список 1.0 и стабильный манифест/подпись рабочего процесса выпуска.
+- [ ] Только после всех проверок опубликовать APK v1.0.0 и проверить вложения, коммит, версию и подпись.
+
+## Параметры наследственных признаков в историческом плане
+
+- Эластичная реакция: 0,13 с вместо 0,20 с, но +8% урона от столкновений.
+- Чувствительность: +160 к дальности обнаружения, но −5% скорости.
+- Складки: −20% времени переваривания отделённой ткани, но −10% получаемого лечения.
+- Генетическая восприимчивость: вес предпочтительной ветви 1,75 вместо 1,35, но −5% опыта.
+- Два слота, обычный отпечаток ранга 1, без наследования качества/эволюции. Стоимость ограничена; хищная форма доступна изначально; миграция сохраняет прежние покупки.
+
+Исполнители отвечают за непересекающиеся модули модели/UI/проверки обновлений; корневой координатор интегрирует симуляцию, основной экран и рабочий процесс, затем проверяет всю систему.
