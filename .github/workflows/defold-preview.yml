@@ -221,6 +221,10 @@ jobs:
               --title "Микроген $version · Defold" --notes-file ../prototypes/defold/RELEASE_NOTES.md
           elif [ "$(jq -r .isDraft release-state.json)" = true ]; then
             gh release upload "$tag" "$asset" SHA256SUMS.txt --clobber
+          else
+            # A previously published release may exist without assets. Repair it
+            # by uploading the verified APK and checksum instead of silently skipping.
+            gh release upload "$tag" "$asset" SHA256SUMS.txt --clobber
           fi
           expected=$(cut -d' ' -f1 SHA256SUMS.txt)
           if [ "$(gh release view "$tag" --json isDraft --jq .isDraft)" = true ]; then
