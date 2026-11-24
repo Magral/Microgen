@@ -1689,6 +1689,9 @@ function init(self)
         sim.cooldowns.barrier=0
         app:draw_hud()
         assert(app.hud_has_barrier and gui.get_text(app.shield_metric):find("Щит готов",1,true))
+        local vitals_position,vitals_size=gui.get_position(app.vitals),gui.get_size(app.vitals)
+        assert(math.abs(vitals_position.x-vitals_size.x/2)<0.01,
+            "Gameplay vitals panel must touch the left scene edge")
         sim.cooldowns.barrier=4
         app:draw_hud()
         assert(gui.get_size(app.shield).x==360 and gui.get_text(app.shield_metric):find("4.0",1,true))
