@@ -53,6 +53,29 @@ function M.test()
     near(top, 1047 - 44 / (1200 / 1080))
     near(bottom, 33 + 22 / (1200 / 1080))
 
+    -- Narrow landscape: horizontal inset conversion uses the narrower X scale.
+    left, right, top, bottom = safe_bounds(1920, 1080, 2460, 1080,
+        {inset_left=32,inset_right=48,inset_top=18,inset_bottom=12})
+    near(left, 42 + 32 / (1920 / 2460))
+    near(right, 2418 - 48 / (1920 / 2460))
+    near(top, 1023)
+    near(bottom, 45)
+
+    -- Insets that consume the available area collapse safely to its center.
+    left, right, top, bottom = safe_bounds(1230, 540, 2460, 1080,
+        {inset_left=700,inset_right=700,inset_top=400,inset_bottom=400})
+    near(left, 1230)
+    near(right, 1230)
+    near(top, 540)
+    near(bottom, 540)
+
+    -- Missing platform safe-area data keeps the ordinary scene margins.
+    left, right, top, bottom = safe_bounds(1230, 540, 2460, 1080, nil)
+    near(left, 42)
+    near(right, 2418)
+    near(top, 1047)
+    near(bottom, 33)
+
     return true
 end
 
