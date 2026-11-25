@@ -1871,20 +1871,30 @@ function init(self)
                 if gui.get_text(button.text)==label then return button.callback end
             end
         end
+        -- Exercise the real App:map zoom closure without rebuilding several
+        -- complete GUI trees in one init frame (Defold releases deleted nodes
+        -- after the frame is flushed).
+        local original_map,original_show_run=app.map,app.show_run
+        local map_redraws=0
+        app.map=function(self) map_redraws=map_redraws+1;self.screen="map" end
         map_callback("+")()
-        assert(app.screen=="map" and math.abs(app.map_zoom-1.12)<0.001,
-            "Map zoom-in control must increase zoom and keep map open")
-        local zoom_out=map_callback("−")
-        assert(zoom_out,"Map zoom-out control must remain available after zoom-in")
-        zoom_out()
+        assert(app.screen=="map" and map_redraws==1 and math.abs(app.map_zoom-1.12)<0.001,
+            "Map zoom-in control must increase zoom and request a map redraw")
+        app.modal:clear()
+        app.modal:fit_safe_area()
+        MapView.screen(app.modal,sim,function() app.screen="run" end,1.12,
+            function(value) app.map_zoom=value end,function() app.map_zoom=1 end)
+        check_window()
+        map_callback("−")()
         assert(app.screen=="map" and math.abs(app.map_zoom-1.0)<0.001,
             "Map zoom-out control must restore the default zoom")
-        map_callback("+")()
+        app.map_zoom=1.12
         map_callback("Общий вид")()
-        assert(app.screen=="map" and math.abs(app.map_zoom-1.0)<0.001,
+        assert(math.abs(app.map_zoom-1.0)<0.001,
             "Map overview control must restore the default zoom")
         map_callback("×")()
         assert(app.screen=="run","Map close control must return to the active run")
+        app.map,app.show_run=original_map,original_show_run
         print("MICROGEN MAP CONTROLS READY")
     end
 end
