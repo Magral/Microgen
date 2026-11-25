@@ -39,6 +39,20 @@ end
 
 -- Keep the complete joystick artwork visible inside the platform safe area.
 -- The touch origin remains unchanged and is still used for movement direction.
+local function touch_zones()
+    local window_width,window_height=window.get_size()
+    local scene_width,scene_height=gui.get_width(),gui.get_height()
+    local left,right,top,bottom=ScreenLayout.safe_bounds(
+        window_width,window_height,scene_width,scene_height,window.get_safe_area(),42,33)
+    return left,right,top,bottom
+end
+
+-- Keep movement on the left side so empty right-side touches cannot start
+-- an unexpected joystick gesture while the player reaches for HUD controls.
+local function in_movement_zone(x,left,right)
+    return x <= left + (right-left)*.55
+end
+
 local function stick_visual_origin(x,y)
     local window_width,window_height=window.get_size()
     local scene_width,scene_height=gui.get_width(),gui.get_height()
@@ -1654,6 +1668,11 @@ function init(self)
         if top-bottom>=180 then
             assert(ly>=bottom+89 and ry<=top-89,"Joystick artwork must remain vertically inside safe area")
         end
+        assert(in_movement_zone(left+(right-left)*.25,left,right),
+            "Left quarter must start one-finger movement")
+        assert(not in_movement_zone(left+(right-left)*.80,left,right),
+            "Right-side empty space must not start an accidental movement gesture")
+        print("MICROGEN TOUCH ZONES READY")
         if #app.store:family_summaries()==0 then
             app.home_slot=3
             app:show_home()
@@ -2005,8 +2024,11 @@ local function pointer(app,id,x,y,pressed,released)
         app.touch_id=id
         app.press_action=app.modal:hit(x,y) or (app.screen=="run" and app.hud:hit(x,y))
         if not app.press_action and app.screen=="run" then
-            local visual_x,visual_y=stick_visual_origin(x,y)
-            app.stick={ox=x,oy=y,x=x,y=y,visual_x=visual_x,visual_y=visual_y}
+            local left,right=touch_zones()
+            if in_movement_zone(x,left,right) then
+                local visual_x,visual_y=stick_visual_origin(x,y)
+                app.stick={ox=x,oy=y,x=x,y=y,visual_x=visual_x,visual_y=visual_y}
+            end
         end
     end
     if app.touch_id~=id then return end
