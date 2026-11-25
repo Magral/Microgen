@@ -93,10 +93,14 @@ local function run(seed, branch)
 
     assert(finite(sim.elapsed) and finite(sim.build.biomass) and finite(sim.kills),
         "Balance run ended with invalid summary values")
+    local history = sim.combat_stats.history
+    local last_hit = history[#history]
+    local cause = last_hit and string.format("%s/%s/%.1f", last_hit.kind, last_hit.name, last_hit.amount) or "none"
     print(string.format(
-        "MICROGEN BALANCE RUN seed=%d branch=%s seconds=%.1f stage=%d level=%d kills=%d hp=%.1f outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d",
+        "MICROGEN BALANCE RUN seed=%d branch=%s seconds=%.1f stage=%d level=%d kills=%d hp=%.1f damage_taken=%.1f last_hit=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d",
         seed, branch, sim.elapsed, sim.stage_index, sim.level, sim.kills, sim.hp,
-        sim.outcome == "" and "alive" or sim.outcome, steps, max_enemies, max_fields, max_remains))
+        sim.combat_stats.damage_taken, cause, sim.outcome == "" and "alive" or sim.outcome,
+        steps, max_enemies, max_fields, max_remains))
     return sim.elapsed
 end
 
