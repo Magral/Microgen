@@ -23,6 +23,19 @@ local DARK = color("0c202b")
 local SHADE = vmath.vector4(.008,.023,.035,.56)
 Interface.colors = {pale=PALE,mint=MINT,dim=DIM,gold=color("dbbd8c"),red=color("efb6a9")}
 
+local function assert_inside_safe_area(self,node,label)
+    if not self.safe_left or sys.get_config_string("microgen.smoke_cards","0")~="1" then return end
+    local position,size=gui.get_position(node),gui.get_size(node)
+    local epsilon=1
+    assert(position.x-size.x/2>=self.safe_left-epsilon
+        and position.x+size.x/2<=self.safe_right+epsilon
+        and position.y-size.y/2>=self.safe_bottom-epsilon
+        and position.y+size.y/2<=self.safe_top+epsilon,
+        ("Interface element outside safe area (%s): center %.1f,%.1f size %.1f,%.1f bounds %.1f..%.1f / %.1f..%.1f")
+            :format(label or "unnamed",position.x,position.y,size.x,size.y,
+                self.safe_left,self.safe_right,self.safe_bottom,self.safe_top))
+end
+
 function Interface.new()
     return setmetatable({nodes={}, buttons={}, group="overlay"},Interface)
 end
@@ -38,6 +51,7 @@ function Interface:fit_safe_area()
     local scene_width,scene_height=gui.get_width(),gui.get_height()
     local left,right,top,bottom=ScreenLayout.safe_bounds(
         window_width,window_height,scene_width,scene_height,window.get_safe_area(),42,33)
+    self.safe_left,self.safe_right,self.safe_top,self.safe_bottom=left,right,top,bottom
     self.safe_width=right-left
     self.safe_height=top-bottom
     self.center_x=(left+right)/2
@@ -102,6 +116,7 @@ end
 
 function Interface:button(x,y,w,h,label,callback,accent,scale)
     local node = self:surface(x,y,w,h,callback and (accent and "primary" or "button") or "disabled")
+    assert_inside_safe_area(self,node,"button: "..(label or ""))
     local shade = callback and (accent and color("09272c") or color("d6eeea")) or color("637b82")
     local text
     if self.horizontal_scale and label ~= "" then
@@ -132,6 +147,7 @@ function Interface:panel(title,subtitle,close,size,variant)
     gui.set_color(shade,backdrop)
     self:widen(w)
     local shell=self:surface(1230,540,w,1038,"panel")
+    assert_inside_safe_area(self,shell,"modal panel")
     gui.set_color(shell,vmath.vector4(.54,.84,.85,variant=="mutation" and .12 or .76))
     self:box(left+8,540,4,972,color("4edbb9"))
     self:box(1230,870,w-74,2,color("39727b"))
@@ -255,6 +271,7 @@ function Interface:clear()
     self.nodes,self.buttons,self.panel_width = {},{},nil
     self.horizontal_scale,self.vertical_scale,self.font_scale = nil,nil,nil
     self.center_x,self.center_y,self.safe_width,self.safe_height = nil,nil,nil,nil
+    self.safe_left,self.safe_right,self.safe_top,self.safe_bottom = nil,nil,nil,nil
 end
 
 function Interface:visible(value)
