@@ -103,6 +103,11 @@ local function breathing_scale(time,seed,amplitude)
     return 1+math.sin((time or 0)*2.1+(seed or 0)*.73)*(amplitude or .012)
 end
 
+local function feeding_turn(progress)
+    local crossing=smoothstep(.12,.72,math.max(0,math.min(1,progress or 0)))
+    return math.sin(crossing*math.pi)*.14
+end
+
 local function feeding_pose(sim,item,progress)
     progress=math.max(0,math.min(1,progress or 0))
     local theta=item.entry_angle or 0
@@ -484,7 +489,8 @@ function Scene:render(sim, breakup_time)
     for _,fragment in ipairs(sim.remains) do
         local p,shrink,opacity=fragment.pos,1,1
         if fragment.captured then p,shrink,opacity=feeding_pose(sim,fragment,fragment.progress) end
-        self:draw_fragment(fragment,p,shrink,opacity)
+        self:draw_fragment(fragment,p,shrink,opacity,
+            fragment.captured and feeding_turn(fragment.progress) or 0)
     end
     if breakup_time and sim.boss_breakup.pieces then
         local t=math.min(1,breakup_time/1.35)
@@ -545,6 +551,7 @@ end
 
 -- Exposed for deterministic visual regression tests; gameplay uses the same helper.
 Scene.feeding_pose=feeding_pose
+Scene.feeding_turn=feeding_turn
 Scene.breathing_scale=breathing_scale
 
 return Scene
