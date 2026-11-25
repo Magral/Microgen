@@ -1694,6 +1694,14 @@ function init(self)
     end
     if smoke and sys.get_config_string("microgen.smoke_cards","0")=="1" then
         local sim=app.sim
+        local breath_peak=Scene.breathing_scale(math.pi/(2*2.1),1,.014)
+        local breath_trough=Scene.breathing_scale(3*math.pi/(2*2.1),1,.014)
+        local npc_breath=Scene.breathing_scale(math.pi/(2*2.1),1,.009)
+        assert(breath_peak>1 and breath_peak<=1.014001
+            and breath_trough<1 and breath_trough>=.985999
+            and npc_breath>1 and npc_breath<breath_peak,
+            "Organism breathing must stay subtle and bounded")
+        print("MICROGEN ORGANISM BREATHING READY")
         local feed_item={entry_angle=0,entry_distance=100,r=100}
         local feed_start,scale_start,alpha_start=Scene.feeding_pose(sim,feed_item,0)
         local feed_mid,scale_mid,alpha_mid=Scene.feeding_pose(sim,feed_item,.5)
