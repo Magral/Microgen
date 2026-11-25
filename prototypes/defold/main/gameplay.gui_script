@@ -37,6 +37,22 @@ local function bounded_direction(dx,dy,r)
     return dx*strength/length,dy*strength/length
 end
 
+-- Keep the complete joystick artwork visible inside the platform safe area.
+-- The touch origin remains unchanged and is still used for movement direction.
+local function stick_visual_origin(x,y)
+    local window_width,window_height=window.get_size()
+    local scene_width,scene_height=gui.get_width(),gui.get_height()
+    local left,right,top,bottom=ScreenLayout.safe_bounds(
+        window_width,window_height,scene_width,scene_height,window.get_safe_area(),42,33)
+    local margin=90 -- 86-unit base radius plus the tip's maximum 57+32-unit reach.
+    local function clamp_axis(value,low,high)
+        local minimum,maximum=low+margin,high-margin
+        if minimum>maximum then return (low+high)/2 end
+        return math.max(minimum,math.min(maximum,value))
+    end
+    return clamp_axis(x,left,right),clamp_axis(y,bottom,top)
+end
+
 local function has_checkpoint(profile)
     return type(profile.checkpoint)=="table" and next(profile.checkpoint)~=nil
 end
@@ -1626,6 +1642,18 @@ function init(self)
         end
     end)
     if smoke then
+        local window_width,window_height=window.get_size()
+        local scene_width,scene_height=gui.get_width(),gui.get_height()
+        local left,right,top,bottom=ScreenLayout.safe_bounds(
+            window_width,window_height,scene_width,scene_height,window.get_safe_area(),42,33)
+        local lx,ly=stick_visual_origin(-100,-100)
+        local rx,ry=stick_visual_origin(scene_width+100,scene_height+100)
+        if right-left>=180 then
+            assert(lx>=left+89 and rx<=right-89,"Joystick artwork must remain horizontally inside safe area")
+        end
+        if top-bottom>=180 then
+            assert(ly>=bottom+89 and ry<=top-89,"Joystick artwork must remain vertically inside safe area")
+        end
         if #app.store:family_summaries()==0 then
             app.home_slot=3
             app:show_home()
@@ -1933,7 +1961,10 @@ local function pointer(app,id,x,y,pressed,released)
     if pressed and app.touch_id==nil then
         app.touch_id=id
         app.press_action=app.modal:hit(x,y) or (app.screen=="run" and app.hud:hit(x,y))
-        if not app.press_action and app.screen=="run" then app.stick={ox=x,oy=y,x=x,y=y} end
+        if not app.press_action and app.screen=="run" then
+            local visual_x,visual_y=stick_visual_origin(x,y)
+            app.stick={ox=x,oy=y,x=x,y=y,visual_x=visual_x,visual_y=visual_y}
+        end
     end
     if app.touch_id~=id then return end
     if released then
@@ -1945,8 +1976,8 @@ local function pointer(app,id,x,y,pressed,released)
         local stick=app.stick
         stick.x,stick.y=x,y
         local dx,dy=bounded_direction(x-stick.ox,y-stick.oy,94)
-        gui.set_position(app.stick_base,vmath.vector3(stick.ox,stick.oy,0))
-        gui.set_position(app.stick_tip,vmath.vector3(stick.ox+dx*57,stick.oy+dy*57,0))
+        gui.set_position(app.stick_base,vmath.vector3(stick.visual_x,stick.visual_y,0))
+        gui.set_position(app.stick_tip,vmath.vector3(stick.visual_x+dx*57,stick.visual_y+dy*57,0))
         gui.set_enabled(app.stick_base,true)
         gui.set_enabled(app.stick_tip,true)
     end
