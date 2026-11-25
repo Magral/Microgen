@@ -103,6 +103,13 @@ local function breathing_scale(time,seed,amplitude)
     return 1+math.sin((time or 0)*2.1+(seed or 0)*.73)*(amplitude or .012)
 end
 
+local function breathing_shape(time,seed,amplitude)
+    local phase=(time or 0)*2.1+(seed or 0)*.73
+    local strength=amplitude or .012
+    return 1+math.sin(phase)*strength,
+        1+math.sin(phase+math.pi*.5)*strength*.65
+end
+
 local function feeding_turn(progress)
     local crossing=smoothstep(.12,.72,math.max(0,math.min(1,progress or 0)))
     return math.sin(crossing*math.pi)*.14
@@ -313,15 +320,16 @@ function Scene:draw_body(sim, actor, is_player, serial)
         slot.pose = Tissue.attach(self.atlas,slot.node,frame)
     end
     local phase = self.visual_time
-    local breath=breathing_scale(phase,actor.id or serial or 1,is_player and .014 or .009)
-    local stretch = self.scale*radius/source_radius*shrink*breath
+    local breath_x,breath_y=breathing_shape(phase,actor.id or serial or 1,is_player and .014 or .009)
+    local stretch = self.scale*radius/source_radius*shrink
     local motion=Tissue.motion(self.motions[actor],self.dt,actor.pos.x,actor.pos.y,genome,is_player and sim.facing or nil)
     self.motions[actor]=motion
     self.ocean:track(actor,actor.pos,radius)
     local angle = is_player and sim.facing or ((genome and genome.rotation or 0)+Tissue.turn(motion))
     local overscan = slot.pose and Tissue.OVERSCAN or 1
     position(slot.node,x,y)
-    size(slot.node,dimensions[1]*stretch*overscan,dimensions[2]*stretch*overscan)
+    size(slot.node,dimensions[1]*stretch*breath_x*overscan,
+        dimensions[2]*stretch*breath_y*overscan)
     gui.set_rotation(slot.node,vmath.vector3(0,0,-math.deg(angle)))
     local cx,cy,bite=0,0,0
     if is_player then cx,cy,bite=feeding_contact(sim) end
@@ -553,5 +561,6 @@ end
 Scene.feeding_pose=feeding_pose
 Scene.feeding_turn=feeding_turn
 Scene.breathing_scale=breathing_scale
+Scene.breathing_shape=breathing_shape
 
 return Scene
