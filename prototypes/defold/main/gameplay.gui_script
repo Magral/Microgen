@@ -1694,6 +1694,25 @@ function init(self)
     end
     if smoke and sys.get_config_string("microgen.smoke_cards","0")=="1" then
         local sim=app.sim
+        local feed_item={entry_angle=0,entry_distance=100,r=100}
+        local feed_start,scale_start,alpha_start=Scene.feeding_pose(sim,feed_item,0)
+        local feed_mid,scale_mid,alpha_mid=Scene.feeding_pose(sim,feed_item,.5)
+        local feed_end,scale_end,alpha_end=Scene.feeding_pose(sim,feed_item,1)
+        local function radial_distance(point)
+            return math.sqrt((point.x-sim.player.x)^2+(point.y-sim.player.y)^2)
+        end
+        assert(math.abs(feed_start.y-sim.player.y)<.001
+            and math.abs(feed_end.y-sim.player.y)<.001,
+            "Absorption trajectory must begin and end on the entry axis")
+        assert(math.abs(feed_mid.y-sim.player.y)>.1,
+            "Absorption trajectory must include a visible inward curl")
+        assert(radial_distance(feed_mid)<radial_distance(feed_start)
+            and radial_distance(feed_end)<radial_distance(feed_mid),
+            "Absorption must move monotonically toward the organism")
+        assert(scale_start>scale_mid and scale_mid>scale_end
+            and alpha_start>alpha_mid and alpha_mid>alpha_end,
+            "Absorbed tissue must shrink and fade monotonically")
+        print("MICROGEN ABSORPTION ANIMATION READY")
         local function check_window()
             local ui=app.modal
             if ui.panel_width then
