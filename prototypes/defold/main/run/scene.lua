@@ -100,13 +100,19 @@ local function smoothstep(lo,hi,value)
 end
 
 local function feeding_pose(sim,item,progress)
+    progress=math.max(0,math.min(1,progress or 0))
     local theta=item.entry_angle or 0
     local entry=item.entry_distance or item.r or 0
     local crossing=smoothstep(.12,.72,progress)
     local depth=math.min(sim:body_radius()*.32,entry*.35)
     local distance=entry+(depth-entry)*crossing
+    -- A restrained inward curl makes absorption feel like membrane suction,
+    -- while both ends of the trajectory remain exactly on the radial axis.
+    local curl=math.sin(crossing*math.pi)*.16
+    local angle=theta+curl
     local dissolve=smoothstep(.55,1,progress)
-    return {x=sim.player.x+math.cos(theta)*distance,y=sim.player.y+math.sin(theta)*distance},1-dissolve*.96,1-dissolve
+    return {x=sim.player.x+math.cos(angle)*distance,y=sim.player.y+math.sin(angle)*distance},
+        1-dissolve*.96,1-dissolve
 end
 
 local function visibly_inside(x,y,padding)
@@ -531,5 +537,8 @@ function Scene:hide()
     self.ocean:hide()
     for _,group in ipairs({self.bed,self.walls,self.landmarks,self.fields,self.organisms,self.fragments,self.objects,self.effects,self.labels}) do finish(group) end
 end
+
+-- Exposed for deterministic visual regression tests; gameplay uses the same helper.
+Scene.feeding_pose=feeding_pose
 
 return Scene
