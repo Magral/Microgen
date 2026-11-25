@@ -110,6 +110,11 @@ local function breathing_shape(time,seed,amplitude)
         1+math.sin(phase+math.pi*.5)*strength*.65
 end
 
+local function damage_shape(reaction)
+    local impact=math.max(0,math.min(1,reaction or 0))
+    return 1-impact*.035,1+impact*.022
+end
+
 local function feeding_turn(progress)
     local crossing=smoothstep(.12,.72,math.max(0,math.min(1,progress or 0)))
     return math.sin(crossing*math.pi)*.14
@@ -321,9 +326,7 @@ function Scene:draw_body(sim, actor, is_player, serial)
     end
     local phase = self.visual_time
     local breath_x,breath_y=breathing_shape(phase,actor.id or serial or 1,is_player and .014 or .009)
-    local impact=is_player and self.reaction or 0
-    local impact_x=1-impact*.035
-    local impact_y=1+impact*.022
+    local impact_x,impact_y=damage_shape(is_player and self.reaction or 0)
     local stretch = self.scale*radius/source_radius*shrink
     local motion=Tissue.motion(self.motions[actor],self.dt,actor.pos.x,actor.pos.y,genome,is_player and sim.facing or nil)
     self.motions[actor]=motion
@@ -572,5 +575,6 @@ Scene.feeding_pose=feeding_pose
 Scene.feeding_turn=feeding_turn
 Scene.breathing_scale=breathing_scale
 Scene.breathing_shape=breathing_shape
+Scene.damage_shape=damage_shape
 
 return Scene
