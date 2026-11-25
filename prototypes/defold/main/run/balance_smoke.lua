@@ -64,13 +64,16 @@ end
 
 local function direction(sim, tick)
     local player, radius = sim.player, sim:body_radius()
-    local away_x, away_y, nearest_prey, prey_distance = 0, 0, nil, math.huge
+    local away_x, away_y, nearest_target, target_score = 0, 0, nil, math.huge
     for _, enemy in ipairs(sim.enemies) do
         if enemy.hp > 0 and not enemy.captured then
             local dx, dy = player.x - enemy.pos.x, player.y - enemy.pos.y
             local distance = math.sqrt(dx * dx + dy * dy)
-            if enemy.kind == "prey" then
-                if distance < prey_distance then nearest_prey, prey_distance = enemy, distance end
+            local edible = enemy.kind == "prey" or
+                (enemy.r <= radius * 1.2 and sim:interaction(enemy).eligible)
+            if edible then
+                local cost = distance + (enemy.kind == "prey" and 0 or 80)
+                if cost < target_score then nearest_target, target_score = enemy, cost end
             elseif distance < 650 then
                 local weight = (650 - distance) / 650 / math.max(40, distance)
                 away_x, away_y = away_x + dx * weight, away_y + dy * weight
@@ -94,8 +97,8 @@ local function direction(sim, tick)
     local desired_x, desired_y
     if away_length > 0.0001 then
         desired_x, desired_y = away_x / away_length, away_y / away_length
-    elseif nearest_prey and prey_distance < 600 then
-        local dx, dy = nearest_prey.pos.x - player.x, nearest_prey.pos.y - player.y
+    elseif nearest_target then
+        local dx, dy = nearest_target.pos.x - player.x, nearest_target.pos.y - player.y
         local distance = math.max(0.0001, math.sqrt(dx * dx + dy * dy))
         desired_x, desired_y = dx / distance, dy / distance
     else
@@ -122,6 +125,14 @@ local function direction(sim, tick)
                     score = score + (next_distance - current_distance) * 0.025
                         - math.max(0, clearance - next_distance) * 0.03
                 end
+            end
+        end
+        for _, field in ipairs(sim.fields) do
+            if field.hostile then
+                local fx, fy = nx - field.pos.x, ny - field.pos.y
+                local distance = math.sqrt(fx * fx + fy * fy)
+                local clearance = field.r + radius * 0.65 + 60
+                score = score - math.max(0, clearance - distance) * 0.025
             end
         end
         for _, colony in ipairs(sim.world.colonies) do
