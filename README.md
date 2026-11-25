@@ -45,7 +45,8 @@ APK и контрольная сумма доступны на [странице
 
 Откройте [`prototypes/defold/game.project`](prototypes/defold/game.project) в Defold Editor. Параметры Android: пакет `org.magral.microgen.defold`, минимальный API 26, версия проекта — 1.5.9 / version code 159.
 
-- [ROADMAP.md](ROADMAP.md) — этапы, критерии и незакрытые проверки.\n- [RELEASE_AUTOMATION.md](RELEASE_AUTOMATION.md) — порядок запуска стабильного релиза.
+- [ROADMAP.md](ROADMAP.md) — этапы, критерии и незакрытые проверки.
+- [RELEASE_AUTOMATION.md](RELEASE_AUTOMATION.md) — порядок запуска стабильного релиза.
 - [RELEASE_NOTES.md](RELEASE_NOTES.md) — сведения о стабильном релизе 1.5.9.
 - [CHANGELOG.md](CHANGELOG.md) — история стабильных релизов.
 - [`prototypes/defold/RELEASE_NOTES.md`](prototypes/defold/RELEASE_NOTES.md) — заметки стабильного релиза 1.5.9.
