@@ -1697,6 +1697,7 @@ function init(self)
         local feed_item={entry_angle=0,entry_distance=100,r=100}
         local feed_start,scale_start,alpha_start=Scene.feeding_pose(sim,feed_item,0)
         local feed_mid,scale_mid,alpha_mid=Scene.feeding_pose(sim,feed_item,.5)
+        local feed_fade,scale_fade,alpha_fade=Scene.feeding_pose(sim,feed_item,.8)
         local feed_end,scale_end,alpha_end=Scene.feeding_pose(sim,feed_item,1)
         local function radial_distance(point)
             return math.sqrt((point.x-sim.player.x)^2+(point.y-sim.player.y)^2)
@@ -1709,8 +1710,9 @@ function init(self)
         assert(radial_distance(feed_mid)<radial_distance(feed_start)
             and radial_distance(feed_end)<radial_distance(feed_mid),
             "Absorption must move monotonically toward the organism")
-        assert(scale_start>scale_mid and scale_mid>scale_end
-            and alpha_start>alpha_mid and alpha_mid>alpha_end,
+        assert(scale_start>=scale_mid and scale_mid>scale_fade
+            and scale_fade>scale_end and alpha_start>=alpha_mid
+            and alpha_mid>alpha_fade and alpha_fade>alpha_end,
             "Absorbed tissue must shrink and fade monotonically")
         print("MICROGEN ABSORPTION ANIMATION READY")
         local function check_window()
