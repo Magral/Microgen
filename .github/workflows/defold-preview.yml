@@ -153,7 +153,15 @@ jobs:
                 --config=display.window_width="$width" --config=display.window_height="$height" \
                 --config=microgen.smoke_run=1 --config=microgen.smoke_cards=1 "${balance_args[@]}" > "$log" 2>&1 &
               pid=$!
-              trap "kill $pid 2>/dev/null || true" EXIT
+              dump_on_failure() {
+                status=$?
+                if (( status != 0 )); then
+                  echo "Smoke log for $profile:"
+                  cat "$log" 2>/dev/null || true
+                fi
+                kill "$pid" 2>/dev/null || true
+              }
+              trap dump_on_failure EXIT
               for attempt in {1..60}; do
                 if grep -Fq "MICROGEN PREVIEW READY" "$log"; then break; fi
                 kill -0 "$pid"
