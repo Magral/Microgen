@@ -62,6 +62,77 @@ local function settle_stage(sim)
     assert(sim:enter_next_stage(), "Balance run could not enter the next stage")
 end
 
+local function direction(sim, tick)
+    local player, radius = sim.player, sim:body_radius()
+    local away_x, away_y, nearest_prey, prey_distance = 0, 0, nil, math.huge
+    for _, enemy in ipairs(sim.enemies) do
+        if enemy.hp > 0 and not enemy.captured then
+            local dx, dy = player.x - enemy.pos.x, player.y - enemy.pos.y
+            local distance = math.sqrt(dx * dx + dy * dy)
+            if enemy.kind == "prey" then
+                if distance < prey_distance then nearest_prey, prey_distance = enemy, distance end
+            elseif distance < 650 then
+                local weight = (650 - distance) / 650 / math.max(40, distance)
+                away_x, away_y = away_x + dx * weight, away_y + dy * weight
+            end
+        end
+    end
+    if sim.elapsed >= 8 then
+        for _, resident in ipairs(sim.residents) do
+            if not resident.dead and not resident.active then
+                local dx, dy = player.x - resident.pos.x, player.y - resident.pos.y
+                local distance = math.sqrt(dx * dx + dy * dy)
+                if distance < 650 then
+                    local weight = (650 - distance) / 650 / math.max(40, distance)
+                    away_x, away_y = away_x + dx * weight, away_y + dy * weight
+                end
+            end
+        end
+    end
+
+    local away_length = math.sqrt(away_x * away_x + away_y * away_y)
+    local desired_x, desired_y
+    if away_length > 0.0001 then
+        desired_x, desired_y = away_x / away_length, away_y / away_length
+    elseif nearest_prey and prey_distance < 600 then
+        local dx, dy = nearest_prey.pos.x - player.x, nearest_prey.pos.y - player.y
+        local distance = math.max(0.0001, math.sqrt(dx * dx + dy * dy))
+        desired_x, desired_y = dx / distance, dy / distance
+    else
+        local roam = DIRECTIONS[math.floor(sim.elapsed / 12) % #DIRECTIONS + 1]
+        desired_x, desired_y = roam[1], roam[2]
+    end
+
+    local best_x, best_y, best_score = desired_x, desired_y, -math.huge
+    local step_distance = math.max(16, 85 * STEP * 2)
+    for _, candidate in ipairs(DIRECTIONS) do
+        local nx, ny = player.x + candidate[1] * step_distance, player.y + candidate[2] * step_distance
+        local score = candidate[1] * desired_x + candidate[2] * desired_y
+        if not sim.world:walkable(nx, ny, math.min(26, radius * 0.65)) then
+            score = score - 100
+        end
+        for _, enemy in ipairs(sim.enemies) do
+            if enemy.hp > 0 and not enemy.captured and enemy.kind ~= "prey" then
+                local current_x, current_y = player.x - enemy.pos.x, player.y - enemy.pos.y
+                local next_x, next_y = nx - enemy.pos.x, ny - enemy.pos.y
+                local current_distance = math.sqrt(current_x * current_x + current_y * current_y)
+                local next_distance = math.sqrt(next_x * next_x + next_y * next_y)
+                if current_distance < 520 or next_distance < 520 then
+                    local clearance = enemy.r + radius * 0.75 + 65
+                    score = score + (next_distance - current_distance) * 0.025
+                        - math.max(0, clearance - next_distance) * 0.03
+                end
+            end
+        end
+        for _, colony in ipairs(sim.world.colonies) do
+            local cx, cy = nx - colony.pos.x, ny - colony.pos.y
+            if cx * cx + cy * cy < 150 * 150 then score = score + 0.08 end
+        end
+        if score > best_score then best_x, best_y, best_score = candidate[1], candidate[2], score end
+    end
+    return best_x, best_y
+end
+
 local function run(seed, branch)
     local sim = Simulation.new(seed, nil, nil, branch)
     local max_enemies, max_fields, max_remains = 0, 0, 0
@@ -73,8 +144,8 @@ local function run(seed, branch)
         settle_levels(sim)
         settle_rewards(sim)
 
-        local direction = DIRECTIONS[math.floor(sim.elapsed / 20) % #DIRECTIONS + 1]
-        sim:step(STEP, direction[1], direction[2])
+        local move_x, move_y = direction(sim, tick)
+        sim:step(STEP, move_x, move_y)
         settle_levels(sim)
         settle_rewards(sim)
         settle_stage(sim)
@@ -97,7 +168,7 @@ local function run(seed, branch)
     local last_hit = history[#history]
     local cause = last_hit and string.format("%s/%s/%.1f", last_hit.kind, last_hit.name, last_hit.amount) or "none"
     print(string.format(
-        "MICROGEN BALANCE RUN seed=%d branch=%s seconds=%.1f stage=%d level=%d kills=%d hp=%.1f damage_taken=%.1f last_hit=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d",
+        "MICROGEN BALANCE RUN seed=%d branch=%s pilot=kite seconds=%.1f stage=%d level=%d kills=%d hp=%.1f damage_taken=%.1f last_hit=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d",
         seed, branch, sim.elapsed, sim.stage_index, sim.level, sim.kills, sim.hp,
         sim.combat_stats.damage_taken, cause, sim.outcome == "" and "alive" or sim.outcome,
         steps, max_enemies, max_fields, max_remains))
