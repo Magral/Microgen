@@ -5,7 +5,7 @@
 ## Основа проекта
 
 - **Движок:** Defold
-- **Последний стабильный релиз:** [Defold 1.5.8](https://github.com/Magral/Microgen/releases/tag/defold-1.5.8)
+- **Последний стабильный релиз:** [Defold 1.5.9](https://github.com/Magral/Microgen/releases/tag/defold-1.5.9)
 - **Рабочая ветка:** `preview/defold`
 - **Каталог игры:** `prototypes/defold`
 - **Платформа:** Android, ARM64 (`arm64-v8a`), альбомная ориентация
