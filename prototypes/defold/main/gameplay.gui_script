@@ -2021,11 +2021,15 @@ end
 
 local function pointer(app,id,x,y,pressed,released)
     if pressed and app.touch_id==nil then
-        app.touch_id=id
-        app.press_action=app.modal:hit(x,y) or (app.screen=="run" and app.hud:hit(x,y))
-        if not app.press_action and app.screen=="run" then
-            local left,right=touch_zones()
-            if in_movement_zone(x,left,right) then
+        local press_action=app.modal:hit(x,y) or (app.screen=="run" and app.hud:hit(x,y))
+        local left,right=touch_zones()
+        local starts_movement=app.screen=="run" and in_movement_zone(x,left,right)
+        -- Ignore empty touches outside the movement zone entirely; they must
+        -- not capture the single active pointer and block the left thumb.
+        if press_action or starts_movement then
+            app.touch_id=id
+            app.press_action=press_action
+            if starts_movement and not press_action then
                 local visual_x,visual_y=stick_visual_origin(x,y)
                 app.stick={ox=x,oy=y,x=x,y=y,visual_x=visual_x,visual_y=visual_y}
             end
