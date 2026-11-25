@@ -1706,6 +1706,10 @@ function init(self)
         local feed_start,scale_start,alpha_start=Scene.feeding_pose(sim,feed_item,0)
         local feed_mid,scale_mid,alpha_mid=Scene.feeding_pose(sim,feed_item,.5)
         local feed_fade,scale_fade,alpha_fade=Scene.feeding_pose(sim,feed_item,.8)
+        local turn_start,turn_mid,turn_end=Scene.feeding_turn(0),Scene.feeding_turn(.5),Scene.feeding_turn(1)
+        assert(math.abs(turn_start)<.001 and turn_mid>.05 and turn_mid<.141
+            and math.abs(turn_end)<.001,
+            "Absorbed fragments must rotate gently and settle on entry")
         local feed_end,scale_end,alpha_end=Scene.feeding_pose(sim,feed_item,1)
         local function radial_distance(point)
             return math.sqrt((point.x-sim.player.x)^2+(point.y-sim.player.y)^2)
