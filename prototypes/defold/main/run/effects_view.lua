@@ -305,6 +305,21 @@ function Effects.draw_breakup(scene, data, elapsed, time)
     wave(scene, "reward", data.pos, 25 + sin((time or 0) * 2.5) * 1.6, "ffdb9b", 0.96, t * 0.45)
 end
 
+local toxin_kinds = {toxin = true, acid = true, spore = true, toxic = true, pool = true}
+
+local function damage_impact(player, radius, source, time)
+    if not source or not source.pos then return nil end
+    local age = time - (source.time or -10)
+    if age < 0 or age > 0.48 then return nil end
+    local origin = source.pos
+    if not origin.x then origin = point(origin[1], origin[2]) end
+    local dx, dy = origin.x - player.x, origin.y - player.y
+    if dx * dx + dy * dy < 1 then return nil end
+    local strength = clamp(1 - age / 0.48)
+    local angle = heading(dx, dy)
+    return offset(player, angle, radius * 0.78), angle, strength
+end
+
 function Effects.draw_player(scene, sim, time)
     local radius = sim:body_radius()
     local rank = sim.build:rank("acid")
@@ -317,12 +332,17 @@ function Effects.draw_player(scene, sim, time)
         wave(scene, "ring", sim.player, radius * 1.4, "f2c3d1", 0.2 + 0.2 * sin(time * 24), time * 0.4)
     end
     local last = sim.last_damage or {}
+    local impact, impact_angle, impact_strength = damage_impact(sim.player, radius, last, time)
+    if impact then
+        local pulse_radius = radius * (0.12 + (1 - impact_strength) * 0.16)
+        local color = toxin_kinds[last.kind] and "efbf77" or "ff879b"
+        wave(scene, "membrane", impact, pulse_radius, color, impact_strength * 0.44, impact_angle)
+        wave(scene, "ring", impact, pulse_radius * 0.82, color, impact_strength * 0.30, impact_angle)
+    end
     if last.kind == "toxin" and time - (last.time or -10) < 1.5 then
         Effects.draw_infection(scene, {pos = sim.player, r = radius, genome = sim.player_genome}, time)
     end
 end
-
-local toxin_kinds = {toxin = true, acid = true, spore = true, toxic = true, pool = true}
 
 function Effects.draw_damage_sources(scene, sim, time)
     for _, marker in ipairs(sim.damage_markers or {}) do
@@ -371,5 +391,7 @@ function Effects.draw_damage_sources(scene, sim, time)
         wave(scene, "ring", sim.player, radius * 1.18, "ff9aab", (1 - age / 0.4) * 0.22, time * 0.2)
     end
 end
+
+Effects.damage_impact = damage_impact
 
 return Effects

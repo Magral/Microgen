@@ -576,5 +576,6 @@ Scene.feeding_turn=feeding_turn
 Scene.breathing_scale=breathing_scale
 Scene.breathing_shape=breathing_shape
 Scene.damage_shape=damage_shape
+Scene.damage_impact=Effects.damage_impact
 
 return Scene

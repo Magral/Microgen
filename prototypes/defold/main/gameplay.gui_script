@@ -1711,6 +1711,17 @@ function init(self)
         assert(calm_x==1 and calm_y==1 and hit_x>=.964 and hit_x<1
             and hit_y>1 and hit_y<=1.022 and over_x==hit_x and over_y==hit_y,
             "Damage deformation must be bounded and recover to the resting shape")
+        local player_point=vmath.vector3(0,0,0)
+        local east=Scene.damage_impact(player_point,50,{pos=vmath.vector3(100,0,0),time=4},4)
+        local north,north_angle,strength=Scene.damage_impact(
+            player_point,50,{pos=vmath.vector3(0,100,0),time=4},4)
+        assert(east and east.x>player_point.x and math.abs(east.y-player_point.y)<.001
+            and north and north.y>player_point.y and math.abs(north.x-player_point.x)<.001
+            and north_angle>1.5 and north_angle<1.6 and strength==1,
+            "Membrane impact pulse must follow the incoming damage direction")
+        assert(Scene.damage_impact(player_point,50,{pos=vmath.vector3(100,0,0),time=4},4.5)==nil
+            and Scene.damage_impact(player_point,50,{time=4},4)==nil,
+            "Membrane impact pulse must expire and ignore damage without a source position")
         print("MICROGEN ORGANISM BREATHING READY")
         local feed_item={entry_angle=0,entry_distance=100,r=100}
         local feed_start,scale_start,alpha_start=Scene.feeding_pose(sim,feed_item,0)
