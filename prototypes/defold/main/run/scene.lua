@@ -99,6 +99,10 @@ local function smoothstep(lo,hi,value)
     return t*t*(3-2*t)
 end
 
+local function breathing_scale(time,seed,amplitude)
+    return 1+math.sin((time or 0)*2.1+(seed or 0)*.73)*(amplitude or .012)
+end
+
 local function feeding_pose(sim,item,progress)
     progress=math.max(0,math.min(1,progress or 0))
     local theta=item.entry_angle or 0
@@ -303,8 +307,9 @@ function Scene:draw_body(sim, actor, is_player, serial)
         sprite(slot,"cells",frame)
         slot.pose = Tissue.attach(self.atlas,slot.node,frame)
     end
-    local stretch = self.scale*radius/source_radius*shrink
     local phase = self.visual_time
+    local breath=breathing_scale(phase,actor.id or serial or 1,is_player and .014 or .009)
+    local stretch = self.scale*radius/source_radius*shrink*breath
     local motion=Tissue.motion(self.motions[actor],self.dt,actor.pos.x,actor.pos.y,genome,is_player and sim.facing or nil)
     self.motions[actor]=motion
     self.ocean:track(actor,actor.pos,radius)
@@ -540,5 +545,6 @@ end
 
 -- Exposed for deterministic visual regression tests; gameplay uses the same helper.
 Scene.feeding_pose=feeding_pose
+Scene.breathing_scale=breathing_scale
 
 return Scene
