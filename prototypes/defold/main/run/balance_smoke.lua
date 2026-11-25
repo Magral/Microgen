@@ -15,10 +15,34 @@ local function finite(value)
     return type(value) == "number" and value == value and value > -math.huge and value < math.huge
 end
 
+local PILOT_PRIORITY = {
+    predator = { devour = 120, tentacle = 115, spikes = 110, cilia = 100, pulse = 95, acid = 60 },
+    toxic = { acid = 120, infection = 115, enzymes = 110, trail = 100, electric = 70, barrier = 80 },
+    colony = { division = 120, electric = 115, barrier = 110, pulse = 95, spikes = 80 },
+}
+
+local function mutation_priority(sim, id)
+    local branch = PILOT_PRIORITY[sim.build.branch] or {}
+    local priority = branch[id] or 35
+    if sim.build:rank(id) > 0 then priority = priority + 12 end
+    if id == "regen" then return 105 end
+    if id == "armor" then return 90 end
+    if id == "speed" then return 78 end
+    if id == "catalysis" and sim.build:used_organ_cells() > 0 then return 88 end
+    if id == "magnet" then return 18 end
+    return priority
+end
+
 local function settle_levels(sim)
     while sim.pending_levels > 0 do
+        local offers = sim:prepare_offers()
+        table.sort(offers, function(a, b)
+            local score_a, score_b = mutation_priority(sim, a), mutation_priority(sim, b)
+            if score_a == score_b then return a < b end
+            return score_a > score_b
+        end)
         local selected = false
-        for _, id in ipairs(sim:prepare_offers()) do
+        for _, id in ipairs(offers) do
             if sim:choose_mutation(id) then
                 selected = true
                 break
