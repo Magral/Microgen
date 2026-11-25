@@ -47,10 +47,11 @@ local function touch_zones()
     return left,right,top,bottom
 end
 
--- Keep movement on the left side so empty right-side touches cannot start
--- an unexpected joystick gesture while the player reaches for HUD controls.
+-- Reserve the right side for HUD and map controls while leaving a broad,
+-- comfortable one-finger movement area on the left.
+local MOVEMENT_ZONE_RATIO = .58
 local function in_movement_zone(x,left,right)
-    return x <= left + (right-left)*.55
+    return x <= left + (right-left)*MOVEMENT_ZONE_RATIO
 end
 
 local function stick_visual_origin(x,y)
@@ -1668,8 +1669,14 @@ function init(self)
         if top-bottom>=180 then
             assert(ly>=bottom+89 and ry<=top-89,"Joystick artwork must remain vertically inside safe area")
         end
+        assert(in_movement_zone(left,left,right),
+            "Safe-area left edge must start one-finger movement")
         assert(in_movement_zone(left+(right-left)*.25,left,right),
             "Left quarter must start one-finger movement")
+        assert(in_movement_zone(left+(right-left)*.58,left,right),
+            "Movement zone must include its 58% boundary")
+        assert(not in_movement_zone(left+(right-left)*.59,left,right),
+            "Touches immediately beyond the movement zone must not start movement")
         assert(not in_movement_zone(left+(right-left)*.80,left,right),
             "Right-side empty space must not start an accidental movement gesture")
         print("MICROGEN TOUCH ZONES READY")
