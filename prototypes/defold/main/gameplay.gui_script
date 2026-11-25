@@ -1705,6 +1705,12 @@ function init(self)
         assert(shape_x>=.986 and shape_x<=1.014 and shape_y>=.9908
             and shape_y<=1.0092 and math.abs(shape_x-shape_y)>.001,
             "Membrane breathing must remain subtle and slightly asymmetric")
+        local calm_x,calm_y=Scene.damage_shape(0)
+        local hit_x,hit_y=Scene.damage_shape(1)
+        local over_x,over_y=Scene.damage_shape(5)
+        assert(calm_x==1 and calm_y==1 and hit_x>=.964 and hit_x<1
+            and hit_y>1 and hit_y<=1.022 and over_x==hit_x and over_y==hit_y,
+            "Damage deformation must be bounded and recover to the resting shape")
         print("MICROGEN ORGANISM BREATHING READY")
         local feed_item={entry_angle=0,entry_distance=100,r=100}
         local feed_start,scale_start,alpha_start=Scene.feeding_pose(sim,feed_item,0)
