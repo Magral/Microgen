@@ -1853,6 +1853,19 @@ function init(self)
         print("MICROGEN TISSUE LIFECYCLE READY")
         print("MICROGEN MUTATION CARDS READY")
         app:map()
+        check_window()
+        local map_controls={}
+        for _,button in ipairs(app.modal.buttons) do
+            local label=gui.get_text(button.text)
+            if label=="+" or label=="−" or label=="Общий вид" or label=="×" then
+                local position=gui.get_position(button.node)
+                assert(app.modal:hit(position.x,position.y)==button.callback,
+                    "Map control hit area mismatch: "..label)
+                map_controls[label]=true
+            end
+        end
+        assert(map_controls["+"] and map_controls["−"] and map_controls["Общий вид"] and map_controls["×"],
+            "Map controls missing from smoke scenario")
     end
 end
 
