@@ -153,7 +153,7 @@ jobs:
               pid=$!
               trap "kill $pid 2>/dev/null || true" EXIT
               for attempt in {1..60}; do
-                if grep -Fq "MICROGEN PREVIEW SAMPLE" "$log"; then break; fi
+                if grep -Fq "MICROGEN PREVIEW READY" "$log"; then break; fi
                 kill -0 "$pid"
                 sleep 0.2
               done
