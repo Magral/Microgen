@@ -1859,8 +1859,11 @@ function init(self)
         for index,part in ipairs(fracture_sim.remains) do
             local slot=app.scene.fragments.slots[index]
             assert(slot.enabled and slot.texture==original_texture and slot.frame==original_frame and slot.pose)
-            assert(vmath.length(gui.get_position(slot.node)-original_position)<.01
-                and vmath.length(gui.get_size(slot.node)-original_size)<.01)
+            local fragment_position=gui.get_position(slot.node)
+            local fragment_size=gui.get_size(slot.node)
+            assert(vmath.length(fragment_position-original_position)<.01
+                and vmath.length(fragment_size-original_size)<vmath.length(original_size)*.02,
+                "Fracture pieces must preserve the parent silhouette within breathing amplitude")
             assert(part.cut_start==previous and part.cut_end>previous)
             previous=part.cut_end
         end
