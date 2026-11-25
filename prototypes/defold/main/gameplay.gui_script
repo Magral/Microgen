@@ -1692,6 +1692,9 @@ function init(self)
         end
         app:start(47)
     end
+    if smoke and sys.get_config_string("microgen.smoke_balance","0")=="1" then
+        require("main.run.balance_smoke").run()
+    end
     if smoke and sys.get_config_string("microgen.smoke_cards","0")=="1" then
         local sim=app.sim
         local breath_peak=Scene.breathing_scale(math.pi/(2*2.1),1,.014)
