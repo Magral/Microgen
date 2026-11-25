@@ -1866,6 +1866,26 @@ function init(self)
         end
         assert(map_controls["+"] and map_controls["−"] and map_controls["Общий вид"] and map_controls["×"],
             "Map controls missing from smoke scenario")
+        local function map_callback(label)
+            for _,button in ipairs(app.modal.buttons) do
+                if gui.get_text(button.text)==label then return button.callback end
+            end
+        end
+        map_callback("+")()
+        assert(app.screen=="map" and math.abs(app.map_zoom-1.12)<0.001,
+            "Map zoom-in control must increase zoom and keep map open")
+        local zoom_out=map_callback("−")
+        assert(zoom_out,"Map zoom-out control must remain available after zoom-in")
+        zoom_out()
+        assert(app.screen=="map" and math.abs(app.map_zoom-1.0)<0.001,
+            "Map zoom-out control must restore the default zoom")
+        map_callback("+")()
+        map_callback("Общий вид")()
+        assert(app.screen=="map" and math.abs(app.map_zoom-1.0)<0.001,
+            "Map overview control must restore the default zoom")
+        map_callback("×")()
+        assert(app.screen=="run","Map close control must return to the active run")
+        print("MICROGEN MAP CONTROLS READY")
     end
 end
 
