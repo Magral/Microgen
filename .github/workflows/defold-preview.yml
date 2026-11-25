@@ -146,10 +146,12 @@ jobs:
               esac
               profile_home="$2/home-$profile"
               log="$2/linux-smoke-$profile.log"
+              balance_args=()
+              if [[ "$profile" == standard ]]; then balance_args+=(--config=microgen.smoke_balance=1); fi
               mkdir -p "$profile_home"
               HOME="$profile_home" ALSOFT_DRIVERS=null "$1" --graphics-adapter=opengl \
                 --config=display.window_width="$width" --config=display.window_height="$height" \
-                --config=microgen.smoke_run=1 --config=microgen.smoke_cards=1 > "$log" 2>&1 &
+                --config=microgen.smoke_run=1 --config=microgen.smoke_cards=1 "${balance_args[@]}" > "$log" 2>&1 &
               pid=$!
               trap "kill $pid 2>/dev/null || true" EXIT
               for attempt in {1..60}; do
@@ -167,6 +169,11 @@ jobs:
               grep -Fq "MICROGEN LEGACY SCREEN READY" "$log"
               grep -Fq "MICROGEN TISSUE FRACTURE READY" "$log"
               grep -Fq "MICROGEN TISSUE LIFECYCLE READY" "$log"
+              if [[ "$profile" == standard ]]; then
+                test "$(grep -c "MICROGEN BALANCE RUN" "$log")" -eq 6
+                grep -Fq "MICROGEN BALANCE SMOKE READY" "$log"
+                grep -F "MICROGEN BALANCE RUN" "$log"
+              fi
               if grep -E "ERROR:SCRIPT|ERROR:RENDER|FATAL" "$log"; then exit 1; fi
               kill -0 "$pid"
               kill -KILL "$pid" 2>/dev/null || true
