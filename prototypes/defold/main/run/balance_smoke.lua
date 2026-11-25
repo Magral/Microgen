@@ -98,8 +98,8 @@ local function direction(sim, tick)
             if edible then
                 local cost = distance + (enemy.kind == "prey" and 0 or 80)
                 if cost < target_score then nearest_target, target_score = enemy, cost end
-            elseif distance < 650 then
-                local weight = (650 - distance) / 650 / math.max(40, distance)
+            elseif distance < 380 then
+                local weight = (380 - distance) / 380 / math.max(40, distance)
                 away_x, away_y = away_x + dx * weight, away_y + dy * weight
             end
         end
@@ -109,7 +109,7 @@ local function direction(sim, tick)
             if not resident.dead and not resident.active then
                 local dx, dy = player.x - resident.pos.x, player.y - resident.pos.y
                 local distance = math.sqrt(dx * dx + dy * dy)
-                if distance < 650 then
+                if distance < 380 then
                     local weight = (650 - distance) / 650 / math.max(40, distance)
                     away_x, away_y = away_x + dx * weight, away_y + dy * weight
                 end
