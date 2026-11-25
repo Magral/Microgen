@@ -186,7 +186,11 @@ jobs:
           retention-days: 14
 
   publish:
-    if: startsWith(github.ref, 'refs/tags/defold-')
+    if: >-
+      startsWith(github.ref, 'refs/tags/defold-') ||
+      (startsWith(github.ref, 'refs/heads/release/defold-') &&
+       github.event_name == 'push' &&
+       contains(github.event.head_commit.message, '[publish-defold-release]'))
     needs: build
     runs-on: ubuntu-24.04
     permissions:
@@ -211,7 +215,10 @@ jobs:
           if [ "$GITHUB_REF_TYPE" = tag ]; then
             test "$GITHUB_REF_NAME" = "$tag"
           else
-            gh release view "$tag" >/dev/null
+            test "$GITHUB_EVENT_NAME" = push
+            test "$GITHUB_REF_NAME" = "release/$tag"
+            test -f release-request.json
+            jq -e --arg version "$version" '.publish == true and .version == $version' release-request.json >/dev/null
           fi
           cd dist
           sha256sum --check SHA256SUMS.txt
