@@ -1701,6 +1701,10 @@ function init(self)
             and breath_trough<1 and breath_trough>=.985999
             and npc_breath>1 and npc_breath<breath_peak,
             "Organism breathing must stay subtle and bounded")
+        local shape_x,shape_y=Scene.breathing_shape(0,1,.014)
+        assert(shape_x>=.986 and shape_x<=1.014 and shape_y>=.9908
+            and shape_y<=1.0092 and math.abs(shape_x-shape_y)>.001,
+            "Membrane breathing must remain subtle and slightly asymmetric")
         print("MICROGEN ORGANISM BREATHING READY")
         local feed_item={entry_angle=0,entry_distance=100,r=100}
         local feed_start,scale_start,alpha_start=Scene.feeding_pose(sim,feed_item,0)
