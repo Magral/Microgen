@@ -321,6 +321,9 @@ function Scene:draw_body(sim, actor, is_player, serial)
     end
     local phase = self.visual_time
     local breath_x,breath_y=breathing_shape(phase,actor.id or serial or 1,is_player and .014 or .009)
+    local impact=is_player and self.reaction or 0
+    local impact_x=1-impact*.035
+    local impact_y=1+impact*.022
     local stretch = self.scale*radius/source_radius*shrink
     local motion=Tissue.motion(self.motions[actor],self.dt,actor.pos.x,actor.pos.y,genome,is_player and sim.facing or nil)
     self.motions[actor]=motion
@@ -328,8 +331,8 @@ function Scene:draw_body(sim, actor, is_player, serial)
     local angle = is_player and sim.facing or ((genome and genome.rotation or 0)+Tissue.turn(motion))
     local overscan = slot.pose and Tissue.OVERSCAN or 1
     position(slot.node,x,y)
-    size(slot.node,dimensions[1]*stretch*breath_x*overscan,
-        dimensions[2]*stretch*breath_y*overscan)
+    size(slot.node,dimensions[1]*stretch*breath_x*impact_x*overscan,
+        dimensions[2]*stretch*breath_y*impact_y*overscan)
     gui.set_rotation(slot.node,vmath.vector3(0,0,-math.deg(angle)))
     local cx,cy,bite=0,0,0
     if is_player then cx,cy,bite=feeding_contact(sim) end
@@ -460,6 +463,7 @@ function Scene:render(sim, breakup_time)
     if self.sim~=sim or self.world~=sim.world then
         self.sim,self.world=sim,sim.world
         self.scale,self.visual_time,self.elapsed,self.reaction=target,0,sim.elapsed,0
+        self.last_hp=sim.hp
         self.motions=setmetatable({},{__mode="k"})
         self.clones={}
         self.body_looks,self.next_body_looks={},{}
@@ -476,6 +480,12 @@ function Scene:render(sim, breakup_time)
     self:render_ground(sim)
     local time=self.visual_time
     self.reaction=math.max(0,self.reaction-dt*1.4)
+    -- Turn actual health loss into a short, bounded membrane impact response.
+    if sim.hp < (self.last_hp or sim.hp) then
+        local lost=(self.last_hp or sim.hp)-sim.hp
+        self.reaction=math.max(self.reaction,math.min(1,.28+lost/math.max(1,sim.max_hp)*2.4))
+    end
+    self.last_hp=sim.hp
     local rich=0
     for _,field in ipairs(sim.fields) do
         local x,y=self:project(field.pos)
