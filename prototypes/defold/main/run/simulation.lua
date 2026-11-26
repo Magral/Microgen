@@ -83,10 +83,12 @@ end
 
 function Simulation:gain_xp(amount)
     self.xp = self.xp + amount * (1 + self.build:passive("metabolism")) * (self:has_trait("receptive") and 0.95 or 1)
+    local old_level = self.level
     while self.xp >= self:xp_needed() do
         self.xp = self.xp - self:xp_needed()
         self.level, self.pending_levels = self.level + 1, self.pending_levels + 1
     end
+    if self.level > old_level then self:_feedback("level_up", self.player) end
 end
 
 function Simulation:body_radius()
@@ -345,6 +347,8 @@ function Simulation:enter_next_stage(prepared_world)
     self.spawn_timer, self.last_tile = 0, nil
     self:_populate_stage()
     self:_reveal()
+    self.sound_biome, self.sound_biome_candidate, self.sound_biome_since = nil, nil, nil
+    self:_feedback("biome", self.player)
     return true
 end
 
@@ -408,6 +412,7 @@ function Simulation:_check_nests()
     for _, nest in ipairs(self.world.nests) do
         if not nest.used and distance_squared(self.player, nest.pos) <= 100^2 then
             nest.used = true
+            self:_feedback("nest", nest.pos)
             if nest.kind == 0 then
                 self:gain_xp(20)
                 self:_message("Найден древний геном: +20 ДНК")
@@ -820,13 +825,13 @@ function Simulation:_collect(dt)
                     item.captured, item.internal, item.progress = false, false, 0
                     item.pos = offset(self.player, item.entry_angle, self:body_radius() * 1.6 + 12)
                 else
-                    self:_feedback("absorb", self.player)
+                    if item.type ~= "heal" then self:_feedback("absorb", self.player) end
                     if item.type == "dna" then self:gain_xp(item.amount)
                     elseif item.type == "bio" then self.build.biomass = self.build.biomass + item.amount
                     elseif item.type == "body_extension" or item.type == "stock_extension" then
                         self:_event("expansion", { target = item.type == "body_extension" and "body" or "stock", amount = item.amount, token = self.run_id .. ":" .. item.id })
                     elseif item.type == "heal" then
-                        self:heal_player(item.amount)
+                        self:_heal_pickup(item.amount)
                         self:_effect("assimilate", self.player, self:body_radius(), 0.8, { ["end"] = item.pos, color = "7dfcd4" })
                     else
                         self.cores_found = self.cores_found + item.amount
@@ -867,7 +872,9 @@ function Simulation:step(dt, x, y)
     local build, world = self.build, self.world
     self.elapsed, self.invuln = self.elapsed + dt, max(0, self.invuln - dt)
     self.previous_player = self.player
-    local condition = world.conditions[world:biome(self.player.x, self.player.y)]
+    local current_biome = world:biome(self.player.x, self.player.y)
+    local condition = world.conditions[current_biome]
+    self.sound_biome = self.sound_biome or current_biome
     local speed = (72 + self:body_radius() * 0.6) * (1 + build:passive("speed")) * (condition == 1 and 0.85 or 1)
     local inertia = self:has_trait("elastic") and 0.13 or 0.2
     if self:has_trait("sensory") then speed = speed * 0.95 end
@@ -878,6 +885,15 @@ function Simulation:step(dt, x, y)
     self.player_velocity = point(x + vx * response, y + vy * response)
     self.bite_flash = max(0, self.bite_flash - dt * 4.5)
     self.player = self:_move_player_against_bodies(x * dt + vx * inertia * (1 - response), y * dt + vy * inertia * (1 - response))
+    local biome = world:biome(self.player.x, self.player.y)
+    if biome == self.sound_biome then
+        self.sound_biome_candidate = nil
+    elseif biome ~= self.sound_biome_candidate then
+        self.sound_biome_candidate, self.sound_biome_since = biome, self.elapsed
+    elseif self.elapsed - self.sound_biome_since >= 0.65 then
+        self.sound_biome, self.sound_biome_candidate = biome, nil
+        self:_feedback("biome", self.player)
+    end
     local dx, dy = self.player.x - self.previous_player.x, self.player.y - self.previous_player.y
     if dx * dx + dy * dy > 4 * max(0.001, dt)^2 then
         local diff = (V.angle(dx, dy) - self.facing + math.pi) % TAU - math.pi
@@ -998,8 +1014,17 @@ function Simulation:choose_mutation(id, replace_id, award)
 end
 
 function Simulation:_apply_award(id, replace_id, grade, award)
-    if award and Catalog.ORGANS[id] then return award(id, replace_id or "", grade) end
-    return self.build:apply(id, replace_id, grade)
+    local accepted
+    if award and Catalog.ORGANS[id] then accepted = award(id, replace_id or "", grade)
+    else accepted = self.build:apply(id, replace_id, grade) end
+    if accepted then self:_feedback("organ", self.player) end
+    return accepted
+end
+
+function Simulation:_heal_pickup(amount)
+    local previous = self.hp
+    self:heal_player(amount)
+    if self.hp > previous then self:_feedback("heal", self.player) end
 end
 
 Simulation.COLONY_HEAL = 40
@@ -1010,7 +1035,7 @@ function Simulation:buy_colony(index, stock_index, replace_id, award)
     if self:nearby_colony() ~= index or not item or item.sold or self.build.biomass < item.price then return false end
     if item.id == "heal" then
         if self.hp >= self.max_hp then return false end
-        self:heal_player(Simulation.COLONY_HEAL)
+        self:_heal_pickup(Simulation.COLONY_HEAL)
     elseif not self:_apply_award(item.id, replace_id, item.quality or 0, award) then
         return false
     end
@@ -1094,7 +1119,11 @@ function Simulation:claim_reward(index, replace_id, award)
     self.claimed_rewards[#self.claimed_rewards + 1] = reward.token
     table.remove(self.reward_queue, 1)
     self.reward_options = {}
-    self:_feedback("reward", self.player, option.kind == "evolution" and 3 or option.quality)
+    if option.kind == "temporary" or option.kind == "evolution" then
+        self:_feedback("organ", self.player)
+    elseif option.kind == "biomass" then
+        self:_feedback("reward", self.player, option.quality)
+    end
     self:_effect("mutation", self.player, self:body_radius() * 1.6, 1.2)
     return true
 end

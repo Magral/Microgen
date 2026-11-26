@@ -3,21 +3,33 @@ Audio.__index = Audio
 
 local VOICE_CAP = 6
 local GLOBAL_INTERVAL = 0.4
-local PRIORITY = {"miniboss", "danger", "hurt", "reward"}
-local PENDING_KIND = {miniboss = true, danger = true, hurt = true, reward = true}
+local PRIORITY = {"miniboss", "danger", "hurt", "level_up", "organ", "heal", "reward", "nest", "biome"}
+local MENU_CUE = {level_up = true, organ = true, heal = true}
+local PENDING_KIND = {}
+for _, kind in ipairs(PRIORITY) do PENDING_KIND[kind] = true end
 local CUE = {
     miniboss = "/audio#miniboss",
     danger = "/audio#danger",
     hurt = "/audio#hurt",
-    hurt_projectile = "/audio#hurt_projectile",
-    hurt_toxin = "/audio#hurt_toxin",
+    attack_warning = "/audio#attack_warning",
+    level_up = "/audio#level_up",
+    organ = "/audio#organ",
+    heal = "/audio#heal",
+    nest = "/audio#nest",
+    biome = "/audio#biome",
     reward = "/audio#reward",
     reward_rare = "/audio#reward_rare",
     absorb = "/audio#absorb",
     movement = "/audio#movement",
 }
-local INTERVAL = {warning = 1.4, hurt = 0.85, reward = 1.2, absorb = 0.65}
-local GAIN = {warning = 10 ^ (-11 / 20), hurt = 10 ^ (-9 / 20), reward = 10 ^ (-13 / 20), absorb = 10 ^ (-19 / 20)}
+local INTERVAL = {
+    warning = 1.4, attack_warning = 0.85, hurt = 0.85, reward = 1.2, absorb = 0.65,
+    level_up = 0.6, organ = 0.6, heal = 0.7, nest = 1.0, biome = 3.0,
+}
+local GAIN = {
+    warning = .28, attack_warning = .38, hurt = .35, reward = .22, absorb = .16,
+    level_up = .34, organ = .29, heal = .29, nest = .32, biome = .25,
+}
 
 function Audio.new()
     local mixer = setmetatable({
@@ -57,13 +69,15 @@ end
 
 function Audio:stop()
     stop_sounds(self)
-    self.clock, self.run_id, self.last_global = -1, nil, -100
+    self.clock, self.elapsed, self.run_id, self.last_global = -1, nil, nil, -100
     for kind in pairs(self.last) do self.last[kind] = nil end
 end
 
 local function set_paused(self, paused)
     if paused == self.paused then return end
-    for _, url in pairs(CUE) do sound.pause(url, paused) end
+    for kind, url in pairs(CUE) do
+        if not MENU_CUE[kind] then sound.pause(url, paused) end
+    end
     self.paused = paused
 end
 
@@ -88,10 +102,7 @@ local function play(self, kind, now, event)
     local group = (kind == "miniboss" or kind == "danger") and "warning" or kind
     if now - (self.last[group] or -100) < INTERVAL[group] then return false end
     local clip = kind
-    if kind == "hurt" then
-        if event.source == "toxin" then clip = "hurt_toxin"
-        elseif event.source == "projectile" then clip = "hurt_projectile" end
-    elseif kind == "reward" and (event.tier or 1) >= 2 then
+    if kind == "reward" and (event.tier or 1) >= 2 then
         clip = "reward_rare"
     end
 
@@ -111,33 +122,43 @@ local function play(self, kind, now, event)
 end
 
 -- Read each frame's feedback after simulation, before the caller discards it.
-function Audio:consume(sim, enabled, paused)
-    local now = sim.elapsed
-    if now < self.clock or sim.run_id ~= self.run_id then self:stop() end
-    local dt = self.clock >= 0 and math.min(now - self.clock, 0.1) or 0.016
-    self.clock, self.run_id = now, sim.run_id
+function Audio:consume(sim, enabled, paused, dt)
+    if sim.run_id ~= self.run_id or (self.elapsed and sim.elapsed < self.elapsed) then self:stop() end
+    local movement_dt = self.elapsed and math.min(sim.elapsed - self.elapsed, 0.1) or 0.016
+    local now = math.max(self.clock, 0) + dt
+    self.clock, self.elapsed, self.run_id = now, sim.elapsed, sim.run_id
     if not enabled then
         stop_sounds(self)
         return
     end
 
-    local absorb
+    local absorb, attack_warning
     for _, event in ipairs(sim.feedback) do
-        if PENDING_KIND[event.kind] then self.pending[event.kind] = event
-        elseif event.kind == "absorb" and not absorb then absorb = event end
+        local kind = event.kind
+        if PENDING_KIND[kind] then self.pending[kind] = {event = event, time = now}
+        elseif kind == "attack_warning" then attack_warning = event
+        elseif kind == "absorb" then absorb = event end
     end
     set_paused(self, not not (paused or sim.paused))
-    if self.paused then return end
-    update_movement(self, sim, dt)
+    if not self.paused then
+        update_movement(self, sim, movement_dt)
+        -- Сигнал должен прозвучать до атаки, поэтому в очередь его не ставим.
+        if attack_warning and play(self, "attack_warning", now, attack_warning) then return end
+    end
+    for _, kind in ipairs(PRIORITY) do
+        local pending = self.pending[kind]
+        if pending and now - pending.time > 1.5 then self.pending[kind] = nil end
+    end
     if now - self.last_global < GLOBAL_INTERVAL - 0.000001 then return end
     for _, kind in ipairs(PRIORITY) do
-        if self.pending[kind] and play(self, kind, now, self.pending[kind]) then
+        local pending = self.pending[kind]
+        if pending and (not self.paused or MENU_CUE[kind]) and play(self, kind, now, pending.event) then
             self.pending[kind] = nil
             if kind == "miniboss" then self.pending.danger = nil end
             return
         end
     end
-    if absorb then play(self, "absorb", now, absorb) end
+    if absorb and not self.paused then play(self, "absorb", now, absorb) end
 end
 
 return Audio

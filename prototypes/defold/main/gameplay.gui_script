@@ -1857,7 +1857,7 @@ function init(self)
             "Organ cards must expose damage, cadence, attack count, and range")
         local spitter_probe=setmetatable({
             player=vmath.vector3(500,0,0), shots={},
-            _feedback=function() end,
+            _feedback=function(self, kind) self.feedback_kind=kind end,
             _shot=function(self,origin,velocity,radius,hostile,kind,label,id)
                 self.shots[#self.shots+1]={origin=origin,velocity=velocity}
             end,
@@ -1865,7 +1865,8 @@ function init(self)
         local test_spitter={kind="spitter",pos=vmath.vector3(0,0,0),r=30,
             hp=10,max_hp=10,shot_cd=0,id=7001}
         spitter_probe:_spitter_windup(test_spitter,1/60,500)
-        assert(test_spitter.spit_windup>0 and #spitter_probe.shots==0,
+        assert(test_spitter.spit_windup>0 and #spitter_probe.shots==0
+            and spitter_probe.feedback_kind=="attack_warning",
             "Spitter must telegraph before firing")
         local beam_calls={}
         local fake_scene={effects={},scale=1,
@@ -2233,7 +2234,7 @@ function update(self,dt)
             Interface.button_enabled(app.reward_button,true)
         elseif app.screen=="run" and app.reward_button then Interface.button_enabled(app.reward_button,false) end
     end
-    app.audio:consume(sim,app.audio_enabled,app.screen~="run")
+    app.audio:consume(sim,app.audio_enabled and app.focused,app.screen~="run",math.min(dt,.1))
     sim.feedback={}
 end
 

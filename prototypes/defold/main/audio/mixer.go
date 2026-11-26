@@ -78,3 +78,51 @@ embedded_components {
   position { x: 0.0 y: 0.0 z: 0.0 }
   rotation { x: 0.0 y: 0.0 z: 0.0 w: 1.0 }
 }
+
+embedded_components {
+  id: "level_up"
+  type: "sound"
+  data: "sound: \"/main/audio/level_up.wav\"\n"
+  position { x: 0.0 y: 0.0 z: 0.0 }
+  rotation { x: 0.0 y: 0.0 z: 0.0 w: 1.0 }
+}
+
+embedded_components {
+  id: "organ"
+  type: "sound"
+  data: "sound: \"/main/audio/organ.wav\"\n"
+  position { x: 0.0 y: 0.0 z: 0.0 }
+  rotation { x: 0.0 y: 0.0 z: 0.0 w: 1.0 }
+}
+
+embedded_components {
+  id: "heal"
+  type: "sound"
+  data: "sound: \"/main/audio/heal.wav\"\n"
+  position { x: 0.0 y: 0.0 z: 0.0 }
+  rotation { x: 0.0 y: 0.0 z: 0.0 w: 1.0 }
+}
+
+embedded_components {
+  id: "nest"
+  type: "sound"
+  data: "sound: \"/main/audio/nest.wav\"\n"
+  position { x: 0.0 y: 0.0 z: 0.0 }
+  rotation { x: 0.0 y: 0.0 z: 0.0 w: 1.0 }
+}
+
+embedded_components {
+  id: "attack_warning"
+  type: "sound"
+  data: "sound: \"/main/audio/attack_warning.wav\"\n"
+  position { x: 0.0 y: 0.0 z: 0.0 }
+  rotation { x: 0.0 y: 0.0 z: 0.0 w: 1.0 }
+}
+
+embedded_components {
+  id: "biome"
+  type: "sound"
+  data: "sound: \"/main/audio/biome.wav\"\n"
+  position { x: 0.0 y: 0.0 z: 0.0 }
+  rotation { x: 0.0 y: 0.0 z: 0.0 w: 1.0 }
+}

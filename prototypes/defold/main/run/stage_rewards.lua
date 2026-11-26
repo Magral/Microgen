@@ -143,6 +143,7 @@ function M.claim_boss_reward(store, sim, take_organ)
     M.apply_equipment(state, sim.build)
     sim.stock_capacity = state.stock_capacity
     sim.boss_reward = checkpoint.boss_reward
+    if take_organ then sim:_feedback("organ", sim.player) end
     local activated = {}
     for _, id in ipairs(sim.build:active_synergies()) do
         if not util.index(before, id) then activated[#activated + 1] = id end

@@ -214,7 +214,7 @@ function Combat:_boss_windup(enemy, dt)
     if enemy.shot_cd > 0 or distance_squared(enemy.pos, self.player) > 460^2 or self:_safe_zone(self.player) then return end
     enemy.boss_angle = V.angle(self.player.x - enemy.pos.x, self.player.y - enemy.pos.y)
     enemy.boss_windup = 1.1
-    self:_feedback("danger", enemy.pos)
+    self:_feedback("attack_warning", enemy.pos)
 end
 
 function Combat:_spitter_windup(enemy, dt, distance)
@@ -231,7 +231,7 @@ function Combat:_spitter_windup(enemy, dt, distance)
     if enemy.shot_cd > 0 or distance >= 850 then return end
     enemy.spit_angle = V.angle(self.player.x - enemy.pos.x, self.player.y - enemy.pos.y)
     enemy.spit_windup = 0.65
-    self:_feedback("danger", enemy.pos)
+    self:_feedback("attack_warning", enemy.pos)
 end
 
 function Combat:_update_enemy_status(enemy, dt, radius)
