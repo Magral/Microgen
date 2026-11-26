@@ -50,6 +50,9 @@ function Simulation.new(seed, unlocked, upgrades, branch, loadout)
     end
     local build = self.build
     build.unlocked = copy(unlocked or Catalog.base_unlocked())
+    for _, id in ipairs(Catalog.base_unlocked()) do
+        if not contains(build.unlocked, id) then build.unlocked[#build.unlocked + 1] = id end
+    end
     build.branch = branch or "predator"
     if next(self.run_loadout) then
         build.branch = self.run_loadout.branch

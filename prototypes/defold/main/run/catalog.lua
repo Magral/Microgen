@@ -1,7 +1,7 @@
 -- Microgen v1.4.1 organ, adaptation, and evolution data.
 local M = {}
 
-M.ORGAN_IDS = { "tentacle", "acid", "spikes", "pulse", "division", "trail", "infection", "cilia", "enzymes", "electric", "barrier", "devour" }
+M.ORGAN_IDS = { "tentacle", "acid", "spikes", "pulse", "division", "trail", "infection", "cilia", "enzymes", "electric", "barrier", "devour", "chemoreceptor_ridge", "osmotic_vacuole", "synaptic_node" }
 
 M.ORGANS = {
     tentacle = { name = "Щупальца", branch = "predator", desc = "Хлещут ближайших врагов. Каждый ранг добавляет рабочее щупальце. Суммарная сила залпа распределяется между ними.", color = "6ef1cb" },
@@ -16,6 +16,9 @@ M.ORGANS = {
     electric = { name = "Биоразряд", branch = "colony", desc = "Разряд перескакивает между соседними противниками.", color = "9cddf2" },
     barrier = { name = "Сократительный щит", branch = "colony", desc = "Периодически поглощает часть входящего удара.", color = "b6bdec" },
     devour = { name = "Хищная пасть", branch = "predator", desc = "Разрывает ткань спереди: укус, более ранний захват и быстрое переваривание через пасть. Боковое поглощение слабее.", color = "ffbd88" },
+    chemoreceptor_ridge = { name = "Хеморецепторный гребень", branch = "predator", desc = "Сигнатурный орган хищной формы. На следующем этапе будет отмечать уязвимые цели (радиус 220; метка 2,5 с; укус +8%). Пока подготовлен как модель данных.", color = "b58cff", signature = true, form = "predator", offer_enabled = false },
+    osmotic_vacuole = { name = "Осмотическая вакуоль", branch = "toxic", desc = "Сигнатурный орган железистой формы. На следующем этапе будет накапливать до 3 зарядов и расширять кислотное поле. Пока подготовлен как модель данных.", color = "a8e86f", signature = true, form = "toxic", research_unlock = "toxic", offer_enabled = false },
+    synaptic_node = { name = "Синаптический узел", branch = "colony", desc = "Сигнатурный орган колониальной формы. На следующем этапе будет координировать удары копий. Пока подготовлен как модель данных.", color = "c5a0f5", signature = true, form = "colony", research_unlock = "colony", offer_enabled = false },
 }
 
 M.ADAPTATION_IDS = { "metabolism", "catalysis", "armor", "regen", "speed", "magnet" }
@@ -28,6 +31,97 @@ M.ADAPTATIONS = {
     speed = { name = "Жгутики", desc = "Ранг и качество увеличивают скорость. Предел — 60%.", color = "f4d394" },
     magnet = { name = "Рецепторы", desc = "Притягивают ДНК, биомассу и ткань с растущего радиуса. Само поглощение идёт при касании.", color = "e7a7f5" },
 }
+
+M.FORM_IDS = { "predator", "toxic", "colony" }
+M.SIGNATURE_ORGAN_IDS = { "chemoreceptor_ridge", "osmotic_vacuole", "synaptic_node" }
+
+-- Данные формы хранятся отдельно от боевой реализации. Следующие этапы подключат
+-- способности, пассивные эффекты и высшие эволюции к симуляции.
+M.SIGNATURE_ORGANS = {
+    chemoreceptor_ridge = {
+        form = "predator", search_radius = 220, mark_duration = 2.5, retarget_interval = 4,
+        bite_bonus = 0.08, rank_three_mark_duration = 3.2, rank_six_bite_bonus = 0.12,
+    },
+    osmotic_vacuole = {
+        form = "toxic", charge_target_interval = 8, max_charges = 3, charge_lifetime = 15,
+        rank_three_charge_lifetime = 20, rank_six_max_charges = 4,
+        radius_per_charge = 0.08, duration_per_charge = 0.25,
+    },
+    synaptic_node = {
+        form = "colony", coordination_window = 1.2, followup_window = 2,
+        bonus_per_clone = 0.05, max_bonus = 0.15, rank_three_radius_multiplier = 1.2,
+        rank_six_max_bonus = 0.20,
+    },
+}
+
+M.FORM_SPECIALIZATIONS = {
+    predator = {
+        research = "", branch = "predator", signature_organ = "chemoreceptor_ridge",
+        ability = {
+            id = "predator_dash", name = "Рывок-хватка", cooldown = 14,
+            damage_multiplier = 1.25, absorb_refund = 2, minimum_cooldown = 10,
+        },
+        passive = {
+            id = "feast", name = "Пиршество", heal_fraction = 0.03,
+            heal_cap = 4, cooldown = 5,
+        },
+        evolution = {
+            id = "apex_predator", name = "Вершинный хищник",
+            organ = "chemoreceptor_ridge", organ_rank = 6, adaptation = "magnet", adaptation_rank = 3,
+            ability_cooldown = 12.5, marked_bite_bonus = 0.12,
+        },
+    },
+    toxic = {
+        research = "toxic", branch = "toxic", signature_organ = "osmotic_vacuole",
+        ability = {
+            id = "toxic_rupture", name = "Разгерметизация", cooldown = 16,
+            duration = 3, damage_multiplier = 0.60, slow = 0.15, slow_duration = 1.5,
+            fields_do_not_stack = true,
+        },
+        passive = {
+            id = "toxic_regulation", name = "Токсикорегуляция",
+            enemy_contact_reduction = 0.08, boss_contact_reduction = 0.04,
+        },
+        evolution = {
+            id = "living_reactor", name = "Живой реактор",
+            organ = "osmotic_vacuole", organ_rank = 6, adaptation = "catalysis", adaptation_rank = 3,
+            duration_bonus = 1, slow = 0.20,
+        },
+    },
+    colony = {
+        research = "colony", branch = "colony", signature_organ = "synaptic_node",
+        ability = {
+            id = "colony_rally", name = "Сбор колонии", cooldown = 15,
+            radius = 260, clone_damage_multiplier = 0.40, maximum_clone_hit_equivalents = 2,
+        },
+        passive = {
+            id = "shared_membrane", name = "Общая мембрана",
+            reduction_per_clone = 0.012, maximum_clones = 5, maximum_reduction = 0.06,
+        },
+        evolution = {
+            id = "collective_mind", name = "Коллективный разум",
+            organ = "synaptic_node", organ_rank = 6, adaptation = "armor", adaptation_rank = 3,
+            second_wave_delay = 1, second_wave_multiplier = 0.35,
+            ability_cooldown = 18, maximum_reduction = 0.075,
+        },
+    },
+}
+
+function M.form_specialization(form)
+    return M.FORM_SPECIALIZATIONS[form] or {}
+end
+
+function M.signature_organ(form)
+    return M.form_specialization(form).signature_organ or ""
+end
+
+function M.signature_organ_for_research(research_id)
+    for _, form in ipairs(M.FORM_IDS) do
+        local data = M.FORM_SPECIALIZATIONS[form]
+        if data.research == research_id then return data.signature_organ end
+    end
+    return ""
+end
 
 M.SYNERGY_IDS = { "enzyme_bite", "conductive_bath", "barbed_cilia", "shield_pulse", "metabolic_colony", "ferment_cloud", "acid_grasp", "spike_pulse", "toxic_colony", "spore_feast" }
 
@@ -93,6 +187,18 @@ M.SPECIALIZATIONS = {
         { id = "devour_whale_maw", name = "Кашалотова пасть", desc = "Урон пасти +14%, укус срабатывает на 18% чаще; растёт живая мышечная складка.", color = "ff9c82", motif = "jaws", power = 1.14, bite_cooldown_mult = 0.82 },
         { id = "devour_selective_filter", name = "Избирательный фильтр", desc = "Урон +8%, а в активной синергии +20%; пищевые каналы пульсируют бирюзой.", color = "83e9cf", motif = "threads", power = 1.08, synergy_power = 1.2 },
     },
+    chemoreceptor_ridge = {
+        { id = "chemoreceptor_deep_sensor", name = "Глубокий сенсор", desc = "Радиус поиска +20%.", color = "b9a0ff", motif = "nodes", search_radius_mult = 1.2 },
+        { id = "chemoreceptor_neural_sight", name = "Нервный прицел", desc = "Длительность метки +1 с.", color = "8ce7df", motif = "threads", mark_duration_bonus = 1 },
+    },
+    osmotic_vacuole = {
+        { id = "vacuole_hyperosmotic_sac", name = "Гиперосмотический мешок", desc = "Радиус кислотного поля +15%.", color = "d5f47c", motif = "vesicles", field_radius_mult = 1.15 },
+        { id = "vacuole_stable_chamber", name = "Стабильная камера", desc = "Заряды хранятся на 6 с дольше.", color = "91e6a8", motif = "glands", charge_lifetime_bonus = 6 },
+    },
+    synaptic_node = {
+        { id = "synapse_branched_network", name = "Разветвлённая сеть", desc = "Радиус координации +20%.", color = "c6a6ff", motif = "threads", coordination_radius_mult = 1.2 },
+        { id = "synapse_protective_network", name = "Защитная сеть", desc = "Пассивная защита +1,5 процентного пункта в пределах общего ограничения.", color = "a5e9e0", motif = "nodes", passive_protection_bonus = 0.015 },
+    },
 }
 
 M.TEMP_MUTATION_IDS = { "acid_vesicles", "spore_pouch", "forked_tendrils", "charged_nucleus", "elastic_cortex", "voracious_ridge" }
@@ -126,6 +232,7 @@ local log = math.log
 local format = string.format
 local cell_costs = {
     devour = 3, division = 3, tentacle = 2, acid = 2, barrier = 2, electric = 2,
+    chemoreceptor_ridge = 1, osmotic_vacuole = 2, synaptic_node = 2,
 }
 
 function M.item(id)
@@ -202,7 +309,8 @@ end
 function M.base_unlocked()
     local ids = {}
     for _, id in ipairs(M.ORGAN_IDS) do
-        if id ~= "division" then
+        local organ = M.ORGANS[id]
+        if organ and not organ.unlock and not organ.research_unlock then
             ids[#ids + 1] = id
         end
     end

@@ -24,6 +24,12 @@ function M.defaults()
     return profile
 end
 
+local function append_unique(values, id)
+    if type(id) == "string" and id ~= "" and not util.index(values, id) then
+        values[#values + 1] = id
+    end
+end
+
 local function active_projection(profile)
     local state = {}
     for key, value in pairs(profile) do
@@ -71,6 +77,25 @@ local function normalize_state(state)
         clean.upgrades[id] = util.clamp(util.integer(clean.upgrades[id]), 0, util.MAX_INTEGER)
     end
     clean.legacy = legacy.normalize(clean)
+    -- Миграция старых профилей: уже исследованные формы получают свой орган.
+    -- Хищный гребень является базовым, а два остальных открываются исследованием.
+    for _, form_id in ipairs(legacy.FORM_IDS) do
+        local form = legacy.FORMS[form_id]
+        if form.research == "" or util.index(clean.legacy.research, form.research) then
+            append_unique(clean.unlocked, form.signature_organ)
+        end
+    end
+    if util.index(clean.legacy.research, "colony") then append_unique(clean.unlocked, "division") end
+
+    -- Снимок текущего забега тоже получает новые доступные органы, иначе после
+    -- восстановления старого checkpoint список предложений останется устаревшим.
+    local checkpoint = util.table(clean.checkpoint)
+    if type(checkpoint.build) == "table" then
+        local saved_unlocked = util.array(checkpoint.build.unlocked) and checkpoint.build.unlocked or {}
+        for _, id in ipairs(clean.unlocked) do append_unique(saved_unlocked, id) end
+        checkpoint.build.unlocked = saved_unlocked
+        clean.checkpoint = checkpoint
+    end
     return clean
 end
 
@@ -216,6 +241,7 @@ end
 function Store:unlock(id)
     local item = catalog.ORGANS[id]
     if not item or util.index(self.profile.unlocked, id) or self.profile.cores < (item.unlock or 8) then return false end
+    if item.research_unlock and not util.index(self.profile.legacy.research, item.research_unlock) then return false end
     local profile = util.copy(self.profile)
     profile.cores = profile.cores - (item.unlock or 8)
     profile.unlocked[#profile.unlocked + 1] = id
@@ -242,7 +268,9 @@ function Store:research(id)
     profile.cores = profile.cores - progress.cost
     profile.legacy.knowledge[branch] = math.max(0, profile.legacy.knowledge[branch] - progress.knowledge)
     profile.legacy.research[#profile.legacy.research + 1] = id
-    if id == "colony" and not util.index(profile.unlocked, "division") then profile.unlocked[#profile.unlocked + 1] = "division" end
+    local signature_organ = catalog.signature_organ_for_research(id)
+    if signature_organ ~= "" then append_unique(profile.unlocked, signature_organ) end
+    if id == "colony" then append_unique(profile.unlocked, "division") end
     return self:write_profile(profile)
 end
 
@@ -382,9 +410,8 @@ function Store:create_family(name, form, preferred_slot)
     if research ~= "" and not util.index(projected.legacy.research, research) then
         projected.legacy.research[#projected.legacy.research + 1] = research
     end
-    if form == "colony" and not util.index(projected.unlocked, "division") then
-        projected.unlocked[#projected.unlocked + 1] = "division"
-    end
+    if form == "colony" then append_unique(projected.unlocked, "division") end
+    append_unique(projected.unlocked, legacy.FORMS[form].signature_organ)
     projected.legacy.selected_form = form
     projected.families = families
     return self:write_profile(projected)

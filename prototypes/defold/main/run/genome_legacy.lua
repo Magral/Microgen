@@ -4,9 +4,9 @@ local catalog = require "main.run.catalog"
 local M = {}
 
 M.FORMS = {
-    predator = {name = "Хищная", organ = "devour", branch = "predator", research = "", desc = "Выраженная передняя часть и пасть: сближение и укусы."},
-    toxic = {name = "Железистая", organ = "acid", branch = "toxic", research = "toxic", desc = "Складчатая мембрана растворяет добычу рядом с телом."},
-    colony = {name = "Колониальная", organ = "division", branch = "colony", research = "colony", desc = "Живые перемычки связывают доли; почки отделяются в помощников."},
+    predator = {name = "Хищная", organ = "devour", branch = "predator", research = "", signature_organ = catalog.signature_organ("predator"), ability = catalog.form_specialization("predator").ability, passive = catalog.form_specialization("predator").passive, evolution = catalog.form_specialization("predator").evolution, desc = "Выраженная передняя часть и пасть: сближение и укусы."},
+    toxic = {name = "Железистая", organ = "acid", branch = "toxic", research = "toxic", signature_organ = catalog.signature_organ("toxic"), ability = catalog.form_specialization("toxic").ability, passive = catalog.form_specialization("toxic").passive, evolution = catalog.form_specialization("toxic").evolution, desc = "Складчатая мембрана растворяет добычу рядом с телом."},
+    colony = {name = "Колониальная", organ = "division", branch = "colony", research = "colony", signature_organ = catalog.signature_organ("colony"), ability = catalog.form_specialization("colony").ability, passive = catalog.form_specialization("colony").passive, evolution = catalog.form_specialization("colony").evolution, desc = "Живые перемычки связывают доли; почки отделяются в помощников."},
 }
 M.TRAITS = {
     elastic = {name = "Эластичная ткань", research = "elastic", desc = "Разгон и торможение: 0,13 с вместо 0,20 с.", tradeoff = "Контактный урон +8%.", visual = "Вытянутые мягкие доли."},
@@ -15,8 +15,8 @@ M.TRAITS = {
     receptive = {name = "Генетическая восприимчивость", research = "receptive", desc = "Вес выбранной ветви мутаций: 1,75 вместо 1,35.", tradeoff = "Получаемая ДНК −5%.", visual = "Светящиеся рецепторные камеры."},
 }
 M.RESEARCH = {
-    toxic = {name = "Железистая форма", branch = "structure", cost = 4, requires = {}, effect = "Открывает железистый старт с кислотой.", visual = "Мягкое складчатое тело и железы."},
-    colony = {name = "Колониальная форма", branch = "structure", cost = 8, requires = {}, effect = "Открывает деление и колониальный старт одной покупкой.", visual = "Доли и живые перемычки."},
+    toxic = {name = "Железистая форма", branch = "structure", cost = 4, requires = {}, effect = "Открывает железистый старт с кислотой и сигнатурную осмотическую вакуоль.", visual = "Мягкое складчатое тело и железы."},
+    colony = {name = "Колониальная форма", branch = "structure", cost = 8, requires = {}, effect = "Открывает деление, сигнатурный синаптический узел и колониальный старт одной покупкой.", visual = "Доли и живые перемычки."},
     elastic = {name = "Эластичная ткань", branch = "adaptation", cost = 4, requires = {}, effect = "Открывает наследственный признак скорости.", visual = "Мягкие вытянутые доли."},
     sensory = {name = "Чувствительная мембрана", branch = "adaptation", cost = 4, requires = {}, effect = "Открывает наследственные рецепторы.", visual = "Рецепторные выступы."},
     folds = {name = "Пищеварительные складки", branch = "adaptation", cost = 6, requires = {"sensory"}, effect = "Открывает наследственный признак усвоения.", visual = "Складки пищеварительной ткани."},
@@ -112,6 +112,15 @@ function M.normalize(profile)
     clean.research = ids(raw.research, M.RESEARCH)
     if util.index(util.array_or_empty(profile.unlocked), "division") and not util.index(clean.research, "colony") then
         clean.research[#clean.research + 1] = "colony"
+    end
+    -- В старых и вручную перенесённых профилях наличие открытого сигнатурного
+    -- органа означает, что соответствующее исследование уже было получено.
+    for _, form_id in ipairs(M.FORM_IDS) do
+        local form = M.FORMS[form_id]
+        if form.research ~= "" and util.index(util.array_or_empty(profile.unlocked), form.signature_organ)
+            and not util.index(clean.research, form.research) then
+            clean.research[#clean.research + 1] = form.research
+        end
     end
     for _, id in ipairs(M.FORM_IDS) do
         if util.index(clean.research, M.FORMS[id].research) then clean.forms[#clean.forms + 1] = id end

@@ -1,5 +1,7 @@
 local Simulation = require "main.run.simulation"
 local Catalog = require "main.run.catalog"
+local Build = require "main.run.build_model"
+local Legacy = require "main.run.genome_legacy"
 local Size = require "main.run.size_rules"
 local SaveStore = require "main.run.save_store"
 local Util = require "main.run.meta_util"
@@ -442,6 +444,100 @@ local function validate_save_recovery()
     print("MICROGEN SAVE RECOVERY READY")
 end
 
+local function validate_form_specialization_data()
+    local expected = {
+        predator = {organ = "chemoreceptor_ridge", cells = 1},
+        toxic = {organ = "osmotic_vacuole", cells = 2},
+        colony = {organ = "synaptic_node", cells = 2},
+    }
+    for _, form_id in ipairs(Catalog.FORM_IDS) do
+        local data, expected_form = Catalog.form_specialization(form_id), expected[form_id]
+        assert(data and data.ability and data.passive and data.evolution, "Every form must define its ability, passive and evolution")
+        assert(data.signature_organ == expected_form.organ, "Form signature organ must be stable")
+        local organ = Catalog.ORGANS[data.signature_organ]
+        assert(organ and organ.signature and organ.form == form_id, "Signature organ must belong to its form")
+        assert(Catalog.cell_cost(data.signature_organ) == expected_form.cells, "Signature organ cell cost changed")
+        assert(#(Catalog.SPECIALIZATIONS[data.signature_organ] or {}) == 2, "Every signature organ must have two specializations")
+        local legacy_form = Legacy.FORMS[form_id]
+        assert(legacy_form.signature_organ == data.signature_organ and legacy_form.ability == data.ability
+            and legacy_form.passive == data.passive, "Legacy form metadata must point to the shared form model")
+    end
+
+    local baseline = Catalog.base_unlocked()
+    assert(Util.index(baseline, "chemoreceptor_ridge"), "Predator signature organ must be available by default")
+    assert(not Util.index(baseline, "osmotic_vacuole") and not Util.index(baseline, "synaptic_node")
+        and not Util.index(baseline, "division"), "Research-gated organs must not be available by default")
+
+    local staged = Build.new()
+    staged.unlocked = {"chemoreceptor_ridge", "osmotic_vacuole", "synaptic_node"}
+    local offers = staged:offers({randf = function() return 0 end})
+    assert(#offers == 0, "Signature organs must not enter level-up offers before their combat effects are implemented")
+
+    local old_unlocked = {
+        "tentacle", "acid", "spikes", "pulse", "trail", "infection", "cilia", "enzymes",
+        "electric", "barrier", "devour", "metabolism", "catalysis", "armor", "regen", "speed", "magnet",
+    }
+    local old_profile = SaveStore.defaults()
+    old_profile.unlocked = Util.copy(old_unlocked)
+    old_profile.legacy = Legacy.defaults()
+    old_profile.legacy.research = {"toxic", "colony"}
+    old_profile.legacy.selected_form = "toxic"
+    old_profile.checkpoint = Simulation.new(147, nil, nil, "predator",
+        {form = "predator", branch = "predator", seed = 147}):snapshot()
+    old_profile.checkpoint.build.unlocked = Util.copy(old_unlocked)
+
+    local migrated = SaveStore.normalize_profile(old_profile)
+    assert(migrated, "An older profile with both form researches must remain valid")
+    assert(Util.index(migrated.unlocked, "chemoreceptor_ridge")
+        and Util.index(migrated.unlocked, "osmotic_vacuole")
+        and Util.index(migrated.unlocked, "synaptic_node")
+        and Util.index(migrated.unlocked, "division"), "Migration must restore all organs granted by existing research")
+    assert(Util.index(migrated.checkpoint.build.unlocked, "chemoreceptor_ridge")
+        and Util.index(migrated.checkpoint.build.unlocked, "osmotic_vacuole")
+        and Util.index(migrated.checkpoint.build.unlocked, "synaptic_node"),
+        "Migration must update the unlocked list inside an old checkpoint")
+    local restored = Simulation.restore(migrated.checkpoint)
+    assert(restored and Util.index(restored.build.unlocked, "osmotic_vacuole")
+        and Util.index(restored.build.unlocked, "synaptic_node"), "Migrated checkpoint must restore with researched organs")
+
+    local old_colony = SaveStore.defaults()
+    old_colony.unlocked = Util.copy(old_unlocked)
+    old_colony.unlocked[#old_colony.unlocked + 1] = "division"
+    old_colony.legacy = Legacy.defaults()
+    local migrated_colony = SaveStore.normalize_profile(old_colony)
+    assert(migrated_colony and Util.index(migrated_colony.legacy.research, "colony")
+        and Util.index(migrated_colony.unlocked, "synaptic_node"),
+        "Legacy division unlock must imply colony research and its new signature organ")
+
+    local fresh = SaveStore.defaults()
+    fresh.unlocked = Util.copy(old_unlocked)
+    fresh.legacy = Legacy.defaults()
+    local fresh_clean = SaveStore.normalize_profile(fresh)
+    assert(fresh_clean and not Util.index(fresh_clean.unlocked, "osmotic_vacuole")
+        and not Util.index(fresh_clean.unlocked, "synaptic_node"),
+        "Migration must not grant forms that have not been researched")
+
+    local records = {}
+    local backend = {
+        get_save_file = function(_, filename) return filename end,
+        load = function(path) return Util.copy(records[path]) end,
+        save = function(path, record) records[path] = Util.copy(record); return true end,
+    }
+    local store = SaveStore.new("signature_research", backend)
+    store.profile.cores = 12
+    assert(not store:unlock("osmotic_vacuole"), "Research-gated organ must not be purchased outside its research")
+    assert(store:research("toxic") and Util.index(store.profile.unlocked, "osmotic_vacuole"),
+        "Toxic research must unlock the osmotic vacuole")
+    assert(store:research("colony") and Util.index(store.profile.unlocked, "synaptic_node")
+        and Util.index(store.profile.unlocked, "division"), "Colony research must unlock division and the synaptic node")
+
+    local old_build = Build.new()
+    old_build:from_dict({unlocked = old_unlocked, organs = {devour = 1}})
+    assert(Util.index(old_build.unlocked, "chemoreceptor_ridge"),
+        "Loading a legacy build must append the new baseline signature organ")
+    print("MICROGEN FORM SPECIALIZATION DATA READY")
+end
+
 local function validate_enemy_markers()
     local sim = Simulation.new(147, nil, nil, "toxic", {form = "toxic", seed = 147})
     local radius = sim:body_radius()
@@ -485,6 +581,7 @@ local function validate_enemy_markers()
 end
 
 function M.run()
+    validate_form_specialization_data()
     validate_enemy_markers()
     validate_save_recovery()
     validate_toxin_overlap()

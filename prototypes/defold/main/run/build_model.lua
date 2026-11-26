@@ -185,7 +185,7 @@ function Build:offers(rng, filter_branch)
     local total = 0
     for _, id in ipairs(self.unlocked) do
         local entry = Catalog.item(id)
-        if entry.name and self:stored_rank(id) < Catalog.max_rank(id) and
+        if entry.name and entry.offer_enabled ~= false and self:stored_rank(id) < Catalog.max_rank(id) and
            (filter_branch == "" or entry.branch == filter_branch) then
             local weight = entry.branch == self.branch and self.branch_weight or 1
             pool[#pool + 1] = id
@@ -265,9 +265,13 @@ function Build:from_dict(data)
     self.unlocked = {}
     for _, entry in ipairs(dictionary(data.unlocked or Catalog.base_unlocked())) do
         local id = tostring(entry)
-        if Catalog.item(id).name then
+        if Catalog.item(id).name and not contains(self.unlocked, id) then
             self.unlocked[#self.unlocked + 1] = id
         end
+    end
+    -- Сохранения старых версий не содержат новый базовый орган хищной формы.
+    for _, id in ipairs(Catalog.base_unlocked()) do
+        if not contains(self.unlocked, id) then self.unlocked[#self.unlocked + 1] = id end
     end
 
     load_ranks(self, dictionary(data.organs), Catalog.ORGANS, self.organs)
