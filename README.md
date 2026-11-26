@@ -5,7 +5,7 @@
 ## Основа проекта
 
 - **Движок:** Defold
-- **Последний стабильный релиз:** [Defold 1.5.9](https://github.com/Magral/Microgen/releases/tag/defold-1.5.9)
+- **Последний стабильный релиз:** [Defold 1.5.10](https://github.com/Magral/Microgen/releases/tag/defold-1.5.10)
 - **Рабочая ветка:** `preview/defold`
 - **Каталог игры:** `prototypes/defold`
 - **Платформа:** Android, ARM64 (`arm64-v8a`), альбомная ориентация
@@ -13,22 +13,28 @@
 - **Минимальная версия Android:** API 26
 - **Контрольное устройство:** Poco X8 Pro; игра также рассчитана на другие поддерживаемые Android-смартфоны и соотношения сторон.
 
-## Стабильный релиз · 1.5.9
+## Стабильный релиз · 1.5.10
+
+- По выбору пользователя для Android установлена иконка бирюзовой амёбы с сияющим ядром.
+- На карточках синергий видны игровой эффект, требуемая пара органов и состояние активации.
+- Плюющаяся амёба предупреждает о выстреле направленным кислотно-зелёным сигналом за 0,65 секунды.
+- Версия Android ARM64 — 1.5.10 / version code 160.
+
+Релизный конвейер проверяет ARM64 сборку и подпись, путь автообновления с 1.5.9 и четыре Linux smoke-профиля. [Скачать стабильный релиз](https://github.com/Magral/Microgen/releases/tag/defold-1.5.10).
+
+## Предыдущий стабильный релиз · 1.5.9
 
 - Исправлены сетчатый артефакт мембраны и прилегание левого блока HUD.
 - Улучшены безопасные области, краевые касания и управление одним пальцем.
 - Добавлены анимации дыхания, поглощения и локальной реакции на удар.
-- Версия Android ARM64 — 1.5.9 / version code 159.
+- APK и контрольная сумма доступны на [странице релиза 1.5.9](https://github.com/Magral/Microgen/releases/tag/defold-1.5.9).
 
-Успешный CI [45652857399](https://github.com/Magral/Microgen/actions/runs/45652857399) проверил сборку, подпись, идентификатор пакета и четыре Linux smoke-профиля. Проверка APK на Poco X8 Pro и обновления с 1.5.8 остаётся за пользователем. [Скачать стабильный релиз](https://github.com/Magral/Microgen/releases/tag/defold-1.5.9).
-
-## Предыдущий стабильный релиз · 1.5.8
+## Defold 1.5.8 · предыдущий релиз
 
 - Общий расчёт безопасных областей для HUD и модальных окон.
 - Проверки интерфейса и основных экранов на четырёх альбомных профилях.
 - Усиленная регрессия жизненного цикла ткани, останков и поглощения.
-
-APK и контрольная сумма доступны на [странице релиза 1.5.8](https://github.com/Magral/Microgen/releases/tag/defold-1.5.8).
+- APK и контрольная сумма доступны на [странице релиза 1.5.8](https://github.com/Magral/Microgen/releases/tag/defold-1.5.8).
 
 ## Игровой процесс и визуальное направление
 
@@ -43,11 +49,11 @@ APK и контрольная сумма доступны на [странице
 
 ## Сборка и документация
 
-Откройте [`prototypes/defold/game.project`](prototypes/defold/game.project) в Defold Editor. Параметры Android: пакет `org.magral.microgen.defold`, минимальный API 26, версия проекта — 1.5.9 / version code 159.
+Откройте [`prototypes/defold/game.project`](prototypes/defold/game.project) в Defold Editor. Параметры Android: пакет `org.magral.microgen.defold`, минимальный API 26, версия проекта — 1.5.10 / version code 160.
 
 - [ROADMAP.md](ROADMAP.md) — этапы, критерии и незакрытые проверки.
 - [RELEASE_AUTOMATION.md](RELEASE_AUTOMATION.md) — порядок запуска стабильного релиза.
-- [RELEASE_NOTES.md](RELEASE_NOTES.md) — сведения о стабильном релизе 1.5.9.
+- [RELEASE_NOTES.md](RELEASE_NOTES.md) — сведения о стабильном релизе 1.5.10.
 - [CHANGELOG.md](CHANGELOG.md) — история стабильных релизов.
-- [`prototypes/defold/RELEASE_NOTES.md`](prototypes/defold/RELEASE_NOTES.md) — заметки стабильного релиза 1.5.9.
+- [`prototypes/defold/RELEASE_NOTES.md`](prototypes/defold/RELEASE_NOTES.md) — заметки стабильного релиза 1.5.10.
 - [Технический аудит адаптации интерфейса](docs/development/ui-adaptation.md).

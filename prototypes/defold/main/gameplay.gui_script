@@ -1865,6 +1865,25 @@ function init(self)
             and test_spitter.shot_cd==2,
             "Spitter shot must follow the telegraphed aim after its windup")
         print("MICROGEN SPITTER TELEGRAPH READY")
+        local function update_fixture(version, prerelease)
+            local tag="defold-"..version
+            local asset="Microgen-Defold-"..version..".apk"
+            return {tag_name=tag,draft=false,prerelease=prerelease,assets={{
+                name=asset,
+                browser_download_url="https://github.com/Magral/Microgen/releases/download/"..tag.."/"..asset,
+                digest="sha256:"..string.rep("a",64),size=4096,
+            }}}
+        end
+        local update=Updater.select({
+            update_fixture("1.5.9",false),
+            update_fixture("1.5.10",false),
+            update_fixture("1.5.11",true),
+        },"1.5.9")
+        assert(update and update.label=="1.5.10" and update.size==4096
+            and update.sha==string.rep("a",64)
+            and update.url=="https://github.com/Magral/Microgen/releases/download/defold-1.5.10/Microgen-Defold-1.5.10.apk",
+            "Auto-update must select the verified stable APK newer than 1.5.9")
+        print("MICROGEN UPDATE PATH READY")
         sim.build.organs.enzymes=previous_organs.enzymes
         sim.build.organs.devour=previous_organs.devour
         sim.build.organs.acid=previous_organs.acid
