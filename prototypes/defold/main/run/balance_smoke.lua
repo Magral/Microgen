@@ -19,6 +19,7 @@ local BRANCHES = {
     {form = "colony", starter = "division"},
 }
 local ADVANCED_SEEDS = {147, 247, 347}
+local CONTROL_SEEDS = {147, 247, 371}
 local HYBRID_SCENARIOS = {
     {form="predator",starter="devour",name="acid_bite",
         seed_organs={osmotic_vacuole=2,acid=2},expected_synergies={"acid_bite"}},
@@ -310,29 +311,31 @@ local function run(seed, scenario, horizon_seconds)
     local toxin_source_summary = #toxin_summary > 0 and table.concat(toxin_summary, ";") or "none"
     local marker=scenario.run_marker or "MICROGEN BALANCE RUN"
     print(string.format(
-        "%s seed=%d branch=%s starter=%s scenario=%s pilot=kite seconds=%.1f stage=%d level=%d kills=%d hp=%.1f damage_taken=%.1f first_hit=%s last_hit=%s damage_sources=%s toxin_sources=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d",
+        "%s seed=%d branch=%s starter=%s scenario=%s pilot=kite seconds=%.1f stage=%d level=%d kills=%d absorbed=%d hp=%.1f damage_dealt=%.1f damage_taken=%.1f first_hit=%s last_hit=%s damage_sources=%s toxin_sources=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d",
         marker,seed,branch,starter,scenario.name or "base",sim.elapsed,sim.stage_index,sim.level,sim.kills,sim.hp,
-        sim.combat_stats.damage_taken,first_hit or "none",cause,source_summary,toxin_source_summary,
+        sim.absorbed or 0,sim.combat_stats.damage_dealt,sim.combat_stats.damage_taken,first_hit or "none",cause,source_summary,toxin_source_summary,
         sim.outcome=="" and "alive" or sim.outcome,steps,max_enemies,max_fields,max_remains))
     return {alive=sim.outcome=="",seconds=sim.elapsed,hp=sim.hp,level=sim.level,kills=sim.kills,
-        stage=sim.stage_index,damage_taken=sim.combat_stats.damage_taken}
+        absorbed=sim.absorbed or 0,stage=sim.stage_index,damage_dealt=sim.combat_stats.damage_dealt,
+        damage_taken=sim.combat_stats.damage_taken}
 end
 
 local function run_batch(marker,scenario,seeds)
-    local seconds,levels,kills,damage,stages,survivors=0,0,0,0,0,0
+    local seconds,levels,kills,absorbed,dealt,damage,stages,survivors=0,0,0,0,0,0,0,0
     for _,seed in ipairs(seeds) do
         local config=Util.copy(scenario)
         config.run_marker=marker
         local result=run(seed,config)
-        seconds,levels,kills,damage,stages=seconds+result.seconds,levels+result.level,
-            kills+result.kills,damage+result.damage_taken,stages+result.stage
+        seconds,levels,kills,absorbed,dealt,damage,stages=seconds+result.seconds,levels+result.level,
+            kills+result.kills,absorbed+result.absorbed,dealt+result.damage_dealt,
+            damage+result.damage_taken,stages+result.stage
         if result.alive then survivors=survivors+1 end
         collectgarbage("collect")
     end
     local summary=marker:gsub(" RUN$"," SUMMARY")
-    print(string.format("%s form=%s scenario=%s maps=%d mean_seconds=%.1f mean_stage=%.2f mean_level=%.2f mean_kills=%.2f mean_damage_taken=%.1f survivors=%d",
+    print(string.format("%s form=%s scenario=%s maps=%d mean_seconds=%.1f mean_stage=%.2f mean_level=%.2f mean_kills=%.2f mean_absorbed=%.2f mean_damage_dealt=%.1f mean_damage_taken=%.1f survivors=%d",
         summary,scenario.form,scenario.name or "base",#seeds,seconds/#seeds,stages/#seeds,
-        levels/#seeds,kills/#seeds,damage/#seeds,survivors))
+        levels/#seeds,kills/#seeds,absorbed/#seeds,dealt/#seeds,damage/#seeds,survivors))
 end
 
 local function validate_resident_start_safety()
@@ -474,7 +477,7 @@ local function validate_save_recovery()
     assert(store:create_family("Первая", "predator"), "Initial family must be saved")
     local family = store:family_id()
     local sim = Simulation.new(147, nil, nil, "predator", {form = "predator", branch = "predator", seed = 147})
-    sim.family_id, sim.hp, sim.elapsed = family, 62, 45
+    sim.family_id, sim.hp, sim.elapsed, sim.absorbed = family, 62, 45, 3
     assert(store:save_checkpoint(sim:snapshot(), family), "Checkpoint must be committed")
     assert(store:credit_once("test-reward", 7), "Reward must be credited once")
     local committed = store.revision
@@ -489,8 +492,12 @@ local function validate_save_recovery()
     assert(not reopened:credit_once("test-reward", 7) and reopened.profile.cores == 7,
         "Reload must not duplicate a previously credited reward")
     local restored = assert(Simulation.restore(reopened.profile.checkpoint))
-    assert(restored.family_id == family and restored.hp == 62 and restored.elapsed == 45,
-        "Reload must preserve the checkpoint and family identity")
+    assert(restored.family_id == family and restored.hp == 62 and restored.elapsed == 45 and restored.absorbed == 3,
+        "Reload must preserve the checkpoint, family identity and absorption count")
+    local old_checkpoint=Util.copy(reopened.profile.checkpoint)
+    old_checkpoint.absorbed=nil
+    local old_restore=assert(Simulation.restore(old_checkpoint))
+    assert(old_restore.absorbed==0,"Older checkpoints must default the absorption counter to zero")
     -- Повреждаем только самый свежий слот и проверяем предыдущую ревизию.
     records[reopened.paths[reopened.active_file]] = { revision = committed, profile = { version = -1 } }
     local fallback = SaveStore.new("balance_recovery", backend)
@@ -703,10 +710,12 @@ local function validate_form_passives()
     predator:spawn_enemy(predator.player, "prey")
     predator:_die(1, true)
     near(predator.hp, 53.8, "Feast plus existing mouth healing")
+    assert(predator.absorbed==1,"Absorption counter must distinguish completed absorption from kills")
     near(predator.cooldowns.form_feast, 5, "Feast cooldown")
     predator:spawn_enemy(predator.player, "prey")
     predator:_die(1, true)
     near(predator.hp, 54.6, "Second absorption must not bypass cooldown")
+    assert(predator.absorbed==2,"Absorption counter must include each completed absorption")
     predator.cooldowns.form_feast = 2.5
     local restored = assert(Simulation.restore(predator:snapshot()))
     near(restored.cooldowns.form_feast, 2.5, "Feast cooldown survives checkpoint")
@@ -1127,21 +1136,24 @@ function M.run()
     validate_resident_start_safety()
     validate_combat_checkpoint()
     for _,scenario in ipairs(BRANCHES) do
-        local seconds,levels,kills,survivors=0,0,0,0
+        local seconds,levels,kills,absorbed,dealt,damage,stages,survivors=0,0,0,0,0,0,0,0
         for _,seed in ipairs(SEEDS) do
             local result=run(seed,scenario)
-            seconds,levels,kills=seconds+result.seconds,levels+result.level,kills+result.kills
+            seconds,levels,kills,absorbed,dealt,damage,stages=seconds+result.seconds,levels+result.level,
+                kills+result.kills,absorbed+result.absorbed,dealt+result.damage_dealt,
+                damage+result.damage_taken,stages+result.stage
             if result.alive then survivors=survivors+1 end
             collectgarbage("collect")
         end
-        print(string.format("MICROGEN BALANCE SUMMARY branch=%s maps=%d mean_seconds=%.1f mean_level=%.2f mean_kills=%.2f survivors=%d",
-            scenario.form,#SEEDS,seconds/#SEEDS,levels/#SEEDS,kills/#SEEDS,survivors))
+        print(string.format("MICROGEN BALANCE SUMMARY branch=%s maps=%d mean_seconds=%.1f mean_stage=%.2f mean_level=%.2f mean_kills=%.2f mean_absorbed=%.2f mean_damage_dealt=%.1f mean_damage_taken=%.1f survivors=%d",
+            scenario.form,#SEEDS,seconds/#SEEDS,stages/#SEEDS,levels/#SEEDS,kills/#SEEDS,
+            absorbed/#SEEDS,dealt/#SEEDS,damage/#SEEDS,survivors))
     end
     for _,scenario in ipairs(BRANCHES) do
         local control=Util.copy(scenario)
         control.name="без активной способности"
         control.use_ability=false
-        run_batch("MICROGEN BALANCE CONTROL RUN",control,SEEDS)
+        run_batch("MICROGEN BALANCE CONTROL RUN",control,CONTROL_SEEDS)
     end
     for _,scenario in ipairs(HYBRID_SCENARIOS) do
         run_batch("MICROGEN HYBRID BALANCE RUN",scenario,ADVANCED_SEEDS)

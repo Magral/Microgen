@@ -37,7 +37,7 @@ function Simulation.new(seed, unlocked, upgrades, branch, loadout)
         stage_index = 1, best_stage = 0, minibosses_spawned = 0, minibosses_defeated = 0, next_miniboss_at = 180,
         stage_transition = false, pending_stage_seed = 0, boss_spawned = false, boss_marker = point(),
         digesting_id = -1, paused = false, outcome = "", player_velocity = point(), bite_flash = 0,
-        next_id = 0, kills = 0, cores_found = 0, rerolls = 0, spawn_timer = 0, invuln = 0, spore_charge = 0,
+        next_id = 0, kills = 0, absorbed = 0, cores_found = 0, rerolls = 0, spawn_timer = 0, invuln = 0, spore_charge = 0,
         run_id = string.format("%d-%d-%d-%d", seed, os.time(), floor(os.clock() * 1000000), next_run), _danger_at = -10,
     }, Simulation)
     self.player, self.previous_player = self.world.start, self.world.start
@@ -732,6 +732,7 @@ function Simulation:_die(index, absorbed)
         if resident.id == enemy.resident_id then resident.dead, resident.active = true, false end
     end
     self.kills = self.kills + 1
+    if absorbed then self.absorbed = (self.absorbed or 0) + 1 end
     local source = absorbed and "devour" or (enemy.last_damage_source or "unknown")
     Stats.record_kill(self.combat_stats, source)
     if contains(enemy.traits, "spores") then self:_field(enemy.pos, 75, 8, 2.5, "enemy_spore", true, self:_enemy_label(enemy) .. " · споры", enemy.id) end
@@ -1155,7 +1156,7 @@ local SAVED_KEYS = {
     "minibosses_spawned", "minibosses_defeated", "stage_index", "best_stage", "stage_transition", "boss_reward", "boss_breakup",
     "pending_stage_seed", "next_miniboss_at", "facing", "tissue_pigment", "residents", "outcome", "events", "material_pending",
     "material_batch", "run_id", "player", "player_velocity", "remains", "digesting_id", "hp", "max_hp", "elapsed", "xp",
-    "level", "pending_levels", "enemies", "pickups", "boss_spawned", "boss_marker", "kills", "cores_found",
+    "level", "pending_levels", "enemies", "pickups", "boss_spawned", "boss_marker", "kills", "absorbed", "cores_found",
     "next_id", "upgrades", "cooldowns", "current_offers", "rerolls", "fields", "shots", "spawn_timer", "invuln",
     "bite_flash", "_danger_at", "form_action", "vacuole_charges", "signature_mark_id", "signature_mark_until", "rally_echo",
 }
@@ -1188,6 +1189,7 @@ function Simulation.restore(saved)
     self.combat_stats = Stats.restore(saved.combat_stats)
     self.run_loadout = Heredity.normalize(saved.run_loadout)
     self.build.form=self.run_loadout.form or ""
+    self.absorbed=finite(self.absorbed) and max(0,floor(self.absorbed)) or 0
     local echo=self.rally_echo
     if type(echo)~="table" or not finite(echo.target_id) or echo.target_id<=0 or echo.target_id%1~=0
         or not finite(echo.due) or not finite(echo.amount) or not finite(echo.limit)
