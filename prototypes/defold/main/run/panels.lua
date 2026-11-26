@@ -87,7 +87,9 @@ local function entries(section)
         local detail=data.summary or ""
         if section=="synergies" then detail=title(data.needs[1]).." + "..title(data.needs[2])
         elseif section=="evolutions" then detail=title(id).." 6/6 + "..title(data.passive).." 3/3"
-        elseif section=="organs" or section=="adaptations" then detail=Catalog.effect_text(id,1) end
+        elseif section=="organs" or section=="adaptations" then
+            detail=data.signature and (tostring(Catalog.cell_cost(id)).." яч. · гибридный орган") or Catalog.effect_text(id,1)
+        end
         local item=Catalog.item(id)
         rows[#rows+1]={id=id,icon=(Catalog.ORGANS[id] or Catalog.ADAPTATIONS[id]) and (item.icon or id) or nil,
             organ=section=="temporary" and data.organ or id,title=data.name,

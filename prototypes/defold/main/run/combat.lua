@@ -45,6 +45,7 @@ function Combat:hit_enemy(enemy, amount, source)
     source = source or "unknown"
     local build = self.build
     local raw = max(0, amount) * (1 + build:passive("catalysis")) * build:power(source)
+    if source == "devour" then raw = raw * self:marked_bite_multiplier(enemy) end
     local exposed = (enemy.boss_exposed or 0) > 0
     local ratio = enemy.r / self:body_radius()
     local giant = enemy.kind == "boss" or ratio >= 1.6
@@ -63,6 +64,7 @@ function Combat:hit_enemy(enemy, amount, source)
     end
     enemy.last_damage_source = source
     Stats.record_damage(self.combat_stats, source, dealt)
+    if source == "acid" or source == "infection" or source == "trail" then self:_vacuole_charge(enemy) end
     self:_feedback("hit", enemy.pos, dealt)
     enemy.popup_damage = (enemy.popup_damage or 0) + dealt
     if self.elapsed - (enemy.popup_at or -1) >= 0.24 and enemy.popup_damage >= 0.8 then
@@ -130,6 +132,104 @@ function Combat:active_clone_count()
     return min(6, Catalog.clone_count(rank) + self.build:specialization_bonus("division", "clone_bonus"))
 end
 
+-- Сигнатурные органы принадлежат сборке, а не выбранной форме.
+function Combat:chemoreceptor_parameters()
+    local id, cfg = "chemoreceptor_ridge", Catalog.SIGNATURE_ORGANS.chemoreceptor_ridge
+    local rank = self.build:rank(id)
+    return cfg.search_radius * self.build:specialization_value(id,"search_radius_mult"),
+        (rank >= 3 and cfg.rank_three_mark_duration or cfg.mark_duration) + self.build:specialization_bonus(id,"mark_duration_bonus"),
+        rank >= 6 and cfg.rank_six_bite_bonus or cfg.bite_bonus
+end
+
+function Combat:is_chemoreceptor_marked(enemy)
+    return self.build:rank("chemoreceptor_ridge") > 0 and enemy.hp > 0 and not enemy.captured
+        and self.signature_mark_id == enemy.id and (self.signature_mark_until or 0) > self.elapsed
+end
+
+function Combat:marked_bite_multiplier(enemy)
+    if not self:is_chemoreceptor_marked(enemy) then return 1 end
+    local _,_,bonus = self:chemoreceptor_parameters()
+    return 1 + bonus
+end
+
+function Combat:_update_chemoreceptor()
+    if self.build:rank("chemoreceptor_ridge") <= 0 then
+        self.signature_mark_id,self.signature_mark_until = nil,nil
+        return
+    end
+    if not self:_ready("chemoreceptor_mark") then return end
+    local radius,duration = self:chemoreceptor_parameters()
+    local function candidate(e) return not e.captured and e.kind ~= "boss" end
+    local target = self:_nearest(radius,function(e) return candidate(e) and self:_can_be_absorbed(e) end)
+    if not target then
+        target = self:_nearest(radius,function(e)
+            return candidate(e) and e.r < self:body_radius()*1.6 and e.hp <= e.max_hp*.65
+        end)
+    end
+    if target then
+        self.signature_mark_id,self.signature_mark_until = target.id,self.elapsed+duration
+        self.cooldowns.chemoreceptor_mark = Catalog.SIGNATURE_ORGANS.chemoreceptor_ridge.retarget_interval
+    end
+end
+
+function Combat:vacuole_parameters()
+    local id,cfg = "osmotic_vacuole",Catalog.SIGNATURE_ORGANS.osmotic_vacuole
+    local rank=self.build:rank(id)
+    return rank>=6 and cfg.rank_six_max_charges or cfg.max_charges,
+        (rank>=3 and cfg.rank_three_charge_lifetime or cfg.charge_lifetime)+self.build:specialization_bonus(id,"charge_lifetime_bonus")
+end
+
+function Combat:vacuole_charge_count()
+    local charges = self.vacuole_charges
+    if self.build:rank("osmotic_vacuole")<=0 then self.vacuole_charges={};return 0 end
+    local cap = self:vacuole_parameters()
+    for i=#charges,1,-1 do
+        local expires=charges[i]
+        if type(expires)~="number" or expires~=expires or expires<=self.elapsed or expires>self.elapsed+26 then table.remove(charges,i) end
+    end
+    while #charges>cap do table.remove(charges) end
+    return #charges
+end
+
+function Combat:_vacuole_charge(enemy)
+    if self.build:rank("osmotic_vacuole")<=0 then return end
+    local cfg=Catalog.SIGNATURE_ORGANS.osmotic_vacuole
+    local cap,lifetime=self:vacuole_parameters()
+    if self:vacuole_charge_count()>=cap or (enemy.vacuole_next or 0)>self.elapsed then return end
+    enemy.vacuole_next=self.elapsed+cfg.charge_target_interval
+    self.vacuole_charges[#self.vacuole_charges+1]=self.elapsed+lifetime
+end
+
+function Combat:synaptic_parameters()
+    local id,cfg="synaptic_node",Catalog.SIGNATURE_ORGANS.synaptic_node
+    local rank=self.build:rank(id)
+    return cfg.coordination_radius*(rank>=3 and cfg.rank_three_radius_multiplier or 1)
+        *self.build:specialization_value(id,"coordination_radius_mult"),
+        rank>=6 and cfg.rank_six_max_bonus or cfg.max_bonus
+end
+
+function Combat:_synaptic_hit(enemy,amount,index)
+    if self.build:rank("synaptic_node")<=0 then return self:hit_enemy(enemy,amount,"division") end
+    local radius,cap=self:synaptic_parameters()
+    if distance_squared(self.player,enemy.pos)>radius^2 then return self:hit_enemy(enemy,amount,"division") end
+    local cfg=Catalog.SIGNATURE_ORGANS.synaptic_node
+    local sync=enemy.synaptic
+    if type(sync)~="table" or (sync.until_time or 0)<=self.elapsed then
+        sync={start=self.elapsed,until_time=self.elapsed+cfg.coordination_window,seen={},count=0}
+        enemy.synaptic=sync
+    end
+    local key=tostring(index)
+    local fresh=not sync.seen[key] and self.elapsed<=sync.start+cfg.coordination_window
+    local count=sync.count+(fresh and 1 or 0)
+    local bonus=min(cap,max(0,count-1)*cfg.bonus_per_clone)
+    local dealt=self:hit_enemy(enemy,amount*(1+bonus),"division")
+    if dealt>0 and fresh then
+        sync.seen[key],sync.count=true,count
+        if count==2 then sync.until_time=self.elapsed+cfg.followup_window end
+    end
+    return dealt
+end
+
 function Combat:damage_reduction(source)
     local passive = self:form_passive()
     local bonus = 0
@@ -138,6 +238,9 @@ function Combat:damage_reduction(source)
         bonus = (kind == "boss" or kind == "miniboss") and passive.boss_contact_reduction or passive.enemy_contact_reduction
     elseif passive.id == "shared_membrane" then
         bonus = min(passive.maximum_reduction, min(passive.maximum_clones, self:active_clone_count()) * passive.reduction_per_clone)
+    end
+    if self.build:rank("synaptic_node")>0 and self:active_clone_count()>0 then
+        bonus=bonus+self.build:specialization_bonus("synaptic_node","passive_protection_bonus")
     end
     return min(0.60, self.build:passive("armor") + bonus)
 end
@@ -493,9 +596,16 @@ function Combat:activate_form_ability(x, y)
     elseif ability.id == "toxic_rupture" then
         local rank = self.build:rank("acid")
         local radius = (75 + rank * 9) * self.build:specialization_value("acid", "radius_mult") * self:ability_scale()
-        self:_field(self.player, radius * ability.radius_multiplier,
-            damage(rank, 4, 3) * ability.damage_multiplier, ability.duration, "rupture")
-        self:_effect("pulse", self.player, radius * ability.radius_multiplier, .65)
+        local charges=self:vacuole_charge_count()
+        local cfg=Catalog.SIGNATURE_ORGANS.osmotic_vacuole
+        local field_radius=radius*ability.radius_multiplier*(1+charges*cfg.radius_per_charge)
+        if self.build:rank("osmotic_vacuole")>0 then
+            field_radius=field_radius*self.build:specialization_value("osmotic_vacuole","field_radius_mult")
+        end
+        self:_field(self.player,field_radius,damage(rank,4,3)*ability.damage_multiplier,
+            ability.duration+charges*cfg.duration_per_charge,"rupture")
+        self.vacuole_charges={}
+        self:_effect("pulse",self.player,field_radius,.65)
     elseif ability.id == "colony_rally" then
         local target = self:_rally_target(ability.radius)
         if not target then return false end
@@ -731,6 +841,8 @@ end
 function Combat:_attack(dt)
     local build = self.build
     local combos, scale, metabolic = build:active_synergies(), self:ability_scale(), self:cooldown_factor()
+    self:_update_chemoreceptor()
+    self:vacuole_charge_count()
     self:_bite(combos)
     local rank = build:rank("cilia")
     if rank > 0 and self:_ready("cilia") then self:_cilia(rank, scale, combos) end
@@ -796,10 +908,10 @@ function Combat:_attack(dt)
     end
     rank = build:rank("division")
     if rank > 0 and self.form_action.kind ~= "rally" then
-        for _, p in ipairs(self:clone_positions()) do
+        for index, p in ipairs(self:clone_positions()) do
             for _, enemy in ipairs(self.enemies) do
                 if not self:_is_engulfing(enemy) and distance_squared(p, enemy.pos) < (enemy.r + 18)^2 then
-                    self:hit_enemy(enemy, damage(rank, 8, 4) * dt, "division")
+                    self:_synaptic_hit(enemy, damage(rank, 8, 4) * dt, index)
                 end
             end
         end

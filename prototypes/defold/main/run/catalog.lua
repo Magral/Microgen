@@ -16,9 +16,9 @@ M.ORGANS = {
     electric = { name = "Биоразряд", branch = "colony", desc = "Разряд перескакивает между соседними противниками.", color = "9cddf2" },
     barrier = { name = "Сократительный щит", branch = "colony", desc = "Периодически поглощает часть входящего удара.", color = "b6bdec" },
     devour = { name = "Хищная пасть", branch = "predator", desc = "Разрывает ткань спереди: укус, более ранний захват и быстрое переваривание через пасть. Боковое поглощение слабее.", color = "ffbd88" },
-    chemoreceptor_ridge = { name = "Хеморецепторный гребень", branch = "predator", desc = "Сигнатурный орган хищной формы. На следующем этапе будет отмечать уязвимые цели (радиус 220; метка 2,5 с; укус +8%). Пока подготовлен как модель данных.", color = "b58cff", signature = true, form = "predator", icon = "magnet", offer_enabled = false },
-    osmotic_vacuole = { name = "Осмотическая вакуоль", branch = "toxic", desc = "Сигнатурный орган железистой формы. На следующем этапе будет накапливать до 3 зарядов и расширять кислотное поле. Пока подготовлен как модель данных.", color = "a8e86f", signature = true, form = "toxic", icon = "acid", research_unlock = "toxic", offer_enabled = false },
-    synaptic_node = { name = "Синаптический узел", branch = "colony", desc = "Сигнатурный орган колониальной формы. На следующем этапе будет координировать удары копий. Пока подготовлен как модель данных.", color = "c5a0f5", signature = true, form = "colony", icon = "electric", research_unlock = "colony", offer_enabled = false },
+    chemoreceptor_ridge = { name = "Хеморецепторный гребень", branch = "predator", desc = "Отмечает одну уязвимую цель каждые 4 с, усиливает пасть. Доступен гибридам после открытия; нужна пасть для бонуса урона.", color = "b58cff", signature = true, form = "predator", icon = "magnet" },
+    osmotic_vacuole = { name = "Осмотическая вакуоль", branch = "toxic", desc = "Накапливает заряды от урона ядом. Усиливает Разгерметизацию; без этой способности заряды пока не расходуются.", color = "a8e86f", signature = true, form = "toxic", icon = "acid", research_unlock = "toxic" },
+    synaptic_node = { name = "Синаптический узел", branch = "colony", desc = "Светящиеся связи копий усиливают согласованные удары. Работает в гибриде с делением, не увеличивая число копий.", color = "c5a0f5", signature = true, form = "colony", icon = "electric", research_unlock = "colony" },
 }
 
 M.ADAPTATION_IDS = { "metabolism", "catalysis", "armor", "regen", "speed", "magnet" }
@@ -48,7 +48,7 @@ M.SIGNATURE_ORGANS = {
         radius_per_charge = 0.08, duration_per_charge = 0.25,
     },
     synaptic_node = {
-        form = "colony", coordination_window = 1.2, followup_window = 2,
+        form = "colony", coordination_radius = 220, coordination_window = 1.2, followup_window = 2,
         bonus_per_clone = 0.05, max_bonus = 0.15, rank_three_radius_multiplier = 1.2,
         rank_six_max_bonus = 0.20,
     },
@@ -373,6 +373,12 @@ function M.effect_text(id, rank)
         return format("%.1f урона по %d целям; каждые 2,6 с.", damage(12 + r * 6, r), M.electric_targets(r))
     elseif id == "barrier" then
         return format("Щит поглощает до %.1f HP; восстанавливается каждые 8 с.", damage(8 + r * 6, r))
+    elseif id == "chemoreceptor_ridge" then
+        return format("1 ячейка · гибрид. Метка %.1f с / 4 с; укус +%d%%.", r >= 3 and 3.2 or 2.5, r >= 6 and 12 or 8)
+    elseif id == "osmotic_vacuole" then
+        return format("2 ячейки · гибрид. До %d зарядов на %d с; поле +8%% и +0,25 с за заряд.", r >= 6 and 4 or 3, r >= 3 and 20 or 15)
+    elseif id == "synaptic_node" then
+        return format("2 ячейки · гибрид. +5%% за следующую копию, до %d%%; радиус %d.", r >= 6 and 20 or 15, r >= 3 and 264 or 220)
     elseif id == "armor" then
         return format("Входящий урон снижен на %d%%.", floor(M.adaptation_bonus(r) * 100 + 0.5))
     elseif id == "regen" then
@@ -409,6 +415,9 @@ function M.milestone_text(id, rank)
     local mark_six = rank >= 6 and "✓ " or "◇ "
     if not M.ORGANS[id] then
         return format("Рубежи адаптации: %s3 · %s6 — максимум", mark_three, mark_six)
+    end
+    if M.SIGNATURE_ORGANS[id] then
+        return "Рубежи сигнатуры: "..mark_three.."3 · усиление свойства; "..mark_six.."6 · предел базового эффекта."
     end
     local mark_ten = rank >= 10 and "✓ " or "◇ "
     return format("Рубежи: %s3 · формирование ×1,10; %s6 · перестройка ×1,25; %s10 · зрелость ×1,50. Множитель силы органа.", mark_three, mark_six, mark_ten)

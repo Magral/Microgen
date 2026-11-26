@@ -27,9 +27,9 @@ local function finite(value)
 end
 
 local PILOT_PRIORITY = {
-    predator = { devour = 120, tentacle = 115, spikes = 110, cilia = 100, pulse = 95, acid = 60 },
-    toxic = { acid = 120, infection = 115, enzymes = 110, trail = 100, electric = 70, barrier = 80 },
-    colony = { division = 120, electric = 115, barrier = 110, pulse = 95, spikes = 80 },
+    predator = { chemoreceptor_ridge = 98, devour = 120, tentacle = 115, spikes = 110, cilia = 100, pulse = 95, acid = 60 },
+    toxic = { osmotic_vacuole = 98, acid = 120, infection = 115, enzymes = 110, trail = 100, electric = 70, barrier = 80 },
+    colony = { synaptic_node = 98, division = 120, electric = 115, barrier = 110, pulse = 95, spikes = 80 },
 }
 
 local function mutation_priority(sim, id)
@@ -182,7 +182,10 @@ end
 local function run(seed, scenario, horizon_seconds)
     horizon_seconds = horizon_seconds or HORIZON_SECONDS
     local branch, starter = scenario.form, scenario.starter
-    local sim = Simulation.new(seed, nil, nil, branch, {form = branch, branch = branch, seed = seed})
+    local unlocked=Catalog.base_unlocked()
+    local signature=Catalog.signature_organ(branch)
+    if not Util.index(unlocked,signature) then unlocked[#unlocked+1]=signature end
+    local sim = Simulation.new(seed, unlocked, nil, branch, {form = branch, branch = branch, seed = seed})
     assert(sim.build:rank(starter) == 1, "Balance run must start with its form's organ")
     local max_enemies, max_fields, max_remains = 0, 0, 0
     local steps, first_hit = 0, nil
@@ -481,7 +484,7 @@ local function validate_form_specialization_data()
     local staged = Build.new()
     staged.unlocked = {"chemoreceptor_ridge", "osmotic_vacuole", "synaptic_node"}
     local offers = staged:offers({randf = function() return 0 end})
-    assert(#offers == 0, "Signature organs must not enter level-up offers before their combat effects are implemented")
+    assert(#offers == 3, "Unlocked signature organs must enter hybrid level-up offers")
 
     local old_unlocked = {
         "tentacle", "acid", "spikes", "pulse", "trail", "infection", "cilia", "enzymes",
@@ -831,8 +834,100 @@ local function validate_form_abilities()
     print("MICROGEN FORM ABILITIES READY")
 end
 
+local function validate_signature_organs()
+    local function near(a,b,msg) assert(math.abs(a-b)<.00001,msg..": "..tostring(a)) end
+    local function fresh(form)
+        local sim=Simulation.new(147,nil,nil,form,{form=form,branch=form,seed=147})
+        sim.enemies,sim.residents,sim.fields={}, {}, {}
+        return sim
+    end
+    local function enemy(sim,x,kind,hp,r)
+        local e=assert(sim:spawn_enemy({x=sim.player.x+x,y=sim.player.y},kind))
+        e.hp,e.max_hp,e.r,e.tissue_budget=hp,100,r,100
+        return e
+    end
+    local sim=fresh("toxic")
+    sim.build.organs.chemoreceptor_ridge=1
+    local weak=enemy(sim,50,"hunter",50,sim:body_radius())
+    local prey=enemy(sim,100,"prey",8,8)
+    sim:_update_chemoreceptor()
+    assert(sim:is_chemoreceptor_marked(prey) and not sim:is_chemoreceptor_marked(weak),"Prefer absorbable target")
+    near(sim:marked_bite_multiplier(prey),1.08,"Base marked bite")
+    near(sim.cooldowns.chemoreceptor_mark,4,"Retarget interval")
+    near(sim.signature_mark_until-sim.elapsed,2.5,"Base mark duration")
+    local saved=assert(Simulation.restore(sim:snapshot()))
+    assert(saved:is_chemoreceptor_marked(saved.enemies[2]),"Mark survives checkpoint")
+    sim.build.organs.chemoreceptor_ridge=6
+    sim.build.specializations.chemoreceptor_ridge="chemoreceptor_deep_sensor"
+    local radius,duration,bonus=sim:chemoreceptor_parameters()
+    near(radius,264,"Deep sensor");near(duration,3.2,"Rank three");near(bonus,.12,"Rank six")
+    sim.build.specializations.chemoreceptor_ridge="chemoreceptor_neural_sight"
+    radius,duration=sim:chemoreceptor_parameters()
+    near(radius,220,"Exclusive specialization");near(duration,4.2,"Neural sight")
+    local prev=sim.signature_mark_id
+    sim:_update_chemoreceptor()
+    assert(sim.signature_mark_id==prev,"No premature retarget")
+    sim.build.organs.chemoreceptor_ridge=nil
+    assert(not sim:is_chemoreceptor_marked(prey),"Removed organ loses mark")
+
+    local toxic=fresh("toxic")
+    toxic.build.organs.osmotic_vacuole=6
+    toxic.build.specializations.osmotic_vacuole="vacuole_stable_chamber"
+    local a=enemy(toxic,30,"hunter",100,10)
+    toxic:hit_enemy(a,1,"acid")
+    toxic:hit_enemy(a,1,"acid")
+    assert(toxic:vacuole_charge_count()==1,"Repeated ticks cannot farm charges")
+    near(toxic.vacuole_charges[1]-toxic.elapsed,26,"Stable chamber")
+    for i=1,5 do local e=enemy(toxic,40+i,"hunter",100,10);toxic:hit_enemy(e,1,"infection") end
+    assert(toxic:vacuole_charge_count()==4,"Rank six cap")
+    local restored=assert(Simulation.restore(toxic:snapshot()))
+    assert(restored:vacuole_charge_count()==4,"Charges survive checkpoint")
+    toxic.build.specializations.osmotic_vacuole="vacuole_hyperosmotic_sac"
+    assert(toxic:activate_form_ability())
+    local f=toxic.fields[1]
+    near(f.life,4,"Charged duration")
+    local base=(75+9)*toxic.build:specialization_value("acid","radius_mult")*toxic:ability_scale()*1.35
+    near(f.r,base*1.32*1.15,"Charged radius")
+    near(f.damage,Catalog.scaled_damage(7,1)*.6,"Charges do not amplify DPS")
+    assert(toxic:vacuole_charge_count()==0,"Activation consumes charges")
+    toxic.elapsed=8
+    toxic:_vacuole_charge(a)
+    assert(toxic:vacuole_charge_count()==1,"Target can charge again after eight seconds")
+    toxic.elapsed=29
+    assert(toxic:vacuole_charge_count()==0,"Expired charges disappear")
+
+    local colony=fresh("predator")
+    colony.build.organs.division=4
+    colony.build.organs.synaptic_node=6
+    local target=enemy(colony,100,"hunter",100,10)
+    local hits={}
+    colony.hit_enemy=function(_,e,amount,source) hits[#hits+1]=amount;return amount end
+    colony:_synaptic_hit(target,10,1)
+    colony:_synaptic_hit(target,10,1)
+    colony:_synaptic_hit(target,10,2)
+    colony:_synaptic_hit(target,10,3)
+    colony:_synaptic_hit(target,10,4)
+    colony:_synaptic_hit(target,10,5)
+    colony:_synaptic_hit(target,10,6)
+    near(hits[1],10,"First copy");near(hits[2],10,"Same copy cannot stack")
+    near(hits[3],10.5,"Second copy");near(hits[6],12,"Rank six cap");near(hits[7],12,"Sixth copy capped")
+    colony.elapsed=2.01
+    colony:_synaptic_hit(target,10,1)
+    near(hits[8],10,"Coordination expires")
+    colony.build.specializations.synaptic_node="synapse_branched_network"
+    local r=colony:synaptic_parameters()
+    near(r,316.8,"Branched network radius")
+    colony.build.specializations.synaptic_node="synapse_protective_network"
+    near(colony:damage_reduction({kind="projectile"}),.015,"Gear protection in hybrid")
+    colony.build.adaptations.armor=6
+    near(colony:damage_reduction({kind="projectile"}),.6,"Armor cap")
+    assert(colony:form_ability().id=="predator_dash" and colony:form_passive().id=="feast","Foreign organs do not grant foreign form abilities")
+    print("MICROGEN SIGNATURE ORGANS READY")
+end
+
 function M.run()
     validate_form_specialization_data()
+    validate_signature_organs()
     validate_form_abilities()
     validate_form_passives()
     validate_enemy_markers()

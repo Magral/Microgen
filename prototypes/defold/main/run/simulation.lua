@@ -30,7 +30,7 @@ function Simulation.new(seed, unlocked, upgrades, branch, loadout)
         world = World.generate(seed), rng = Rng.new(seed), build = Build.new(), upgrades = copy(upgrades or {}),
         hp = 100, max_hp = 100, elapsed = 0, xp = 0, level = 1, pending_levels = 0,
         enemies = {}, pickups = {}, remains = {}, fields = {}, shots = {}, effects = {}, residents = {},
-        cysts = {}, events = {}, feedback = {}, explored = {}, cooldowns = {}, form_action = {}, damage_markers = {}, last_damage = {},
+        cysts = {}, events = {}, feedback = {}, explored = {}, cooldowns = {}, form_action = {}, vacuole_charges = {}, damage_markers = {}, last_damage = {},
         combat_stats = Stats.create(),
         reward_queue = {}, reward_options = {}, pending_inventory = {}, offer_quality = {}, claimed_rewards = {},
         current_offers = {}, boss_reward = {}, boss_breakup = {}, material_pending = {}, material_batch = 0,
@@ -343,10 +343,11 @@ function Simulation:enter_next_stage(prepared_world)
     self.player, self.previous_player, self.player_velocity = self.world.start, self.world.start, point()
     self.last_damage, self._danger_at = {}, -10
     self.enemies, self.remains, self.fields, self.shots, self.effects, self.damage_markers = {}, {}, {}, {}, {}, {}
-    local feast_cd, ability_cd = self.cooldowns.form_feast, self.cooldowns.form_ability
+    local feast_cd, ability_cd, mark_cd = self.cooldowns.form_feast, self.cooldowns.form_ability, self.cooldowns.chemoreceptor_mark
     self.cooldowns, self.explored, self.events, self.current_offers, self.offer_quality = {}, {}, {}, {}, {}
-    self.cooldowns.form_feast, self.cooldowns.form_ability = feast_cd, ability_cd
+    self.cooldowns.form_feast, self.cooldowns.form_ability, self.cooldowns.chemoreceptor_mark = feast_cd, ability_cd, mark_cd
     self.form_action = {}
+    self.signature_mark_id,self.signature_mark_until=nil,nil
     self.digesting_id, self.boss_spawned, self.boss_marker = -1, false, point()
     self.minibosses_spawned, self.minibosses_defeated = 0, 0
     self.stage_transition, self.boss_reward, self.boss_breakup = false, {}, {}
@@ -1150,7 +1151,7 @@ local SAVED_KEYS = {
     "material_batch", "run_id", "player", "player_velocity", "remains", "digesting_id", "hp", "max_hp", "elapsed", "xp",
     "level", "pending_levels", "enemies", "pickups", "boss_spawned", "boss_marker", "kills", "cores_found",
     "next_id", "upgrades", "cooldowns", "current_offers", "rerolls", "fields", "shots", "spawn_timer", "invuln",
-    "bite_flash", "_danger_at", "form_action",
+    "bite_flash", "_danger_at", "form_action", "vacuole_charges", "signature_mark_id", "signature_mark_until",
 }
 
 function Simulation:snapshot()
@@ -1180,6 +1181,11 @@ function Simulation.restore(saved)
     self.rng.state = copy(saved.rng_state)
     self.combat_stats = Stats.restore(saved.combat_stats)
     self.run_loadout = Heredity.normalize(saved.run_loadout)
+    if type(self.vacuole_charges)~="table" then self.vacuole_charges={} end
+    self:vacuole_charge_count()
+    if not finite(self.signature_mark_id) or not finite(self.signature_mark_until) or self.signature_mark_until>self.elapsed+4.2 then
+        self.signature_mark_id,self.signature_mark_until=nil,nil
+    end
     -- Старые сохранения не содержат действия. Некорректные/чужие действия
     -- отменяются, но уже потраченная перезарядка не сбрасывается.
     local action, ability = self.form_action, self:form_ability()

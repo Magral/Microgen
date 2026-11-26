@@ -322,6 +322,10 @@ function Effects.draw_enemy_marker(scene, sim, actor, time)
         scene:draw_number(label, "ПОГЛОТИТЬ", rgb("a2ffcf", 1), .74)
         return
     end
+    if sim:is_chemoreceptor_marked(actor) then
+        wave(scene,"ring",actor.pos,max(actor.r*1.2,25/scale),"c7acff",.88,0)
+        scene:draw_number(point(actor.pos.x,actor.pos.y-actor.r-18/scale),"ЦЕЛЬ",rgb("dbc9ff",1),.72)
+    end
     -- Обычная метка охотника больше не использует абстрактный оранжевый значок.
     if kind == "hunter" and actor.r > sim:body_radius() * 1.08 then
         wave(scene, "ring", actor.pos, actor.r * 1.23, "ff8398", .78, 0)
@@ -379,6 +383,30 @@ end
 
 function Effects.draw_player(scene, sim, time)
     local radius = sim:body_radius()
+    if sim.build:rank("chemoreceptor_ridge")>0 then
+        for i=-1,1 do
+            local angle=sim.facing+i*.38
+            local base=offset(sim.player,angle,radius*.68)
+            local tip=offset(sim.player,angle,radius*(1.07+.06*sin(time*5+i)))
+            thread(scene,base,tip,max(8,radius*.22),"c7acff",.83,time+i)
+            speck(scene,tip,max(2.5,radius*.08),"e1d3ff",.95)
+        end
+    end
+    if sim.build:rank("osmotic_vacuole")>0 then
+        local count=sim:vacuole_charge_count()
+        local cap=sim:vacuole_parameters()
+        for i=1,cap do
+            local p=offset(sim.player,sim.facing+pi+(i-(cap+1)/2)*.48,radius*.67)
+            wave(scene,"membrane",p,radius*.18,"a9e86f",i<=count and .95 or .30,time*.2)
+            if i<=count then speck(scene,p,radius*.12,"e3fba3",.95) end
+        end
+    end
+    if sim.build:rank("synaptic_node")>0 then
+        wave(scene,"ring",sim.player,radius*.40,"c6a6ff",.85,time*.3)
+        for i,p in ipairs(sim:clone_positions()) do
+            thread(scene,sim.player,p,max(8,radius*.30),"c6a6ff",.68+.18*sin(time*4+i),time+i)
+        end
+    end
     local rank = sim.build:rank("acid")
     if rank > 0 then
         local reach = (75 + rank * 9) * sim.build:specialization_value("acid", "radius_mult") * sim:ability_scale()

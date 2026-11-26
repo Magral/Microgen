@@ -207,6 +207,8 @@ jobs:
                 grep -Fq "MICROGEN FORM SPECIALIZATION DATA READY" "$log"
                 grep -Fq "MICROGEN FORM PASSIVES READY" "$log"
                 grep -Fq "MICROGEN FORM ABILITIES READY" "$log"
+                grep -Fq "MICROGEN SIGNATURE ORGANS READY" "$log"
+                grep -F "MICROGEN SIGNATURE ORGANS READY" "$log"
                 grep -F "MICROGEN FORM ABILITIES READY" "$log"
                 grep -Fq "MICROGEN ENEMY MARKERS READY" "$log"
                 grep -F "MICROGEN BALANCE RUN" "$log"
