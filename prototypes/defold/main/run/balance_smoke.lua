@@ -233,6 +233,9 @@ local function validate_resident_start_safety()
     local sim = Simulation.new(347, nil, nil, "colony")
     local resident = sim.residents[1]
     resident.pos = { x = sim.player.x, y = sim.player.y }
+    for index = 2, #sim.residents do
+        sim.residents[index].pos = { x = sim.player.x + 1200 + index * 100, y = sim.player.y }
+    end
 
     sim.elapsed = 0
     sim:_update_ecology()
