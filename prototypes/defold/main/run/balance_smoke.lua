@@ -214,7 +214,7 @@ local function run(seed, branch, horizon_seconds)
 
         assert(finite(sim.elapsed) and finite(sim.hp) and finite(sim.player.x) and finite(sim.player.y),
             "Balance run produced a non-finite simulation value")
-        assert(#sim.enemies <= 28, "Balance run exceeded the enemy cap")
+        assert(#sim.enemies <= Simulation.ENEMY_CAP, "Balance run exceeded the enemy cap")
         assert(#sim.fields <= 80, "Balance run exceeded the field cap")
         assert(#sim.remains <= 96, "Balance run exceeded the remains cap")
     end

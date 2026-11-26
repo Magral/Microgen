@@ -13,6 +13,10 @@ local WIDTH, HEIGHT = Fixture.size[1], Fixture.size[2]
 local CX, CY = WIDTH / 2, HEIGHT * .49
 local PINK = vmath.vector4(1,.46,.52,1)
 local WHITE = vmath.vector4(1,1,1,1)
+local NEST_BASE = vmath.vector4(.43,.25,.63,1)
+local NEST_RIM = vmath.vector4(.84,.62,1,.93)
+local NEST_BUD = vmath.vector4(.91,.66,.95,1)
+local NEST_CORE = vmath.vector4(1,.75,.54,1)
 local WORLD_GRAIN = 2147483647
 local TAU = 2*math.pi
 
@@ -221,12 +225,21 @@ function Scene:render_ground(sim)
     local time=self.visual_time
     for _,nest in ipairs(world.nests) do
         local x,y=self:project(nest.pos)
-        if not nest.used and visibly_inside(x,y,60*scale) then
-            self:draw_combat(self.landmarks,"ring",nest.pos,113,113,vmath.vector4(.70,.49,.91,.35),0)
-            for index=0,4 do
-                local a=index*TAU/5+time*.15
-                local p={x=nest.pos.x+math.cos(a)*22,y=nest.pos.y+math.sin(a)*22}
-                self:draw_combat(self.landmarks,"skin",p,29,29,vmath.vector4(.66,.47,.85,.62),a)
+        if visibly_inside(x,y,108*scale) then
+            if nest.used then
+                self:draw_combat(self.landmarks,"membrane",nest.pos,156,148,vmath.vector4(.48,.37,.57,.43),0)
+            else
+                self:draw_combat(self.landmarks,"skin",nest.pos,184,172,NEST_BASE,0)
+                self:draw_combat(self.landmarks,"membrane",nest.pos,178,166,NEST_RIM,0)
+                for index=0,5 do
+                    local angle=index*TAU/6
+                    local separation=34+4*math.sin(index*2.4)
+                    local bud={x=nest.pos.x+math.cos(angle)*separation,y=nest.pos.y+math.sin(angle)*separation}
+                    self:draw_combat(self.landmarks,"skin",bud,55,39,NEST_BUD,angle)
+                end
+                local pulse=1+.08*math.sin(time*2.1+nest.pos.x*.01)
+                self:draw_combat(self.landmarks,"reward",nest.pos,64*pulse,64*pulse,NEST_CORE,0)
+                self:draw_number({x=nest.pos.x,y=nest.pos.y-67},"ГНЕЗДО",NEST_RIM,.68)
             end
         end
     end

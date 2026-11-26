@@ -15,7 +15,8 @@ Simulation.__index = function(_, key) return Simulation[key] or Combat[key] end
 local point, offset, distance_squared, contains, copy = V.point, V.offset, V.distance_squared, V.contains, V.copy
 local min, max, floor, ceil, sqrt, exp = math.min, math.max, math.floor, math.ceil, math.sqrt, math.exp
 local clamp, smoothstep, TAU = Size.clamp, Size.smoothstep, V.tau
-local ENEMY_CAP, REMAINS_CAP = 28, 96
+local ENEMY_CAP, REMAINS_CAP = 36, 96
+Simulation.ENEMY_CAP = ENEMY_CAP
 local STAGE_NAMES = {"Соляная полость", "Кристаллический желоб", "Тихая лагуна", "Споровый разлом", "Глубинная взвесь", "Живой термоклин", "Мембранный каньон", "Янтарный провал"}
 local BOSS_NAMES = {"Архицит", "Мембранный левиафан", "Поглотитель бездны", "Матка спор", "Кристаллический колосс"}
 local MINIBOSS_NAMES = {"Матриарх", "Фагоцит", "Споровый страж", "Кристаллический хищник"}
@@ -374,13 +375,16 @@ function Simulation:spawn_enemy(pos, kind)
 end
 
 function Simulation:_spawn_wave()
-    if #self.enemies >= ENEMY_CAP - 2 then return end
-    for _ = 1, min(2, 1 + floor(self.elapsed / 180)) do
+    local wave_size = min(3, 2 + floor(self.elapsed / 180))
+    local wave_slots = min(wave_size, ENEMY_CAP - 2 - #self.enemies)
+    for index = 1, wave_slots do
         for _ = 1, 12 do
             local rng, world = self.rng, self.world
             local p = offset(self.player, rng:randf() * TAU, rng:randf_range(650, 900))
             if world:walkable(p.x, p.y, 25) and not self:_safe_zone(p) then
-                local kind = rng:randf() < 0.24 and "prey" or (world:biome(p.x, p.y) == 2 and rng:randf() < 0.3 and "spitter" or "hunter")
+                local kind = index == 2 and "prey" or
+                    (rng:randf() < 0.24 and "prey" or
+                    (world:biome(p.x, p.y) == 2 and rng:randf() < 0.3 and "spitter" or "hunter"))
                 self:spawn_enemy(p, kind)
                 break
             end
