@@ -6,8 +6,6 @@ local STEP = 1 / 60
 local HORIZON_SECONDS = 600
 local SEEDS = {47, 71}
 local BRANCHES = {"predator", "toxic", "colony"}
-local COLONY_SEEDS = {89, 181, 293, 509}
-local COLONY_COHORT_SECONDS = 120
 local DIRECTIONS = {
     {1, 0}, {0.70710678, 0.70710678}, {0, 1}, {-0.70710678, 0.70710678},
     {-1, 0}, {-0.70710678, -0.70710678}, {0, -1}, {0.70710678, -0.70710678},
@@ -289,14 +287,6 @@ function M.run()
             collectgarbage("collect")
         end
     end
-    local colony_survivors = 0
-    for _, seed in ipairs(COLONY_SEEDS) do
-        local result = run(seed, "colony", COLONY_COHORT_SECONDS)
-        collectgarbage("collect")
-        if result.alive then colony_survivors = colony_survivors + 1 end
-    end
-    print(string.format("MICROGEN COLONY COHORT survivors=%d/%d horizon=%ds",
-        colony_survivors, #COLONY_SEEDS, COLONY_COHORT_SECONDS))
     print("MICROGEN BALANCE SMOKE READY")
 end
 
