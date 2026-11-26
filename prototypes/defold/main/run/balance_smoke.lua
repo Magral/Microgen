@@ -110,7 +110,7 @@ local function direction(sim, tick)
                 local dx, dy = player.x - resident.pos.x, player.y - resident.pos.y
                 local distance = math.sqrt(dx * dx + dy * dy)
                 if distance < 380 then
-                    local weight = (650 - distance) / 650 / math.max(40, distance)
+                    local weight = (380 - distance) / 380 / math.max(40, distance)
                     away_x, away_y = away_x + dx * weight, away_y + dy * weight
                 end
             end
@@ -171,7 +171,7 @@ end
 local function run(seed, branch)
     local sim = Simulation.new(seed, nil, nil, branch)
     local max_enemies, max_fields, max_remains = 0, 0, 0
-    local steps = 0
+    local steps, first_hit = 0, nil
 
     for tick = 1, HORIZON_SECONDS * 60 do
         if sim.outcome ~= "" then break end
@@ -180,7 +180,12 @@ local function run(seed, branch)
         settle_rewards(sim)
 
         local move_x, move_y = direction(sim, tick)
+        local health_before = sim.hp
         sim:step(STEP, move_x, move_y)
+        if not first_hit and sim.hp < health_before then
+            local hit = sim.last_damage
+            if hit then first_hit = string.format("%.1f/%s/%s", hit.time, hit.kind, hit.name) end
+        end
         settle_levels(sim)
         settle_rewards(sim)
         settle_stage(sim)
@@ -202,11 +207,25 @@ local function run(seed, branch)
     local history = sim.combat_stats.history
     local last_hit = history[#history]
     local cause = last_hit and string.format("%s/%s/%.1f", last_hit.kind, last_hit.name, last_hit.amount) or "none"
+    local sources = {}
+    for _, entry in pairs(sim.combat_stats.sources) do
+        if entry.damage > 0 then sources[#sources + 1] = entry end
+    end
+    table.sort(sources, function(a, b)
+        if a.damage == b.damage then return a.name < b.name end
+        return a.damage > b.damage
+    end)
+    local source_labels = {}
+    for index = 1, math.min(3, #sources) do
+        local entry = sources[index]
+        source_labels[index] = string.format("%s/%s=%.1f(%d)", entry.kind, entry.name, entry.damage, entry.hits)
+    end
+    local source_summary = #source_labels > 0 and table.concat(source_labels, ";") or "none"
     print(string.format(
-        "MICROGEN BALANCE RUN seed=%d branch=%s pilot=kite seconds=%.1f stage=%d level=%d kills=%d hp=%.1f damage_taken=%.1f last_hit=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d",
+        "MICROGEN BALANCE RUN seed=%d branch=%s pilot=kite seconds=%.1f stage=%d level=%d kills=%d hp=%.1f damage_taken=%.1f first_hit=%s last_hit=%s damage_sources=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d",
         seed, branch, sim.elapsed, sim.stage_index, sim.level, sim.kills, sim.hp,
-        sim.combat_stats.damage_taken, cause, sim.outcome == "" and "alive" or sim.outcome,
-        steps, max_enemies, max_fields, max_remains))
+        sim.combat_stats.damage_taken, first_hit or "none", cause, source_summary,
+        sim.outcome == "" and "alive" or sim.outcome, steps, max_enemies, max_fields, max_remains))
     return sim.elapsed
 end
 
