@@ -178,7 +178,8 @@ jobs:
               grep -Fq "MICROGEN TISSUE FRACTURE READY" "$log"
               grep -Fq "MICROGEN TISSUE LIFECYCLE READY" "$log"
               if [[ "$profile" == standard ]]; then
-                test "$(grep -c "MICROGEN BALANCE RUN" "$log")" -eq 6
+                test "$(grep -c "MICROGEN BALANCE RUN" "$log")" -ge 10
+                grep -Fq "MICROGEN COLONY COHORT" "$log"
                 grep -Fq "MICROGEN BALANCE SMOKE READY" "$log"
                 grep -F "MICROGEN BALANCE RUN" "$log"
               fi
