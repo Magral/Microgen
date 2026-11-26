@@ -855,7 +855,9 @@ end
 local function validate_form_abilities()
     local function fresh(form)
         local signature=Catalog.signature_organ(form)
-        local sim = Simulation.new(147,nil,nil,form,{form=form,branch=form,seed=147,imprint=signature})
+        local unlocked=Catalog.base_unlocked()
+        if not Util.index(unlocked,signature) then unlocked[#unlocked+1]=signature end
+        local sim = Simulation.new(147,unlocked,nil,form,{form=form,branch=form,seed=147,imprint=signature})
         sim.enemies,sim.residents,sim.fields = {},{},{}
         return sim
     end
