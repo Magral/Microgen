@@ -194,7 +194,7 @@ function Interface:fit_text(x,y,message,scale,shade,width,height,center)
     end
     if sys.get_config_string("microgen.smoke_cards","0")=="1" then
         assert(metrics.height*scale <= height and metrics.width*scale <= width,
-            "Mutation text exceeds its layout slot: "..message)
+            "Interface text exceeds its layout slot: "..message)
     end
     return place_text(self,self:layout_x(x),y,message,scale,shade,width,center)
 end

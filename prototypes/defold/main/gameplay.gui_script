@@ -1005,7 +1005,7 @@ function App:build(page,tab,live)
                 color=data.active and ui.colors.mint or ui.colors.pale,action=function()
                     self:overlay("build")
                     local left=ui:panel(data.title,data.requirements,function() self:build(page,tab,live) end)
-                    ui:text(left+64,580,data.description,1.02,ui.colors.pale,1430)
+                    ui:fit_text(left+64,580,data.description,1.02,ui.colors.pale,1430,520)
                 end}
         end
     elseif tab=="temporary" then
@@ -1806,6 +1806,34 @@ function init(self)
         sim.offer_quality={enzymes=2}
         app:body(true)
         assert(app.screen=="build")
+        local prior_enzymes,prior_devour=sim.build.organs.enzymes,sim.build.organs.devour
+        sim.build.organs.enzymes,sim.build.organs.devour=1,1
+        local synergy_rows=Inspector.synergy_rows(sim.build)
+        assert(#synergy_rows==#Catalog.SYNERGY_IDS,
+            "Synergy screen must include every known synergy")
+        local active_bite=false
+        for _,row in ipairs(synergy_rows) do
+            assert(row.description and row.description~="" and row.requirements and row.requirements~="",
+                "Synergy cards must show both effect and required organs")
+            if row.id=="enzyme_bite" then active_bite=row.active end
+        end
+        assert(active_bite,"Smoke setup must cover an active synergy")
+        local synergy_pages=math.ceil(#synergy_rows/4)
+        for page=1,synergy_pages do
+            app:build(page,"synergies",true)
+            check_window()
+        end
+        app:build(1,"synergies",true)
+        local open_synergy
+        for _,button in ipairs(app.modal.buttons) do
+            if gui.get_text(button.text)=="Открыть" then open_synergy=button;break end
+        end
+        assert(open_synergy,"Synergy effect detail action is missing")
+        open_synergy.callback()
+        check_window()
+        app:build(1,"synergies",true)
+        print("MICROGEN SYNERGY EFFECT CARDS READY")
+        sim.build.organs.enzymes,sim.build.organs.devour=prior_enzymes,prior_devour
         app:body(false)
         assert(app.screen=="preparation")
         app:show_run()
