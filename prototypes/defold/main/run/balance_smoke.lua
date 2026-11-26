@@ -5,7 +5,11 @@ local M = {}
 local STEP = 1 / 60
 local HORIZON_SECONDS = 600
 local SEEDS = {47, 71}
-local BRANCHES = {"predator", "toxic", "colony"}
+local BRANCHES = {
+    {form = "predator", starter = "devour"},
+    {form = "toxic", starter = "acid"},
+    {form = "colony", starter = "division"},
+}
 local DIRECTIONS = {
     {1, 0}, {0.70710678, 0.70710678}, {0, 1}, {-0.70710678, 0.70710678},
     {-1, 0}, {-0.70710678, -0.70710678}, {0, -1}, {0.70710678, -0.70710678},
@@ -168,9 +172,11 @@ local function direction(sim, tick)
     return best_x, best_y
 end
 
-local function run(seed, branch, horizon_seconds)
+local function run(seed, scenario, horizon_seconds)
     horizon_seconds = horizon_seconds or HORIZON_SECONDS
-    local sim = Simulation.new(seed, nil, nil, branch)
+    local branch, starter = scenario.form, scenario.starter
+    local sim = Simulation.new(seed, nil, nil, branch, {form = branch, branch = branch, seed = seed})
+    assert(sim.build:rank(starter) == 1, "Balance run must start with its form's organ")
     local max_enemies, max_fields, max_remains = 0, 0, 0
     local steps, first_hit = 0, nil
     local toxin_sources = {}
@@ -206,6 +212,7 @@ local function run(seed, branch, horizon_seconds)
         settle_levels(sim)
         settle_rewards(sim)
         settle_stage(sim)
+        sim.feedback = {}
 
         steps = tick
         max_enemies = math.max(max_enemies, #sim.enemies)
@@ -252,8 +259,8 @@ local function run(seed, branch, horizon_seconds)
     end
     local toxin_source_summary = #toxin_summary > 0 and table.concat(toxin_summary, ";") or "none"
     print(string.format(
-        "MICROGEN BALANCE RUN seed=%d branch=%s pilot=kite seconds=%.1f stage=%d level=%d kills=%d hp=%.1f damage_taken=%.1f first_hit=%s last_hit=%s damage_sources=%s toxin_sources=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d",
-        seed, branch, sim.elapsed, sim.stage_index, sim.level, sim.kills, sim.hp,
+        "MICROGEN BALANCE RUN seed=%d branch=%s starter=%s pilot=kite seconds=%.1f stage=%d level=%d kills=%d hp=%.1f damage_taken=%.1f first_hit=%s last_hit=%s damage_sources=%s toxin_sources=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d",
+        seed, branch, starter, sim.elapsed, sim.stage_index, sim.level, sim.kills, sim.hp,
         sim.combat_stats.damage_taken, first_hit or "none", cause, source_summary, toxin_source_summary,
         sim.outcome == "" and "alive" or sim.outcome, steps, max_enemies, max_fields, max_remains))
     return { alive = sim.outcome == "", seconds = sim.elapsed, hp = sim.hp }
