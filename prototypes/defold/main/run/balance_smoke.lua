@@ -258,9 +258,7 @@ local function run(seed, branch, horizon_seconds)
         seed, branch, sim.elapsed, sim.stage_index, sim.level, sim.kills, sim.hp,
         sim.combat_stats.damage_taken, first_hit or "none", cause, source_summary, toxin_source_summary,
         sim.outcome == "" and "alive" or sim.outcome, steps, max_enemies, max_fields, max_remains))
-    local result = { alive = sim.outcome == "", seconds = sim.elapsed, hp = sim.hp }
-    collectgarbage("collect")
-    return result
+    return { alive = sim.outcome == "", seconds = sim.elapsed, hp = sim.hp }
 end
 
 local function validate_resident_start_safety()
@@ -288,11 +286,13 @@ function M.run()
     for index, branch in ipairs(BRANCHES) do
         for _, seed in ipairs(SEEDS) do
             run(seed + index * 100, branch)
+            collectgarbage("collect")
         end
     end
     local colony_survivors = 0
     for _, seed in ipairs(COLONY_SEEDS) do
         local result = run(seed, "colony", COLONY_COHORT_SECONDS)
+        collectgarbage("collect")
         if result.alive then colony_survivors = colony_survivors + 1 end
     end
     print(string.format("MICROGEN COLONY COHORT survivors=%d/%d horizon=%ds",
