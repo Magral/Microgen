@@ -1924,17 +1924,17 @@ function init(self)
             }}}
         end
         local update=Updater.select({
-            update_fixture("1.5.9",false),
             update_fixture("1.5.10",false),
-            update_fixture("1.5.11",true),
-        },"1.5.9")
-        assert(update and update.label=="1.5.10" and update.size==4096
+            update_fixture("1.5.11",false),
+            update_fixture("1.5.12",true),
+        },"1.5.10")
+        assert(update and update.label=="1.5.11" and update.size==4096
             and update.sha==string.rep("a",64)
-            and update.url=="https://github.com/Magral/Microgen/releases/download/defold-1.5.10/Microgen-Defold-1.5.10.apk",
-            "Auto-update must select the verified stable APK newer than 1.5.9")
-        local current=update_fixture("1.5.9",false)
-        local next_release=update_fixture("1.5.10",false)
-        local checked=Updater.new("1.5.9",nil,false,function() end)
+            and update.url=="https://github.com/Magral/Microgen/releases/download/defold-1.5.11/Microgen-Defold-1.5.11.apk",
+            "Auto-update must select the verified stable APK newer than 1.5.10")
+        local current=update_fixture("1.5.10",false)
+        local next_release=update_fixture("1.5.11",false)
+        local checked=Updater.new("1.5.10",nil,false,function() end)
         local requests=0
         checked.request=function(url, method, callback)
             requests=requests+1
@@ -1947,7 +1947,7 @@ function init(self)
             end
         end
         checked:check()
-        assert(requests==2 and checked.state=="desktop" and checked.asset.label=="1.5.10",
+        assert(requests==2 and checked.state=="desktop" and checked.asset.label=="1.5.11",
             "A stale latest response must fall back to the release list")
         next_release.assets[1].digest=nil
         requests=0
