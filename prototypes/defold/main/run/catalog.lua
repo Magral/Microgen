@@ -317,8 +317,7 @@ function M.electric_targets(rank)
 end
 
 function M.clone_count(rank)
-    -- Дополнительная копия на ранних рангах; верхний предел не растёт.
-    return min(5, 1 + rank + (rank > 0 and 1 or 0))
+    return min(5, 1 + rank)
 end
 
 function M.adaptation_bonus(rank)

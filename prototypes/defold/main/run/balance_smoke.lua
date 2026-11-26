@@ -346,19 +346,19 @@ end
 local function validate_colony_coverage()
     local sim = Simulation.new(147, nil, nil, "colony", {form = "colony", branch = "colony", seed = 147})
     assert(sim.build:rank("division") == 1, "Colony must start with division")
-    assert(Catalog.clone_count(1) == 3 and Catalog.clone_count(2) == 4
-        and Catalog.clone_count(3) == 5 and Catalog.clone_count(10) == 5,
+    assert(Catalog.clone_count(1) == 2 and Catalog.clone_count(2) == 3
+        and Catalog.clone_count(3) == 4 and Catalog.clone_count(4) == 5 and Catalog.clone_count(10) == 5,
         "Early clone count and late clone cap must match the balance rules")
     local clones = sim:clone_positions()
-    assert(#clones == 3, "Colony must start with three actual clones")
+    assert(#clones == 2, "Colony must start with two actual clones")
     for index, p in ipairs(clones) do
         local q = clones[index % #clones + 1]
         local dx, dy = p.x - q.x, p.y - q.y
-        assert(math.abs(dx * dx + dy * dy - 3 * 105 * 105) < 0.01,
-            "Three clones must be spaced evenly around the player")
+        assert(math.abs(dx * dx + dy * dy - 4 * 105 * 105) < 0.01,
+            "Two clones must be opposite each other")
     end
     local restored = assert(Simulation.restore(sim:snapshot()))
-    assert(#restored:clone_positions() == 3, "Reload must preserve colony coverage")
+    assert(#restored:clone_positions() == 2, "Reload must preserve colony coverage")
     print("MICROGEN COLONY COVERAGE READY")
 end
 

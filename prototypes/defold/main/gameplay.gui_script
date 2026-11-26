@@ -1953,6 +1953,43 @@ function init(self)
         requests=0
         checked:check()
         assert(checked.state=="incomplete","A newer release without a verified APK must not report current")
+        assert(checked.asset==nil and not checked.needs_permission,
+            "Incomplete check must clear stale verified metadata")
+        local malformed=update_fixture("1.5.12",false)
+        table.insert(malformed.assets,1,false)
+        assert(Updater.select({malformed},"1.5.11").label=="1.5.12",
+            "Malformed asset entries must not block valid assets")
+        local installs,downloads,status=0,0,1
+        local native={
+            download=function(url,sha,size)
+                downloads=downloads+1
+                assert(url==update.url and sha==update.sha and size==update.size)
+                return true
+            end,
+            status=function() return status end,
+            install=function() installs=installs+1; return 3 end,
+        }
+        local lifecycle=Updater.new("1.5.10",native,false,function() end)
+        lifecycle.request=function(_,_,callback)
+            callback(nil,nil,{status=200,response=json.encode(update_fixture("1.5.11",false))})
+        end
+        lifecycle:install()
+        assert(installs==0,"Unverified APK must not open the installer")
+        lifecycle:check()
+        assert(lifecycle.state=="downloading" and downloads==1)
+        lifecycle:step(0,false)
+        assert(installs==0 and lifecycle.state=="downloading")
+        status=2
+        lifecycle:step(0,false)
+        assert(lifecycle.state=="ready" and installs==0,
+            "Verified APK must wait for a safe screen")
+        lifecycle:step(0,true)
+        lifecycle:step(0,true)
+        assert(installs==1 and lifecycle.needs_permission,
+            "Automatic installer must be offered once and expose missing permission")
+        status=-1
+        lifecycle:step(0,true)
+        assert(lifecycle.state=="install_error","Native installation failure must be visible")
         print("MICROGEN UPDATE PATH READY")
         sim.build.organs.enzymes=previous_organs.enzymes
         sim.build.organs.devour=previous_organs.devour

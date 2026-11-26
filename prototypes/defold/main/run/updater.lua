@@ -35,7 +35,7 @@ function Updater.select(releases, installed)
             local name = "Microgen-Defold-" .. label .. ".apk"
             local url = REPO .. "/releases/download/" .. tag .. "/" .. name
             for _, asset in ipairs(release.assets) do
-                if asset.name == name and asset.browser_download_url == url
+                if type(asset) == "table" and asset.name == name and asset.browser_download_url == url
                     and type(asset.digest) == "string" and type(asset.size) == "number"
                     and asset.size == math.floor(asset.size) and asset.size > 0 and asset.size <= 150 * 1024 * 1024 then
                     local sha = asset.digest:match("^sha256:([a-f0-9]+)$")
@@ -63,6 +63,7 @@ end
 function Updater:check()
     if self.state == "checking" or self.state == "downloading" or self.state == "verifying" or self.state == "ready" then return end
     self.timer = 5 * 60
+    self.asset, self.needs_permission, self.offered = nil, false, false
     self:set("checking")
     local headers = {
         Accept="application/vnd.github+json",
@@ -112,6 +113,7 @@ function Updater:check()
 end
 
 function Updater:install()
+    if self.state ~= "ready" or not self.native then return end
     local result = self.native.install()
     if result == 3 then self.needs_permission = true; self.changed()
     elseif result == 2 then self.needs_permission = false; self.changed()
