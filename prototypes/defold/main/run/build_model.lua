@@ -62,6 +62,7 @@ function Build.new()
         biomass = 0,
         unlocked = Catalog.base_unlocked(),
         branch = "predator",
+        form = "",
         branch_weight = 1.35,
     }, Build)
     reset_ranks(self)
@@ -226,6 +227,7 @@ function Build:to_dict()
         biomass = self.biomass,
         unlocked = copy(self.unlocked),
         branch = self.branch,
+        form = self.form,
         qualities = copy(self.qualities),
         specializations = copy(self.specializations),
         temporary_mutations = copy(self.temporary_mutations),
@@ -261,6 +263,7 @@ function Build:from_dict(data)
     self.extra_organ_cells = max(0, integer(data.extra_organ_cells))
     self.biomass = max(0, integer(data.biomass))
     self.branch = tostring(data.branch or "predator")
+    self.form = Catalog.FORM_SPECIALIZATIONS[data.form] and data.form or ""
     reset_ranks(self)
     self.unlocked = {}
     for _, entry in ipairs(dictionary(data.unlocked or Catalog.base_unlocked())) do
@@ -317,7 +320,8 @@ end
 
 function Build:power(id)
     local quality = Catalog.quality_multiplier(self:quality(id))
-    local evolved = self:evolved(id) and 1.30 or 1
+    local recipe = Catalog.EVOLUTIONS[id]
+    local evolved = self:evolved(id) and not (recipe and recipe.form) and 1.30 or 1
     local saved_rank = self:stored_rank(id)
     local specialization = self.specializations[id]
     if (not specialization or specialization == "") and #self.temporary_mutations == 0 and
@@ -452,6 +456,8 @@ function Build:passive(id)
 end
 
 function Build:evolved(id)
+    local recipe = Catalog.EVOLUTIONS[id]
+    if recipe and recipe.form and (self.form ~= recipe.form or self:rank(id) < recipe.organ_rank or self:rank(recipe.passive) < recipe.passive_rank) then return false end
     return self:stored_rank(id) > 0 and self.stats.evolutions[id] == true
 end
 
@@ -459,7 +465,8 @@ function Build:evolution_candidates()
     local candidates = {}
     for _, id in ipairs(Catalog.EVOLUTION_IDS) do
         local recipe = Catalog.EVOLUTIONS[id]
-        if not self:evolved(id) and self:rank(id) >= 6 and self:rank(recipe.passive) >= 3 then
+        if (not recipe.form or recipe.form == self.form) and not self:evolved(id)
+            and self:rank(id) >= (recipe.organ_rank or 6) and self:rank(recipe.passive) >= (recipe.passive_rank or 3) then
             candidates[#candidates + 1] = id
         end
     end

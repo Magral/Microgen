@@ -86,7 +86,9 @@ local function entries(section)
             or Catalog.item(id)
         local detail=data.summary or ""
         if section=="synergies" then detail=title(data.needs[1]).." + "..title(data.needs[2])
-        elseif section=="evolutions" then detail=title(id).." 6/6 + "..title(data.passive).." 3/3"
+        elseif section=="evolutions" then
+            local form=data.form and ({predator="Хищная",toxic="Железистая",colony="Колониальная"})[data.form]
+            detail=(form and (form.." · ") or "")..title(id).." 6/6 + "..title(data.passive).." 3/3"
         elseif section=="organs" or section=="adaptations" then
             detail=data.signature and (tostring(Catalog.cell_cost(id)).." яч. · гибридный орган") or Catalog.effect_text(id,1)
         end
@@ -383,7 +385,10 @@ function Panels.offer_cards(ui,choices,y,choose,preview)
             local display = item.name or id
             local detail = choice.detail or item.summary or Catalog.effect_text(id,rank)
             if choice.kind=="biomass" then display,detail="Биомасса","+"..choice.amount
-            elseif choice.kind=="evolution" then display="Эволюция · "..display
+            elseif choice.kind=="evolution" then
+                local recipe=Catalog.EVOLUTIONS[id]
+                display="Эволюция · "..(recipe and recipe.name or display)
+                detail=recipe and recipe.behavior or detail
             elseif choice.kind=="temporary" then display="Временная мутация · "..display end
             local item=Catalog.item(id)
             local icon=(Catalog.ORGANS[id] or Catalog.ADAPTATIONS[id]

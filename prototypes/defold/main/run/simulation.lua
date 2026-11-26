@@ -54,6 +54,7 @@ function Simulation.new(seed, unlocked, upgrades, branch, loadout)
         if not contains(build.unlocked, id) then build.unlocked[#build.unlocked + 1] = id end
     end
     build.branch = branch or "predator"
+    build.form = self.run_loadout.form or ""
     if next(self.run_loadout) then
         build.branch = self.run_loadout.branch
         local starter = ({ predator = "devour", toxic = "acid", colony = "division" })[self.run_loadout.form]
@@ -343,10 +344,11 @@ function Simulation:enter_next_stage(prepared_world)
     self.player, self.previous_player, self.player_velocity = self.world.start, self.world.start, point()
     self.last_damage, self._danger_at = {}, -10
     self.enemies, self.remains, self.fields, self.shots, self.effects, self.damage_markers = {}, {}, {}, {}, {}, {}
-    local feast_cd, ability_cd, mark_cd = self.cooldowns.form_feast, self.cooldowns.form_ability, self.cooldowns.chemoreceptor_mark
+    local feast_cd, ability_cd, mark_cd, bite_cd = self.cooldowns.form_feast, self.cooldowns.form_ability, self.cooldowns.chemoreceptor_mark, self.cooldowns.acid_bite
     self.cooldowns, self.explored, self.events, self.current_offers, self.offer_quality = {}, {}, {}, {}, {}
-    self.cooldowns.form_feast, self.cooldowns.form_ability, self.cooldowns.chemoreceptor_mark = feast_cd, ability_cd, mark_cd
+    self.cooldowns.form_feast, self.cooldowns.form_ability, self.cooldowns.chemoreceptor_mark, self.cooldowns.acid_bite = feast_cd, ability_cd, mark_cd, bite_cd
     self.form_action = {}
+    self.rally_echo = nil
     self.signature_mark_id,self.signature_mark_until=nil,nil
     self.digesting_id, self.boss_spawned, self.boss_marker = -1, false, point()
     self.minibosses_spawned, self.minibosses_defeated = 0, 0
@@ -938,6 +940,7 @@ function Simulation:step(dt, x, y)
         self:_message("Открыт путь к главной угрозе: " .. self:boss_title() .. ". Найди её на карте.")
     end
     if self.form_action.kind == "rally" then self:_advance_rally(dt) end
+    self:_advance_rally_echo()
     self:_attack(dt)
     self:_update_shots(dt)
     self:_update_fields(dt)
@@ -1076,7 +1079,10 @@ function Simulation:prepare_reward()
     local tier = clamp(self.reward_queue[1].tier, 1, 3)
     local options, build, rng = self.reward_options, self.build, self.rng
     if tier >= 2 then
-        local id = build:evolution_candidates()[1]
+        local candidates=build:evolution_candidates()
+        local signature=Catalog.signature_organ(self.run_loadout.form)
+        -- Своя высшая эволюция получает приоритет, старые рецепты остаются доступны.
+        local id=contains(candidates,signature) and signature or candidates[1]
         if id then options[#options + 1] = { kind = "evolution", id = id, quality = build:quality(id) } end
     end
     local temporary = {}
@@ -1151,7 +1157,7 @@ local SAVED_KEYS = {
     "material_batch", "run_id", "player", "player_velocity", "remains", "digesting_id", "hp", "max_hp", "elapsed", "xp",
     "level", "pending_levels", "enemies", "pickups", "boss_spawned", "boss_marker", "kills", "cores_found",
     "next_id", "upgrades", "cooldowns", "current_offers", "rerolls", "fields", "shots", "spawn_timer", "invuln",
-    "bite_flash", "_danger_at", "form_action", "vacuole_charges", "signature_mark_id", "signature_mark_until",
+    "bite_flash", "_danger_at", "form_action", "vacuole_charges", "signature_mark_id", "signature_mark_until", "rally_echo",
 }
 
 function Simulation:snapshot()
@@ -1181,6 +1187,10 @@ function Simulation.restore(saved)
     self.rng.state = copy(saved.rng_state)
     self.combat_stats = Stats.restore(saved.combat_stats)
     self.run_loadout = Heredity.normalize(saved.run_loadout)
+    self.build.form=self.run_loadout.form or ""
+    local echo=self.rally_echo
+    if type(echo)~="table" or not finite(echo.target_id) or not finite(echo.due) or not finite(echo.amount)
+        or echo.due>self.elapsed+1 or echo.amount<=0 or not self.build:evolved("synaptic_node") then self.rally_echo=nil end
     if type(self.vacuole_charges)~="table" then self.vacuole_charges={} end
     self:vacuole_charge_count()
     if not finite(self.signature_mark_id) or not finite(self.signature_mark_until) or self.signature_mark_until>self.elapsed+4.2 then

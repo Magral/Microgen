@@ -114,7 +114,9 @@ function M.effect_text(build, id, scale, tempo)
         return "Не установлено"
     end
     if id == "barrier" then
-        return format("Щит %.1f HP; восстановление 8 с", one(Catalog.scaled_damage(8 + rank * 6, rank) * build:power(id)))
+        local count=build:rank("division")>0 and min(6,Catalog.clone_count(build:rank("division"))+build:specialization_bonus("division","clone_bonus")) or 0
+        local bonus=contains(build:active_synergies(),"shared_shell") and min(.30,.10*count) or 0
+        return format("Щит %.1f HP; восстановление 8 с", one(Catalog.scaled_damage(8 + rank * 6, rank) * build:power(id)*(1+bonus)))
     end
     if passive_formats[id] then
         local passive = build:passive(id)
@@ -125,6 +127,9 @@ function M.effect_text(build, id, scale, tempo)
     end
     local attack = attacks[id]
     if not attack then
+        if Catalog.SIGNATURE_ORGANS[id] then
+            return Catalog.effect_text(id,rank)..(build:evolved(id) and (" "..Catalog.EVOLUTIONS[id].behavior) or "")
+        end
         return Catalog.item(id).desc or ""
     end
 

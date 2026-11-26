@@ -126,7 +126,7 @@ function M.signature_organ_for_research(research_id)
     return ""
 end
 
-M.SYNERGY_IDS = { "enzyme_bite", "conductive_bath", "barbed_cilia", "shield_pulse", "metabolic_colony", "ferment_cloud", "acid_grasp", "spike_pulse", "toxic_colony", "spore_feast" }
+M.SYNERGY_IDS = { "enzyme_bite", "conductive_bath", "barbed_cilia", "shield_pulse", "metabolic_colony", "ferment_cloud", "acid_grasp", "spike_pulse", "toxic_colony", "spore_feast", "enzyme_target", "acid_bite", "shared_shell" }
 
 M.SYNERGIES = {
     enzyme_bite = { name = "Ферментативная пасть", needs = { "enzymes", "devour" }, desc = "Укус на 25%сильнее и оставляет ферменты на 3 с." },
@@ -139,6 +139,9 @@ M.SYNERGIES = {
     spike_pulse = { name = "Колючий импульс", needs = { "spikes", "pulse" }, desc = "Каждое сокращение мембраны выпускает восемь шипов." },
     toxic_colony = { name = "Токсичная колония", needs = { "division", "trail" }, desc = "Копии оставляют собственные ядовитые облака." },
     spore_feast = { name = "Споровый пир", needs = { "infection", "devour" }, desc = "Поглощение заражённой цели создаёт облако спор." },
+    enzyme_target = { name = "Ферментативный прицел", needs = { "chemoreceptor_ridge", "enzymes" }, desc = "Ферменты на отмеченной цели действуют на 25% дольше.", duration_multiplier = 1.25 },
+    acid_bite = { name = "Кислотный прикус", needs = { "osmotic_vacuole", "devour" }, desc = "Урон пастью по отравленной цели возвращает 1 с перезарядки способности; раз в 4 с. В гибриде расходует заряд вакуоли, если он есть.", cooldown_refund = 1, interval = 4 },
+    shared_shell = { name = "Общий панцирь", needs = { "synaptic_node", "barrier" }, desc = "Ёмкость щита +10% за активную копию, до +30%.", per_clone = .10, cap = .30 },
 }
 
 M.SPECIALIZATIONS = {
@@ -215,7 +218,7 @@ M.TEMP_MUTATIONS = {
     voracious_ridge = { name = "Ненасытный валик", organ = "devour", summary = "Укус +12% · интервал −10%", desc = "Мышечный валик ускоряет укусы и усиливает переднее поглощение. Сбрасывается после гибели.", color = "ff9a7e", motif = "jaws", power_targets = { devour = 1.12 }, value_targets = { devour = { bite_cooldown_mult = 0.9 } } },
 }
 
-M.EVOLUTION_IDS = { "tentacle", "acid", "spikes", "pulse", "infection", "electric" }
+M.EVOLUTION_IDS = { "tentacle", "acid", "spikes", "pulse", "infection", "electric", "chemoreceptor_ridge", "osmotic_vacuole", "synaptic_node" }
 
 M.EVOLUTIONS = {
     tentacle = { name = "Ловчая корона", passive = "magnet", behavior = "До двух меньших или сильно повреждённых целей окружаются щупальцами и плавно направляются к пасти. Здоровые крупные враги не удерживаются." },
@@ -225,6 +228,20 @@ M.EVOLUTIONS = {
     infection = { name = "Споровая утроба", passive = "metabolism", behavior = "Три полностью переваренные заражённые порции наполняют камеры и выпускают облако спор. Заряд сохраняется при выходе." },
     electric = { name = "Каталитический разряд", passive = "catalysis" },
 }
+
+-- Высшие эволюции используют прежние ключи органов и прежнюю систему наград.
+local form_behaviors = {
+    predator = "Рывок 12,5 с; отмеченная цель: укус +12%.",
+    toxic = "Кислотное поле +1 с, замедление 20%. DPS без изменений.",
+    colony = "Вторая волна через 1 с (35% силы первой); перезарядка 18 с; защита до 7,5%.",
+}
+for _, form in ipairs(M.FORM_IDS) do
+    local evolution=M.FORM_SPECIALIZATIONS[form].evolution
+    evolution.form=form
+    evolution.behavior=form_behaviors[form]
+    evolution.desc=form_behaviors[form]
+    M.EVOLUTIONS[evolution.organ]=evolution
+end
 
 M.QUALITY_MULTIPLIERS = { 1.0, 1.12, 1.25, 1.45 }
 

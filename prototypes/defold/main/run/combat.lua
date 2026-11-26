@@ -44,6 +44,7 @@ function Combat:hit_enemy(enemy, amount, source)
     if enemy.hp <= 0 or enemy.captured then return 0 end
     source = source or "unknown"
     local build = self.build
+    local acid_bite = source=="devour" and contains(build:active_synergies(),"acid_bite") and self:_player_poisoned(enemy)
     local raw = max(0, amount) * (1 + build:passive("catalysis")) * build:power(source)
     if source == "devour" then raw = raw * self:marked_bite_multiplier(enemy) end
     local exposed = (enemy.boss_exposed or 0) > 0
@@ -64,6 +65,7 @@ function Combat:hit_enemy(enemy, amount, source)
     end
     enemy.last_damage_source = source
     Stats.record_damage(self.combat_stats, source, dealt)
+    if acid_bite then self:_acid_bite_refund() end
     if source == "acid" or source == "infection" or source == "trail" then self:_vacuole_charge(enemy) end
     self:_feedback("hit", enemy.pos, dealt)
     enemy.popup_damage = (enemy.popup_damage or 0) + dealt
@@ -90,7 +92,13 @@ end
 
 function Combat:barrier_capacity()
     local rank = self.build:rank("barrier")
-    return rank > 0 and Catalog.scaled_damage(8 + rank * 6, rank) * self.build:power("barrier") or 0
+    if rank <= 0 then return 0 end
+    local capacity=Catalog.scaled_damage(8+rank*6,rank)*self.build:power("barrier")
+    if contains(self.build:active_synergies(),"shared_shell") then
+        local cfg=Catalog.SYNERGIES.shared_shell
+        capacity=capacity*(1+min(cfg.cap,cfg.per_clone*self:active_clone_count()))
+    end
+    return capacity
 end
 
 -- Форма определяется стартовым комплектом, а не веткой предложений или органами.
@@ -230,6 +238,24 @@ function Combat:_synaptic_hit(enemy,amount,index)
     return dealt
 end
 
+function Combat:_acid_bite_refund()
+    local cfg=Catalog.SYNERGIES.acid_bite
+    local cd=self.cooldowns.form_ability or 0
+    if not self:form_ability().id or cd<=0 or not self:_ready("acid_bite") then return end
+    self.cooldowns.form_ability=max(0,cd-cfg.cooldown_refund)
+    self.cooldowns.acid_bite=cfg.interval
+    -- Гибрид может расходовать накопленный заряд на прикус. Отсутствие
+    -- заряда не отменяет предусмотренный спецификацией возврат секунды.
+    if self.run_loadout.form~="toxic" and self:vacuole_charge_count()>0 then table.remove(self.vacuole_charges,1) end
+end
+
+function Combat:_apply_enzymes(enemy,duration)
+    if contains(self.build:active_synergies(),"enzyme_target") and self:is_chemoreceptor_marked(enemy) then
+        duration=duration*Catalog.SYNERGIES.enzyme_target.duration_multiplier
+    end
+    enemy.enzyme_time=max(enemy.enzyme_time or 0,duration)
+end
+
 function Combat:damage_reduction(source)
     local passive = self:form_passive()
     local bonus = 0
@@ -237,7 +263,13 @@ function Combat:damage_reduction(source)
         local kind = source.enemy.kind
         bonus = (kind == "boss" or kind == "miniboss") and passive.boss_contact_reduction or passive.enemy_contact_reduction
     elseif passive.id == "shared_membrane" then
-        bonus = min(passive.maximum_reduction, min(passive.maximum_clones, self:active_clone_count()) * passive.reduction_per_clone)
+        local cap=passive.maximum_reduction
+        local per_clone=passive.reduction_per_clone
+        if self:form_evolution() then
+            cap=self:form_evolution().maximum_reduction or cap
+            per_clone=cap/passive.maximum_clones
+        end
+        bonus=min(cap,min(passive.maximum_clones,self:active_clone_count())*per_clone)
     end
     if self.build:rank("synaptic_node")>0 and self:active_clone_count()>0 then
         bonus=bonus+self.build:specialization_bonus("synaptic_node","passive_protection_bonus")
@@ -480,7 +512,7 @@ function Combat:_update_enemy(i, dt, radius, safe)
     end
     if enemy.kind == "spitter" and distance < 300 then dx, dy = -dx * 0.3, -dy * 0.3 end
     if safe and enemy.kind ~= "prey" then dx, dy = -dx, -dy end
-    local speed = enemy.speed * rules.speed * min(enemy.slow > 0 and 0.35 or 1, (enemy.rupture_slow or 0) > 0 and 0.85 or 1) * (contains(enemy.traits, "swift") and 1.2 or 1)
+    local speed = enemy.speed * rules.speed * min(enemy.slow > 0 and 0.35 or 1, (enemy.rupture_slow or 0) > 0 and (1-min(.20,max(0,enemy.rupture_strength or .15))) or 1) * (contains(enemy.traits, "swift") and 1.2 or 1)
     dx, dy = dx * speed, dy * speed
     local pull_range = self:attraction_radius()
     if enemy.grasp > 0 then
@@ -563,8 +595,22 @@ function Combat:_nearest(radius, accept)
     return nearest
 end
 
+function Combat:form_evolution()
+    local evolution=Catalog.form_specialization(self.run_loadout.form).evolution
+    return evolution and self.build:evolved(evolution.organ) and evolution or nil
+end
+
 function Combat:form_ability()
-    return Catalog.form_specialization(self.run_loadout.form).ability or {}
+    local base=Catalog.form_specialization(self.run_loadout.form).ability or {}
+    local evo=self:form_evolution()
+    if not evo then return base end
+    local ability=V.copy(base)
+    ability.cooldown=evo.ability_cooldown or base.cooldown
+    if evo.duration_bonus then ability.duration=base.duration+evo.duration_bonus end
+    ability.slow=evo.slow or base.slow
+    ability.second_wave_delay=evo.second_wave_delay
+    ability.second_wave_multiplier=evo.second_wave_multiplier
+    return ability
 end
 
 function Combat:_rally_target(radius)
@@ -604,6 +650,7 @@ function Combat:activate_form_ability(x, y)
         end
         self:_field(self.player,field_radius,damage(rank,4,3)*ability.damage_multiplier,
             ability.duration+charges*cfg.duration_per_charge,"rupture")
+        self.fields[#self.fields].rupture_strength=ability.slow
         self.vacuole_charges={}
         self:_effect("pulse",self.player,field_radius,.65)
     elseif ability.id == "colony_rally" then
@@ -632,7 +679,7 @@ function Combat:_advance_dash(dt)
                 if rank > 0 then
                     local bio = contains(self.build:active_synergies(), "enzyme_bite")
                     self:hit_enemy(target, damage(rank, 7, 5) * (bio and 1.25 or 1) * ability.damage_multiplier, "devour")
-                    if bio then target.enzyme_time = 3 end
+                    if bio then self:_apply_enzymes(target,3) end
                     if target.kind ~= "boss" and target.hp > 0 then
                         target.form_dash_until = self.elapsed + ability.refund_window
                     end
@@ -674,12 +721,32 @@ function Combat:_advance_rally(dt)
             if rank > 0 and count > 0 then
                 -- Один условный удар равен секундному контактному урону копии.
                 local amount = damage(rank, 8, 4) * min(ability.maximum_clone_hit_equivalents, count * ability.clone_damage_multiplier)
-                self:hit_enemy(target, amount, "division")
+                local dealt=self:hit_enemy(target,amount,"division")
+                if ability.second_wave_delay and dealt>0 and target.hp>0 then
+                    self.rally_echo={target_id=target.id,due=self.elapsed+ability.second_wave_delay,amount=amount*ability.second_wave_multiplier}
+                end
                 self:_effect("pulse", target.pos, target.r + 20, .5)
             end
         end
     end
     if action.age >= ability.approach_time + ability.return_time then self.form_action = {} end
+end
+
+-- Отдельное состояние волны сохраняется, не задерживая возврат копий.
+function Combat:_advance_rally_echo()
+    local echo=self.rally_echo
+    if not echo then return end
+    if not self:form_evolution() or self:active_clone_count()<=0 then self.rally_echo=nil;return end
+    if self.elapsed<echo.due then return end
+    self.rally_echo=nil
+    for _,target in ipairs(self.enemies) do
+        if target.id==echo.target_id and target.hp>0 and not target.captured and not self:_is_engulfing(target)
+            and distance_squared(self.player,target.pos)<=(self:form_ability().radius+60)^2 then
+            self:hit_enemy(target,echo.amount,"division")
+            self:_effect("pulse",target.pos,target.r+20,.5)
+            break
+        end
+    end
 end
 
 function Combat:_bite(combos)
@@ -692,7 +759,7 @@ function Combat:_bite(combos)
     local bio = contains(combos, "enzyme_bite")
     self:hit_enemy(target, damage(rank, 7, 5) * (bio and 1.25 or 1), "devour")
     if bio then
-        target.enzyme_time = 3
+        self:_apply_enzymes(target,3)
         self:_effect("enzyme_bite", self.player, self:body_radius(), 0.7, { ["end"] = target.pos })
     end
     self:_effect("bite", offset(self.player, self.facing, self:body_radius() * 0.8), self:body_radius() * 0.25, 0.3, { ["end"] = target.pos })
@@ -850,7 +917,7 @@ function Combat:_attack(dt)
     if rank > 0 and self:_ready("enzymes") then
         local target = self:_nearest(230 * scale)
         if target then
-            target.enzyme_time = 4 * build:specialization_value("enzymes", "duration_mult")
+            self:_apply_enzymes(target,4 * build:specialization_value("enzymes", "duration_mult"))
             self.cooldowns.enzymes = 2
             self:_effect("enzymes", self.player, target.r, 0.5, { ["end"] = target.pos })
         end
@@ -1044,9 +1111,11 @@ function Combat:_update_fields(dt)
                         player_hits[enemy] = { amount = amount, effective = effective, source = field.source }
                     end
                     if field.kind == "rupture" then
-                        enemy.rupture_slow = max(enemy.rupture_slow or 0, Catalog.FORM_SPECIALIZATIONS.toxic.ability.slow_duration)
+                        local strength=min(.20,max(0,field.rupture_strength or .15))
+                        enemy.rupture_strength=max((enemy.rupture_slow or 0)>0 and (enemy.rupture_strength or .15) or 0,strength)
+                        enemy.rupture_slow=max(enemy.rupture_slow or 0,Catalog.FORM_SPECIALIZATIONS.toxic.ability.slow_duration)
                     end
-                    if ferment then enemy.enzyme_time = 2 end
+                    if ferment then self:_apply_enzymes(enemy,2) end
                 end
             end
         end

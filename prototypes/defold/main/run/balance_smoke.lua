@@ -925,8 +925,110 @@ local function validate_signature_organs()
     print("MICROGEN SIGNATURE ORGANS READY")
 end
 
+local function validate_form_evolutions_and_synergies()
+    local function near(a,b,label) assert(math.abs(a-b)<.00001,label..": "..tostring(a)) end
+    local function fresh(form)
+        local sim=Simulation.new(147,nil,nil,form,{form=form,branch=form,seed=147})
+        sim.enemies,sim.fields,sim.residents={},{},{}
+        sim.build.organ_capacity=40
+        return sim
+    end
+    local function target(sim)
+        local e=assert(sim:spawn_enemy({x=sim.player.x+100,y=sim.player.y},"hunter"))
+        e.r,e.hp,e.max_hp,e.tissue_budget=10,100,100,100
+        return e
+    end
+    local function evolve(sim,id,adapt)
+        sim.build.organs[id]=5;sim.build.adaptations[adapt]=3
+        assert(not sim.build:evolve(id),"Rank five is insufficient")
+        sim.build.organs[id]=6;sim.build.adaptations[adapt]=2
+        assert(not sim.build:evolve(id),"Adaptation rank two is insufficient")
+        sim.build.adaptations[adapt]=3
+        sim.reward_queue={{tier=2,token="form-evolution-fixture"}}
+        sim.reward_options={}
+        local options=sim:prepare_reward()
+        assert(options[1].kind=="evolution" and options[1].id==id,"Own form evolution offered through reward")
+        assert(sim:claim_reward(1) and sim.build:evolved(id),"Reward activates evolution")
+        assert(not sim.build:evolve(id),"Evolution cannot be claimed twice")
+    end
+    local pred=fresh("predator")
+    pred.build.branch="toxic"
+    evolve(pred,"chemoreceptor_ridge","magnet")
+    near(pred:form_ability().cooldown,12.5,"Apex dash")
+    near(pred.build:power("chemoreceptor_ridge"),1,"No generic damage multiplier on form evolution")
+    local restored=assert(Simulation.restore(pred:snapshot()))
+    near(restored:form_ability().cooldown,12.5,"Evolution survives reload")
+    local foreign=fresh("toxic")
+    foreign.build.organs.chemoreceptor_ridge=6
+    foreign.build.adaptations.magnet=3
+    assert(not foreign.build:evolve("chemoreceptor_ridge"),"Foreign form cannot evolve signature")
+    foreign.build.stats.evolutions.chemoreceptor_ridge=true
+    assert(not foreign.build:evolved("chemoreceptor_ridge") and foreign:form_ability().id=="toxic_rupture","Foreign evolved organ is dormant")
+    local toxic=fresh("toxic")
+    evolve(toxic,"osmotic_vacuole","catalysis")
+    assert(toxic:activate_form_ability())
+    near(toxic.fields[1].life,4,"Reactor duration")
+    near(toxic.fields[1].rupture_strength,.20,"Reactor slow")
+    near(toxic.fields[1].damage,Catalog.scaled_damage(7,1)*.6,"Reactor DPS unchanged")
+    local e=target(toxic);e.pos=toxic.player
+    toxic:_update_fields(.1)
+    near(e.rupture_strength,.20,"Reactor slows actual target")
+    local colony=fresh("colony")
+    evolve(colony,"synaptic_node","armor")
+    colony.build.organs.division=4
+    near(colony:form_ability().cooldown,18,"Collective cooldown")
+    near(colony:damage_reduction({kind="projectile"}),colony.build:passive("armor")+.075,"Collective defense")
+    colony.build.adaptations.armor=6
+    near(colony:damage_reduction({kind="projectile"}),.60,"Armor cap")
+    local t=target(colony)
+    local dealt=0
+    colony.hit_enemy=function(_,_,amount,source) assert(source=="division");dealt=dealt+amount;return amount end
+    assert(colony:activate_form_ability())
+    colony:_advance_rally(.3)
+    local first=dealt
+    assert(first>0 and colony.rally_echo)
+    colony:_advance_rally(.3)
+    colony.elapsed=.99;colony:_advance_rally_echo();near(dealt,first,"No early echo")
+    local reload=assert(Simulation.restore(colony:snapshot()))
+    assert(reload.rally_echo,"Pending echo survives checkpoint")
+    colony.elapsed=1;colony:_advance_rally_echo();near(dealt,first*1.35,"Second wave")
+    colony:_advance_rally_echo();near(dealt,first*1.35,"No duplicate echo")
+
+    pred.build.organs.enzymes=1
+    local marked=target(pred)
+    pred.signature_mark_id,pred.signature_mark_until=marked.id,pred.elapsed+3
+    pred:_apply_enzymes(marked,4)
+    near(marked.enzyme_time,5,"Marked enzyme duration")
+    pred:_apply_enzymes(marked,4)
+    near(marked.enzyme_time,5,"Enzyme duration not multiplied repeatedly")
+    local unmarked=target(pred)
+    pred:_apply_enzymes(unmarked,4);near(unmarked.enzyme_time,4,"Unmarked duration")
+    pred.build.organs.osmotic_vacuole=1
+    marked.infect=2
+    pred.cooldowns.form_ability=8
+    pred.vacuole_charges={pred.elapsed+10}
+    pred:hit_enemy(marked,1,"devour")
+    near(pred.cooldowns.form_ability,7,"Acid bite refund")
+    assert(pred:vacuole_charge_count()==0,"Hybrid spends available charge")
+    pred:hit_enemy(marked,1,"devour")
+    near(pred.cooldowns.form_ability,7,"Acid bite cooldown prevents repeat")
+    pred.cooldowns.acid_bite=0;marked.infect=0;pred.fields={}
+    pred:hit_enemy(marked,1,"devour")
+    near(pred.cooldowns.form_ability,7,"Unpoisoned bite does not refund")
+    pred.build.organs.synaptic_node=1;pred.build.organs.barrier=1;pred.build.organs.division=1
+    local base=Catalog.scaled_damage(14,1)*pred.build:power("barrier")
+    near(pred:barrier_capacity(),base*1.2,"Two clones increase shield")
+    pred.build.organs.division=4
+    near(pred:barrier_capacity(),base*1.3,"Shield cap")
+    pred.build.organs.division=nil
+    near(pred:barrier_capacity(),base,"No copies, no shield bonus")
+    assert(#Catalog.EVOLUTION_IDS==9 and #Catalog.SYNERGY_IDS==13,"Preserve old recipes and add three each")
+    print("MICROGEN FORM EVOLUTIONS SYNERGIES READY")
+end
+
 function M.run()
     validate_form_specialization_data()
+    validate_form_evolutions_and_synergies()
     validate_signature_organs()
     validate_form_abilities()
     validate_form_passives()
