@@ -127,7 +127,7 @@ jobs:
           retention-days: 14
 
       - name: Build and run native Linux smoke test
-        timeout-minutes: 12
+        timeout-minutes: 14
         working-directory: prototypes/defold
         run: |
           if ! command -v xvfb-run >/dev/null || ! ldconfig -p | grep "libGLU.so.1" >/dev/null; then
@@ -173,7 +173,7 @@ jobs:
                 kill -0 "$pid"
                 sleep 0.2
               done
-              for attempt in {1..2100}; do
+              for attempt in {1..2400}; do
                 ready=1
                 grep -Fq "MICROGEN MEMBRANE HIT RESPONSE READY" "$log" || ready=0
                 if [[ "$profile" == standard ]] && ! grep -Fq "MICROGEN BALANCE SMOKE READY" "$log"; then ready=0; fi
@@ -200,11 +200,13 @@ jobs:
                 grep -Fq "MICROGEN BALANCE SMOKE READY" "$log"
                 test "$(grep -c "MICROGEN BALANCE RUN" "$log")" -eq 18
                 test "$(grep -c "MICROGEN BALANCE SUMMARY" "$log")" -eq 3
-                test "$(grep -c "MICROGEN BALANCE CONTROL RUN" "$log")" -eq 9
+                test "$(grep -c "MICROGEN BALANCE CONTROL RUN" "$log")" -eq 18
                 test "$(grep -c "MICROGEN BALANCE CONTROL SUMMARY" "$log")" -eq 3
                 test "$(grep -c "MICROGEN HYBRID BALANCE RUN" "$log")" -eq 9
                 test "$(grep -c "MICROGEN HYBRID BALANCE SUMMARY" "$log")" -eq 3
-                test "$(grep -c "MICROGEN EVOLUTION BALANCE RUN" "$log")" -eq 18
+                test "$(grep -c "MICROGEN HYBRID CONTROL RUN" "$log")" -eq 9
+                test "$(grep -c "MICROGEN HYBRID CONTROL SUMMARY" "$log")" -eq 3
+                test "$(grep -c "MICROGEN EVOLUTION BALANCE RUN" "$log")" -eq 36
                 test "$(grep -c "MICROGEN EVOLUTION BALANCE SUMMARY" "$log")" -eq 6
                 grep -Fq "MICROGEN STAGE SIX BALANCE READY" "$log"
                 grep -Fq "MICROGEN CONTACT BALANCE READY" "$log"

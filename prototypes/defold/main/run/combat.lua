@@ -613,7 +613,7 @@ end
 
 function Combat:_rally_target(radius)
     return self:_nearest(radius, function(enemy)
-        return not enemy.captured and not self:_is_engulfing(enemy)
+        return enemy.hp > 0 and not enemy.captured and not self:_is_engulfing(enemy)
     end)
 end
 
@@ -720,7 +720,7 @@ function Combat:_advance_rally(dt)
                 -- Один условный удар равен секундному контактному урону копии.
                 local amount = damage(rank, 8, 4) * min(ability.maximum_clone_hit_equivalents, count * ability.clone_damage_multiplier)
                 local dealt=self:hit_enemy(target,amount,"division")
-                if ability.second_wave_delay and dealt>0 and target.hp>0 then
+                if ability.second_wave_delay and dealt>0 then
                     self.rally_echo={target_id=target.id,due=self.elapsed+ability.second_wave_delay,
                         amount=amount*ability.second_wave_multiplier,limit=dealt*ability.second_wave_multiplier}
                 end
@@ -738,13 +738,21 @@ function Combat:_advance_rally_echo()
     if not self:form_evolution() or self:active_clone_count()<=0 then self.rally_echo=nil;return end
     if self.elapsed<echo.due then return end
     self.rally_echo=nil
-    for _,target in ipairs(self.enemies) do
-        if target.id==echo.target_id and target.hp>0 and not target.captured and not self:_is_engulfing(target)
-            and distance_squared(self.player,target.pos)<=(self:form_ability().radius+60)^2 then
-            self:hit_enemy(target,echo.amount,"division",echo.limit)
-            self:_effect("pulse",target.pos,target.r+20,.5)
+    local ability=self:form_ability()
+    local target
+    for _,enemy in ipairs(self.enemies) do
+        if enemy.id==echo.target_id and enemy.hp>0 and not enemy.captured and not self:_is_engulfing(enemy)
+            and distance_squared(self.player,enemy.pos)<=(ability.radius+60)^2 then
+            target=enemy
             break
         end
+    end
+    -- Если первая волна уничтожила цель или та ушла, вторая выбирает
+    -- ближайшую доступную цель в том же радиусе, не теряя всю способность.
+    if not target then target=self:_rally_target(ability.radius+60) end
+    if target then
+        self:hit_enemy(target,echo.amount,"division",echo.limit)
+        self:_effect("pulse",target.pos,target.r+20,.5)
     end
 end
 

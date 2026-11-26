@@ -18,8 +18,7 @@ local BRANCHES = {
     {form = "toxic", starter = "acid"},
     {form = "colony", starter = "division"},
 }
-local ADVANCED_SEEDS = {147, 247, 347}
-local CONTROL_SEEDS = {147, 247, 371}
+local HYBRID_SEEDS = {147, 247, 347}
 local HYBRID_SCENARIOS = {
     {form="predator",starter="devour",name="acid_bite",
         seed_organs={osmotic_vacuole=2,acid=2},expected_synergies={"acid_bite"}},
@@ -219,6 +218,14 @@ local function run(seed, scenario, horizon_seconds)
     if scenario.block_evolution then sim.build.evolution_candidates=function() return {} end end
     for _,id in ipairs(scenario.expected_synergies or {}) do
         assert(Util.index(sim.build:active_synergies(),id),"Hybrid fixture must activate "..id)
+    end
+    if scenario.disabled_synergy then
+        local active_synergies=sim.build.active_synergies
+        sim.build.active_synergies=function(self)
+            local active,filtered=active_synergies(self),{}
+            for _,id in ipairs(active) do if id~=scenario.disabled_synergy then filtered[#filtered+1]=id end end
+            return filtered
+        end
     end
     local max_enemies, max_fields, max_remains = 0, 0, 0
     local steps, first_hit = 0, nil
@@ -1064,10 +1071,11 @@ local function validate_form_evolutions_and_synergies()
     colony.build.adaptations.armor=6
     near(colony:damage_reduction({kind="projectile"}),.60,"Armor cap")
     equipment_roundtrip(colony,"synaptic_node","armor","colony")
-    local t=target(colony)
-    local dealt=0
-    colony.hit_enemy=function(_,_,amount,source,limit)
+    local original_target=target(colony)
+    local dealt,hit_ids=0,{}
+    colony.hit_enemy=function(_,enemy,amount,source,limit)
         assert(source=="division")
+        hit_ids[#hit_ids+1]=enemy.id
         local actual=math.min(amount,limit or amount)
         dealt=dealt+actual
         return actual
@@ -1077,11 +1085,14 @@ local function validate_form_evolutions_and_synergies()
     local first=dealt
     assert(first>0 and colony.rally_echo)
     near(colony.rally_echo.limit,first*.35,"Second wave is 35% of actual first hit")
+    original_target.hp=0
+    local replacement=target(colony)
     colony:_advance_rally(.3)
     colony.elapsed=.99;colony:_advance_rally_echo();near(dealt,first,"No early echo")
     local reload=assert(Simulation.restore(colony:snapshot()))
     assert(reload.rally_echo and reload.rally_echo.limit==colony.rally_echo.limit,"Pending echo limit survives checkpoint")
-    colony.elapsed=1;colony:_advance_rally_echo();near(dealt,first*1.35,"Second wave")
+    colony.elapsed=1;colony:_advance_rally_echo();near(dealt,first*1.35,"Second wave retargets after first target dies")
+    assert(hit_ids[2]==replacement.id,"Second wave must choose a living replacement target")
     colony:_advance_rally_echo();near(dealt,first*1.35,"No duplicate echo")
     local capped=fresh("colony")
     local cap_target=target(capped)
@@ -1154,20 +1165,25 @@ function M.run()
         local control=Util.copy(scenario)
         control.name="без активной способности"
         control.use_ability=false
-        run_batch("MICROGEN BALANCE CONTROL RUN",control,CONTROL_SEEDS)
+        run_batch("MICROGEN BALANCE CONTROL RUN",control,SEEDS)
     end
     for _,scenario in ipairs(HYBRID_SCENARIOS) do
-        run_batch("MICROGEN HYBRID BALANCE RUN",scenario,ADVANCED_SEEDS)
+        run_batch("MICROGEN HYBRID BALANCE RUN",scenario,HYBRID_SEEDS)
+        local control=Util.copy(scenario)
+        control.name=scenario.name.." · без эффекта синергии"
+        control.expected_synergies=nil
+        control.disabled_synergy=scenario.expected_synergies[1]
+        run_batch("MICROGEN HYBRID CONTROL RUN",control,HYBRID_SEEDS)
     end
     for _,scenario in ipairs(EVOLUTION_SCENARIOS) do
         local control=Util.copy(scenario)
         control.name="без высшей эволюции"
         control.block_evolution=true
-        run_batch("MICROGEN EVOLUTION BALANCE RUN",control,ADVANCED_SEEDS)
+        run_batch("MICROGEN EVOLUTION BALANCE RUN",control,SEEDS)
         local evolved=Util.copy(scenario)
         evolved.name="с высшей эволюцией"
         evolved.evolve=true
-        run_batch("MICROGEN EVOLUTION BALANCE RUN",evolved,ADVANCED_SEEDS)
+        run_batch("MICROGEN EVOLUTION BALANCE RUN",evolved,SEEDS)
     end
     print("MICROGEN STAGE SIX BALANCE READY")
     print("MICROGEN BALANCE SMOKE READY")
