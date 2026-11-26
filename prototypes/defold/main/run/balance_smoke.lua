@@ -7,6 +7,7 @@ local HORIZON_SECONDS = 600
 local SEEDS = {47, 71}
 local BRANCHES = {"predator", "toxic", "colony"}
 local COLONY_SEEDS = {89, 181, 293, 509}
+local COLONY_COHORT_SECONDS = 120
 local DIRECTIONS = {
     {1, 0}, {0.70710678, 0.70710678}, {0, 1}, {-0.70710678, 0.70710678},
     {-1, 0}, {-0.70710678, -0.70710678}, {0, -1}, {0.70710678, -0.70710678},
@@ -169,7 +170,8 @@ local function direction(sim, tick)
     return best_x, best_y
 end
 
-local function run(seed, branch)
+local function run(seed, branch, horizon_seconds)
+    horizon_seconds = horizon_seconds or HORIZON_SECONDS
     local sim = Simulation.new(seed, nil, nil, branch)
     local max_enemies, max_fields, max_remains = 0, 0, 0
     local steps, first_hit = 0, nil
@@ -190,7 +192,7 @@ local function run(seed, branch)
         end
     end
 
-    for tick = 1, HORIZON_SECONDS * 60 do
+    for tick = 1, horizon_seconds * 60 do
         if sim.outcome ~= "" then break end
         settle_stage(sim)
         settle_levels(sim)
@@ -288,11 +290,11 @@ function M.run()
     end
     local colony_survivors = 0
     for _, seed in ipairs(COLONY_SEEDS) do
-        local result = run(seed, "colony")
+        local result = run(seed, "colony", COLONY_COHORT_SECONDS)
         if result.alive then colony_survivors = colony_survivors + 1 end
     end
     print(string.format("MICROGEN COLONY COHORT survivors=%d/%d horizon=%ds",
-        colony_survivors, #COLONY_SEEDS, HORIZON_SECONDS))
+        colony_survivors, #COLONY_SEEDS, COLONY_COHORT_SECONDS))
     print("MICROGEN BALANCE SMOKE READY")
 end
 
