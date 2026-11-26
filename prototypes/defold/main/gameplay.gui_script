@@ -1714,7 +1714,22 @@ function init(self)
         assert(calm_x==1 and calm_y==1 and hit_x>=.964 and hit_x<1
             and hit_y>1 and hit_y<=1.022 and over_x==hit_x and over_y==hit_y,
             "Damage deformation must be bounded and recover to the resting shape")
+        local calm_flow_x,calm_flow_y=Tissue.damage_flow(0,1,0)
+        local hit_flow_x,hit_flow_y=Tissue.damage_flow(1,1,0)
+        local diagonal_flow_x,diagonal_flow_y=Tissue.damage_flow(1,1,1)
+        assert(calm_flow_x==0 and calm_flow_y==0 and hit_flow_x<-.099 and hit_flow_x>-.101
+            and math.abs(hit_flow_y)<.001
+            and math.abs(math.sqrt(diagonal_flow_x^2+diagonal_flow_y^2)-.10)<.001,
+            "Directional membrane recoil must be smooth, normalized, and bounded")
         local player_point=vmath.vector3(0,0,0)
+        local recoil_right_x,recoil_right_y=Scene.damage_direction(player_point,0,{pos={100,0}})
+        local recoil_north_x,recoil_north_y=Scene.damage_direction(player_point,0,{pos={0,100}})
+        local recoil_rotated_x,recoil_rotated_y=Scene.damage_direction(player_point,math.pi*.5,{pos={100,0}})
+        assert(recoil_right_x>.999 and math.abs(recoil_right_y)<.001
+            and math.abs(recoil_north_x)<.001 and recoil_north_y>.999
+            and math.abs(recoil_rotated_x)<.001 and recoil_rotated_y<-.999
+            and Scene.damage_direction(player_point,0,{})==0,
+            "Damage recoil direction must follow the incoming source in local body coordinates")
         local east=Scene.damage_impact(player_point,50,{pos=vmath.vector3(100,0,0),time=4},4)
         local north,north_angle,strength=Scene.damage_impact(
             player_point,50,{pos=vmath.vector3(0,100,0),time=4},4)
