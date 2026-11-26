@@ -400,6 +400,7 @@ function Scene:draw_body(sim, actor, is_player, serial)
     end
     if not is_player and not actor.captured then
         if actor.kind=="boss" then Effects.draw_boss(self,sim,actor,phase) end
+        if actor.kind=="spitter" then Effects.draw_spitter(self,sim,actor,phase) end
         if infected then Effects.draw_infection(self,actor,phase) end
         if (actor.enzyme_time or 0)>0 then Effects.draw_infection(self,actor,phase,true) end
         if actor.max_hp and actor.hp>0 and actor.kind and actor.kind~="boss" then

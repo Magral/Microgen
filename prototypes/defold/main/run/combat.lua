@@ -217,6 +217,23 @@ function Combat:_boss_windup(enemy, dt)
     self:_feedback("danger", enemy.pos)
 end
 
+function Combat:_spitter_windup(enemy, dt, distance)
+    if (enemy.spit_windup or 0) > 0 then
+        enemy.spit_windup = max(0, enemy.spit_windup - dt)
+        if enemy.spit_windup == 0 then
+            self:_shot(enemy.pos, offset(point(), enemy.spit_angle, 155), 8, true,
+                "enemy", self:_enemy_label(enemy), enemy.id)
+            enemy.shot_cd = 2
+        end
+        return
+    end
+    enemy.shot_cd = max(0, (enemy.shot_cd or 0) - dt)
+    if enemy.shot_cd > 0 or distance >= 850 then return end
+    enemy.spit_angle = V.angle(self.player.x - enemy.pos.x, self.player.y - enemy.pos.y)
+    enemy.spit_windup = 0.65
+    self:_feedback("danger", enemy.pos)
+end
+
 function Combat:_update_enemy_status(enemy, dt, radius)
     local build = self.build
     local elite = enemy.kind == "boss" or enemy.kind == "miniboss"
@@ -332,14 +349,15 @@ function Combat:_update_enemy(i, dt, radius, safe)
     if enemy.kind == "boss" then
         self.boss_marker = enemy.pos
         self:_boss_windup(enemy, dt)
-    elseif enemy.kind == "spitter" or enemy.kind == "miniboss" then
+    elseif enemy.kind == "spitter" then
+        self:_spitter_windup(enemy, dt, distance)
+    elseif enemy.kind == "miniboss" then
         enemy.shot_cd = enemy.shot_cd - dt
         if enemy.shot_cd <= 0 and distance < 850 then
-            enemy.shot_cd = enemy.kind == "spitter" and 2 or 1.5
-            if enemy.kind == "miniboss" then
-                for n = 0, 4 do self:_shot(enemy.pos, offset(point(), n * TAU / 5 + self.elapsed, 100), 7, true, "enemy", self:_enemy_label(enemy), enemy.id) end
-            else
-                self:_shot(enemy.pos, point(x * 155, y * 155), 8, true, "enemy", self:_enemy_label(enemy), enemy.id)
+            enemy.shot_cd = 1.5
+            for n = 0, 4 do
+                self:_shot(enemy.pos, offset(point(), n * TAU / 5 + self.elapsed, 100), 7,
+                    true, "enemy", self:_enemy_label(enemy), enemy.id)
             end
         end
     end

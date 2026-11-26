@@ -7,6 +7,8 @@ local Genome = require "main.run.genome"
 local Heredity = require "main.run.heredity"
 local Inspector = require "main.run.build_inspector"
 local CombatStats = require "main.run.combat_stats"
+local Combat = require "main.run.combat"
+local Effects = require "main.run.effects_view"
 local Catalog = require "main.run.catalog"
 local Diagnostics = require "main.run.diagnostics"
 local Equipment = require "main.run.organism_equipment"
@@ -1828,6 +1830,41 @@ function init(self)
         app:build(1,"synergies",true)
         check_window()
         print("MICROGEN SYNERGY EFFECT CARDS READY")
+        local organ_probe=Build.new()
+        organ_probe.organs.tentacle=2
+        local organ_effect=Inspector.effect_text(organ_probe,"tentacle",1,1)
+        assert(organ_effect:find("Урон",1,true) and organ_effect:find("DPS",1,true)
+            and organ_effect:find("интервал",1,true) and organ_effect:find("щупалец 2",1,true)
+            and organ_effect:find("дальность",1,true),
+            "Organ cards must expose damage, cadence, attack count, and range")
+        local spitter_probe=setmetatable({
+            player=vmath.vector3(500,0,0), shots={},
+            _feedback=function() end,
+            _shot=function(self,origin,velocity,radius,hostile,kind,label,id)
+                self.shots[#self.shots+1]={origin=origin,velocity=velocity}
+            end,
+        },{__index=Combat})
+        local test_spitter={kind="spitter",pos=vmath.vector3(0,0,0),r=30,
+            hp=10,max_hp=10,shot_cd=0,id=7001}
+        spitter_probe:_spitter_windup(test_spitter,1/60,500)
+        assert(test_spitter.spit_windup>0 and #spitter_probe.shots==0,
+            "Spitter must telegraph before firing")
+        local beam_calls={}
+        local fake_scene={effects={},scale=1,
+            draw_combat=function(_,_,frame,position,width,height,color,angle)
+                beam_calls[#beam_calls+1]={frame=frame,position=position,width=width,height=height}
+            end}
+        test_spitter.spit_windup=.65
+        Effects.draw_spitter(fake_scene,{player=spitter_probe.player},test_spitter,1)
+        assert(#beam_calls>=1 and beam_calls[1].frame=="beam"
+            and beam_calls[1].width>beam_calls[1].height,
+            "Spitter windup must render a clear directional warning")
+        spitter_probe:_spitter_windup(test_spitter,.65,500)
+        assert(#spitter_probe.shots==1 and spitter_probe.shots[1].velocity.x>154
+            and math.abs(spitter_probe.shots[1].velocity.y)<.001
+            and test_spitter.shot_cd==2,
+            "Spitter shot must follow the telegraphed aim after its windup")
+        print("MICROGEN SPITTER TELEGRAPH READY")
         sim.build.organs.enzymes=previous_organs.enzymes
         sim.build.organs.devour=previous_organs.devour
         sim.build.organs.acid=previous_organs.acid

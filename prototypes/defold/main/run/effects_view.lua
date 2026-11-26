@@ -281,6 +281,25 @@ function Effects.draw_shot(scene, shot)
     scene:draw_combat(scene.effects, "projectile", offset(shot.pos, angle, -5.1), 17, 7, rgb(color, 0.95), angle)
 end
 
+function Effects.draw_spitter(scene, sim, enemy, time)
+    local windup = enemy.spit_windup or 0
+    if windup <= 0 then return end
+    local charge = 1 - clamp(windup / 0.65)
+    local angle = enemy.spit_angle or 0
+    local aim = sim.player
+    local dx, dy = aim.x - enemy.pos.x, aim.y - enemy.pos.y
+    local distance = math.sqrt(dx * dx + dy * dy)
+    local length = min(520, distance)
+    local root = offset(enemy.pos, angle, enemy.r * 0.8)
+    local tip = offset(enemy.pos, angle, length)
+    local pulse = 0.5 + 0.5 * sin(time * 18)
+    filament(scene, "beam", root, tip, 8 + charge * 5, "d8ef8b", 0.38 + charge * 0.42)
+    wave(scene, "ring", enemy.pos, enemy.r * (0.75 + pulse * 0.12), "d8ef8b",
+        0.26 + charge * 0.30, time * 0.4)
+    wave(scene, "plume", root, enemy.r * (0.18 + charge * 0.08), "eff7ad",
+        0.30 + charge * 0.35, angle)
+end
+
 function Effects.draw_boss(scene, sim, boss, time)
     if (boss.boss_windup or 0) > 0 then
         local attack = sim:boss_attack()
