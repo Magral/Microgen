@@ -258,7 +258,9 @@ local function run(seed, branch, horizon_seconds)
         seed, branch, sim.elapsed, sim.stage_index, sim.level, sim.kills, sim.hp,
         sim.combat_stats.damage_taken, first_hit or "none", cause, source_summary, toxin_source_summary,
         sim.outcome == "" and "alive" or sim.outcome, steps, max_enemies, max_fields, max_remains))
-    return { alive = sim.outcome == "", seconds = sim.elapsed, hp = sim.hp }
+    local result = { alive = sim.outcome == "", seconds = sim.elapsed, hp = sim.hp }
+    collectgarbage("collect")
+    return result
 end
 
 local function validate_resident_start_safety()
