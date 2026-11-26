@@ -245,9 +245,13 @@ local function run(seed, scenario, horizon_seconds)
     if track_enzyme then
         local original=sim._apply_enzymes
         sim._apply_enzymes=function(self,enemy,duration)
+            local active=Util.index(self.build:active_synergies(),"enzyme_target")~=nil
+            local marked=self:is_chemoreceptor_marked(enemy)
             local before=enemy.enzyme_time or 0
             original(self,enemy,duration)
-            if (enemy.enzyme_time or 0)>before then synergy_triggers.enzyme_target=synergy_triggers.enzyme_target+1 end
+            if active and marked and (enemy.enzyme_time or 0)>before then
+                synergy_triggers.enzyme_target=synergy_triggers.enzyme_target+1
+            end
         end
     end
     if track_shell then
