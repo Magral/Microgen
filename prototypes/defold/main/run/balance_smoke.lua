@@ -360,7 +360,39 @@ local function validate_colony_coverage()
     print("MICROGEN COLONY COVERAGE READY")
 end
 
+local function validate_toxin_overlap()
+    local sim = Simulation.new(147, nil, nil, "colony")
+    sim.world.colonies = {}
+    local p = sim.player
+    local hits = {}
+    sim.hurt_player = function(_, amount, source)
+        hits[#hits + 1] = { amount = amount, id = source.id }
+    end
+    sim:_field(p, 48, 6, 2.8, "enemy_toxin", true, "Токсин", 101)
+    sim:_field(p, 48, 8, 2.8, "enemy_toxin", true, "Токсин", 101)
+    sim:_field({ x = p.x + 1000, y = p.y }, 48, 100, 2.8, "enemy_toxin", true, "Дальний токсин", 101)
+    sim:_field(p, 48, 6, 2.8, "enemy_toxin", true, "Другой токсин", 102)
+    sim:_field(p, 48, 4, 2.8, "enemy_toxin", true, "Старое поле")
+    sim:_field(p, 48, 4, 2.8, "enemy_toxin", true, "Старое поле")
+    sim:_update_fields(0.25)
+    local totals, counts = {}, {}
+    for _, hit in ipairs(hits) do
+        local id = hit.id or 0
+        totals[id] = (totals[id] or 0) + hit.amount
+        counts[id] = (counts[id] or 0) + 1
+    end
+    assert(counts[101] == 1 and totals[101] == 2, "Same-source overlap must use only the strongest local field")
+    assert(counts[102] == 1 and totals[102] == 1.5, "Independent hostile sources must retain their damage")
+    assert(counts[0] == 2 and totals[0] == 2, "Legacy unidentified fields must remain independent")
+    sim.world.colonies = {{ pos = p }}
+    hits = {}
+    sim:_update_fields(0.25)
+    assert(#hits == 0, "Safe zones must still protect against hostile fields")
+    print("MICROGEN TOXIN OVERLAP READY")
+end
+
 function M.run()
+    validate_toxin_overlap()
     validate_colony_coverage()
     validate_contact_balance()
     validate_resident_start_safety()

@@ -201,6 +201,7 @@ jobs:
                 test "$(grep -c "MICROGEN BALANCE SUMMARY" "$log")" -eq 3
                 grep -Fq "MICROGEN CONTACT BALANCE READY" "$log"
                 grep -Fq "MICROGEN COLONY COVERAGE READY" "$log"
+                grep -Fq "MICROGEN TOXIN OVERLAP READY" "$log"
                 grep -F "MICROGEN BALANCE RUN" "$log"
                 grep -F "MICROGEN BALANCE SUMMARY" "$log"
               fi

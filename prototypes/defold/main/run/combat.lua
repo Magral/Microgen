@@ -717,11 +717,27 @@ function Combat:_update_fields(dt)
     -- A mantle pulse may append a field while an enemy field hurts the player.
     -- Keep original references so a capacity eviction cannot shift loop indices.
     for i = 1, #fields do pending[i] = fields[i] end
+    -- Один противник не суммирует урон собственных перекрывающихся облаков.
+    -- Независимые источники и старые поля без идентификатора сохраняют прежнее поведение.
+    local strongest = {}
+    local function covers_player(field)
+        return distance_squared(field.pos, self.player) < (field.r + self:body_radius() * 0.65)^2
+    end
+    if not safe then
+        for i = #pending, 1, -1 do
+            local field = pending[i]
+            local id = field.actor_id
+            if field.hostile and id and id ~= 0 and covers_player(field) then
+                if not strongest[id] or field.damage > strongest[id].damage then strongest[id] = field end
+            end
+        end
+    end
     for i = #pending, 1, -1 do
         local field = pending[i]
         field.life = field.life - dt
         if field.hostile then
-            if not safe and distance_squared(field.pos, self.player) < (field.r + self:body_radius() * 0.65)^2 then
+            local id = field.actor_id
+            if not safe and covers_player(field) and (not id or id == 0 or strongest[id] == field) then
                 self:hurt_player(field.damage * dt, {
                     kind = "toxin", name = field.actor_name or (field.kind == "enemy_spore" and "Вражеские споры" or "Ядовитое облако"),
                     pos = field.pos, id = field.actor_id,
