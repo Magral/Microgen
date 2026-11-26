@@ -255,7 +255,7 @@ function Interface:cards(items,row_y,callback,set_color,preview)
                 state_color=color("e5cc82")
             end
             self:fit_text(x-width/2+63,row_y-291,item.extra,.76,state_color,width-112,72)
-        else
+        elseif not item.service then
             local passive=self:surface(x,row_y-291,width-52,72,"button")
             gui.set_color(passive,vmath.vector4(.35,.70,.71,.20))
             self:text(x,row_y-291,"ПАССИВНЫЙ ЭФФЕКТ",.78,DIM,nil,true)

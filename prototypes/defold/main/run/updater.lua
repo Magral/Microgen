@@ -2,7 +2,7 @@ local Updater = {}
 Updater.__index = Updater
 
 local REPO = "https://github.com/Magral/Microgen"
-local RELEASES = "https://api.github.com/repos/Magral/Microgen/releases?per_page=50"
+local RELEASES = "https://api.github.com/repos/Magral/Microgen/releases"
 
 local function version(value)
     if type(value) ~= "string" then return end
@@ -20,11 +20,15 @@ end
 function Updater.select(releases, installed)
     local current = version(installed)
     if type(releases) ~= "table" or not current then return end
-    local best
+    local best, newest
     for _, release in ipairs(releases) do
         local tag = type(release) == "table" and release.tag_name
         local label = type(tag) == "string" and tag:match("^defold%-(%d+%.%d+%.%d+)$")
         local candidate = version(label)
+        if candidate and release.draft == false and release.prerelease == false
+            and newer(candidate, current) then
+            if not newest or newer(candidate, newest) then newest = candidate end
+        end
         if candidate and release.draft == false and release.prerelease == false
             and newer(candidate, current) and (not best or newer(candidate, best.version))
             and type(release.assets) == "table" then
@@ -43,7 +47,7 @@ function Updater.select(releases, installed)
             end
         end
     end
-    return best
+    return best, newest ~= nil and (best == nil or newer(newest, best.version))
 end
 
 function Updater.new(installed, native, automatic, changed)
@@ -58,35 +62,60 @@ end
 
 function Updater:check()
     if self.state == "checking" or self.state == "downloading" or self.state == "verifying" or self.state == "ready" then return end
-    self.timer = 6 * 60 * 60
+    self.timer = 5 * 60
     self:set("checking")
-    http.request(RELEASES, "GET", function(_, _, result)
-        local ok, data = pcall(json.decode, result.response or "")
-        if result.status ~= 200 or not ok or type(data) ~= "table" then
-            self.timer = 15 * 60
-            self:set("error")
-            return
-        end
-        local asset = Updater.select(data, self.installed)
-        if not asset then self:set("current"); return end
+    local headers = {
+        Accept="application/vnd.github+json",
+        ["User-Agent"]="Microgen-Defold/" .. self.installed,
+        ["Cache-Control"]="no-cache",
+    }
+    local options = {timeout=20, ignore_cache=true}
+    local nonce = tostring(os.time())
+
+    local function accept(asset)
         self.asset = asset
         if not self.native then self:set("desktop"); return end
         if self.native.download(asset.url, asset.sha, asset.size) then
             self:set("downloading")
         else
-            self:set("error")
+            self:set("download_error")
         end
-    end, {
-        Accept="application/vnd.github+json",
-        ["User-Agent"]="Microgen-Defold/" .. self.installed,
-    }, nil, { timeout=20, ignore_cache=true })
+    end
+
+    local function decode(result)
+        if result.status ~= 200 then return end
+        local ok, data = pcall(json.decode, result.response or "")
+        if ok and type(data) == "table" then return data end
+    end
+
+    local request = self.request or http.request
+    request(RELEASES .. "/latest?t=" .. nonce, "GET", function(_, _, result)
+        local latest = decode(result)
+        local asset = Updater.select(latest and {latest}, self.installed)
+        if asset then return accept(asset) end
+
+        request(RELEASES .. "?per_page=50&t=" .. nonce, "GET", function(_, _, listing)
+            local releases = decode(listing)
+            if not releases then self:set("error"); return end
+            if type(releases[1]) ~= "table" then self:set("error"); return end
+            if latest then releases[#releases+1] = latest end
+            local fallback, newer_incomplete = Updater.select(releases, self.installed)
+            if fallback and not newer_incomplete then
+                accept(fallback)
+            elseif newer_incomplete then
+                self:set("incomplete")
+            else
+                self:set("current")
+            end
+        end, headers, nil, options)
+    end, headers, nil, options)
 end
 
 function Updater:install()
     local result = self.native.install()
     if result == 3 then self.needs_permission = true; self.changed()
     elseif result == 2 then self.needs_permission = false; self.changed()
-    else self:set("error") end
+    else self:set("install_error") end
 end
 
 function Updater:step(dt, safe)
@@ -94,7 +123,9 @@ function Updater:step(dt, safe)
     if self.automatic and self.timer <= 0 then self:check() end
     if self.state == "downloading" or self.state == "ready" then
         local status = self.native.status()
-        if status < 0 then self.timer = 15 * 60; self:set("error")
+        if status < 0 then
+            self.timer = 5 * 60
+            self:set(self.state == "ready" and "install_error" or "download_error")
         elseif status == 2 and self.state == "downloading" then
             self.offered = false
             self:set("ready")

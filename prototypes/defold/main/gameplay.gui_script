@@ -7,6 +7,7 @@ local Genome = require "main.run.genome"
 local Heredity = require "main.run.heredity"
 local Inspector = require "main.run.build_inspector"
 local CombatStats = require "main.run.combat_stats"
+local CombatMath = require "main.run.combat_math"
 local Combat = require "main.run.combat"
 local Effects = require "main.run.effects_view"
 local Catalog = require "main.run.catalog"
@@ -124,11 +125,41 @@ local function family_recipe(profile,form)
     return recipe
 end
 
-local function portrait(ui,x,y,radius,recipe)
+local function portrait(ui,x,y,radius,recipe,preview)
     local art=BodyArt[recipe.family+1]
-    local body=ui:image("cells","body_"..recipe.family,x,y,art[1]*radius/108,art[2]*radius/108)
-    gui.set_color(body,Interface.color(Genome.colors(recipe)[1]))
+    local frame="body_"..recipe.family
+    local facing=preview and preview.facing or 0
+    local time=preview and preview.elapsed or 0
+    local color=preview and preview:body_color() or Genome.colors(recipe)[1]
+    local body=ui:image("cells",frame,x,y,art[1]*radius/108,art[2]*radius/108)
+    local pose=Tissue.attach(ui.tissue_atlas,body,frame)
+    gui.set_rotation(body,vmath.vector3(0,0,-math.deg(facing)))
+    if pose then
+        gui.set_size(body,gui.get_size(body)*Tissue.OVERSCAN)
+        local motion=Tissue.motion(nil,0,0,0,recipe,facing)
+        local health=preview and preview.hp/math.max(1,preview.max_hp) or 1
+        Tissue.update(pose,motion,time,facing,art[1]/216,art[2]/216,0,0,0,.67,"#"..color,health)
+    else
+        gui.set_color(body,Interface.color(color))
+    end
+    if preview then
+        local anatomy=Anatomy.new(ui.group)
+        ui:remember(anatomy.node)
+        local scale=math.min(ui.horizontal_scale or 1,ui.vertical_scale or 1)
+        Anatomy.update(anatomy,preview,ui:layout_x(x),ui:layout_y(y),radius*scale,scale,pose,time)
+        for _,node in ipairs(anatomy.ribbons) do ui:remember(node) end
+    end
     return body
+end
+
+local function saved_body_color(checkpoint,recipe)
+    local pigment=checkpoint and checkpoint.tissue_pigment
+    local density=type(pigment)=="table" and pigment.density
+    if type(density)=="table" and type(density[1])=="number"
+        and type(density[2])=="number" and type(density[3])=="number" then
+        return CombatMath.pigment_color(pigment)
+    end
+    return Genome.colors(recipe)[1]
 end
 
 local HOME_SLOTS = 3
@@ -200,14 +231,11 @@ function App:show_home()
         local radius=184
         local glow=ui:image("cells","surge",708,528,540,540)
         gui.set_color(glow,vmath.vector4(.31,.91,.75,.24))
-        portrait(ui,708,528,radius,recipe)
-        local anatomy=Anatomy.new(ui.group)
-        ui:remember(anatomy.node)
-        local preview={player={x=0,y=0},player_genome=recipe,build=build,facing=0,elapsed=0,
-            enemies={},pickups={},remains={},effects={},hp=100,max_hp=100,
-            body_radius=function() return radius end,body_color=function() return Genome.colors(recipe)[1] end}
-        Anatomy.update(anatomy,preview,708,528,radius)
-        for _,node in ipairs(anatomy.ribbons) do ui:remember(node) end
+        local checkpoint=profile.checkpoint
+        local preview={player_genome=recipe,build=build,facing=checkpoint.facing or recipe.rotation,elapsed=checkpoint.elapsed or 0,
+            enemies={},pickups={},remains={},effects={},hp=checkpoint.hp or 100,max_hp=checkpoint.max_hp or 100,
+            body_color=function() return saved_body_color(checkpoint,recipe) end}
+        portrait(ui,708,528,radius,recipe,preview)
         ui:fit_text(1110,748,form.name.." амёба",1.78,ui.colors.pale,940,82)
         ui:fit_text(1110,655,form.desc,1.06,ui.colors.pale,940,80)
         local stage=profile.checkpoint.stage_index or 1
@@ -335,16 +363,12 @@ function App:new_family(slot)
         local glow=ui:image("cells","surge",x,646,342,342)
         gui.set_color(glow,vmath.vector4(accent.x,accent.y,accent.z,.16))
         local recipe=family_recipe(nil,id)
-        portrait(ui,x,645,120,recipe)
         local build=Build.new()
         build.organs[data.organ]=1
-        local anatomy=Anatomy.new(ui.group)
-        ui:remember(anatomy.node)
         local preview={player={x=0,y=0},player_genome=recipe,build=build,facing=0,elapsed=0,
             enemies={},pickups={},remains={},effects={},hp=100,max_hp=100,
             body_radius=function() return 120 end,body_color=function() return Genome.colors(recipe)[1] end}
-        Anatomy.update(anatomy,preview,ui:layout_x(x),645,120)
-        for _,node in ipairs(anatomy.ribbons) do ui:remember(node) end
+        portrait(ui,x,645,120,recipe,preview)
         ui:surface(x,439,350,42,"button")
         ui:text(x,439,string.upper(data.name).." ФОРМА",.72,accent,nil,true)
         ui:image("icons","icon_"..data.organ,x-176,377,58,58)
@@ -407,7 +431,10 @@ function App:updates()
         ready = updater.needs_permission and "Разреши установку из этого приложения в настройках Android."
             or "Версия " .. label .. " готова к установке.",
         current = "У тебя актуальная стабильная версия Defold.",
-        error = "Обновиться не удалось. Можно повторить проверку.",
+        error = "Не удалось получить список релизов GitHub. Повтори проверку.",
+        incomplete = "Новая версия найдена. Проверенный APK пока недоступен.",
+        download_error = "Не удалось загрузить или проверить APK. Повтори проверку.",
+        install_error = "Не удалось открыть установщик Android. Повтори проверку.",
         desktop = "Для Android доступна версия " .. label .. ".",
     }
     ui:text(left+33,828,"Установлена версия "..updater.installed,1)
@@ -513,28 +540,14 @@ function App:body(live)
     local recipe=live and self.sim.player_genome or family_recipe(profile,state.form)
     local build=live and self.sim.build or Build.new()
     if not live then StageRewards.apply_equipment(state,build) end
-    local color=live and self.sim:body_color() or Genome.colors(recipe)[1]
-    local facing=live and self.sim.facing or 0
-    local body=portrait(ui,1230,592,112,recipe)
-    gui.set_color(body,Interface.color(color))
-    gui.set_rotation(body,vmath.vector3(0,0,-math.deg(facing)))
-    local anatomy=Anatomy.new(ui.group)
-    ui:remember(anatomy.node)
-    local preview={player_genome=recipe,build=build,facing=facing,elapsed=1,
-        enemies={},pickups={},remains={},effects={},hp=1,max_hp=1,
-        body_radius=function() return 112 end,body_color=function() return color end}
-    Anatomy.update(anatomy,preview,1230,592,112)
+    local color=live and self.sim:body_color() or saved_body_color(profile.checkpoint,recipe)
+    local facing=live and self.sim.facing or (profile.checkpoint.facing or recipe.rotation)
+    local preview={player_genome=recipe,build=build,facing=facing,elapsed=live and self.sim.elapsed or 0,
+        enemies={},pickups={},remains={},effects={},hp=live and self.sim.hp or 1,max_hp=live and self.sim.max_hp or 1,
+        body_color=function() return color end}
+    portrait(ui,1230,592,112,recipe,preview)
     if selected then
-        local spotlight=Anatomy.new(ui.group)
-        ui:remember(spotlight.node)
         local kind=selected.kind
-        preview.build={
-            rank=function(_,id) return id==kind and build:rank(id) or 0 end,
-            quality=function(_,id) return build:quality(id) end,
-            evolved=function(_,id) return id==kind and build:evolved(id) end,
-        }
-        Anatomy.update(spotlight,preview,1230,592,112)
-        gui.set_color(spotlight.node,vmath.vector4(1.25,1.25,1.25,.78))
         ui:image("icons","icon_"..kind,1005,388,50,50)
         ui:fit_text(1048,388,name(kind),.92,ui.colors.mint,394,62)
     end
@@ -805,12 +818,12 @@ local function safe_edges()
     local window_width,window_height=window.get_size()
     local area=window.get_safe_area()
     local scene_width,scene_height=gui.get_width(),gui.get_height()
-    local _,right,top,bottom=ScreenLayout.safe_bounds(
+    local left,right,top,bottom=ScreenLayout.safe_bounds(
         window_width,window_height,scene_width,scene_height,area,42,33)
     -- The gameplay vitals panel is intentionally edge-anchored. Its own text
     -- and meters retain their 23-unit inner padding; other controls still
     -- respect the platform safe area on the right and vertically.
-    return 0,right,top,bottom
+    return 0,right,top,bottom,left
 end
 
 function App:show_run()
@@ -818,7 +831,7 @@ function App:show_run()
     gui.set_enabled(self.cover,false)
     local ui=self.hud
     ui:clear()
-    local left,right,top,bottom=safe_edges()
+    local left,right,top,bottom,safe_left=safe_edges()
     local control_x=right-144
     local color=Interface.color
     local width=720
@@ -834,8 +847,9 @@ function App:show_run()
     self.biomass=ui:text(left+23,top-250,"",.77,ui.colors.dim,width)
     self.goal=ui:text(left+23,top-279,"",.77,ui.colors.gold,width)
     self.last_damage=ui:text(left+23,top-326,"",.77,ui.colors.red,width)
-    self.metrics=ui:fit_text(left+10,bottom+16,"000 FPS · P95 ≤ 000.0 мс",.73,
-        color("a5d6ce"),math.max(240,right-360),40)
+    self.metrics=ui:fit_text(safe_left+16,bottom+32,"0000 FPS · P95 ≤ 0000.0 мс",.73,
+        color("a5d6ce"),math.max(1,math.min(550,right-safe_left-32)),48)
+    gui.set_text(self.metrics,"")
     self.hud_has_barrier=nil
     if not self.minimap then self.minimap=Minimap.new(self.sim.world) end
     ui:surface(right-442,top-97,204,194,"panel")
@@ -1304,7 +1318,7 @@ function App:level_up()
         end
         if not apply() then self:replacement(item.id,item.grade,apply,function() self:level_up() end)
         else self:accepted(before) end
-    end,function(item,x,y,radius) return draw_offer_preview(ui,sim,item,x,y,radius) end)
+    end)
     if #shaped==0 then
         ui:button(1230,530,650,97,"Получить 15 биомассы",function()
             if sim:take_level_biomass() then self:save_run();self:show_run() end
@@ -1333,7 +1347,9 @@ function App:colony(index)
         local current=sim.build:rank(id)
         local gain=Catalog.ORGANS[id] and Catalog.duplicate_rank_gain(grade) or 1
         local next_rank=current==0 and 1 or math.min(Catalog.max_rank(id),current+gain)
-        local detail=id=="heal" and "Восстанавливает здоровье" or Catalog.effect_text(id,next_rank)
+        local heal=id=="heal"
+        local detail=heal and ("Восстанавливает до %d HP сразу"):format(Simulation.COLONY_HEAL)
+            or Catalog.effect_text(id,next_rank)
         detail=detail..("\nЦена · %d биомассы"):format(entry.price)
         local synergy_hints,synergy_ready={},false
         local active_synergies={}
@@ -1353,17 +1369,17 @@ function App:colony(index)
         local synergy_hint=#synergy_hints>0 and table.concat(synergy_hints,"\n") or nil
         local synergy_color=synergy_ready and ui.colors.mint or ui.colors.dim
         items[#items+1]={title=id=="heal" and "Восстановление" or name(id),id=id,
-            index=stock_index,grade=grade,action=entry.sold and "Куплено" or (current>0 and "Усилить" or "Встроить"),
-            meta=current==0 and "НОВЫЙ ОРГАН · РАНГ 1" or ("РАНГ %d → %d"):format(current,next_rank),
+            index=stock_index,grade=grade,action=entry.sold and "Куплено" or (heal and "Лечиться" or current>0 and "Усилить" or "Встроить"),
+            meta=heal and "ЛЕЧЕНИЕ" or current==0 and "НОВЫЙ ОРГАН · РАНГ 1" or ("РАНГ %d → %d"):format(current,next_rank),
             detail=detail,extra=synergy_hint,extra_color=synergy_color,sold=entry.sold,
-            image_atlas=id=="heal" and "collectibles" or nil,image_frame=id=="heal" and "heal" or nil}
+            service=heal}
     end
     Panels.offer_cards(ui,items,552,function(item)
         if item.sold then return end
         local ok=sim:buy_colony(index,item.data.index,nil,function(...) return self:award(...) end)
         if ok then self:save_run();self:colony(index)
         else self:notice("Покупка недоступна") end
-    end,function(item,x,y,radius) return draw_offer_preview(ui,sim,item,x,y,radius*.42) end)
+    end)
 end
 
 function App:reward(skip_animation)
@@ -1408,7 +1424,7 @@ function App:reward(skip_animation)
         end
         if not apply() then self:notice("Награда недоступна")
         else self:accepted(before) end
-    end,function(item,x,y,radius) return draw_offer_preview(ui,sim,item,x,y,radius*.42) end)
+    end)
 end
 
 function App:stage_transition()
@@ -1514,15 +1530,10 @@ function App:finish()
     local color=sim:body_color()
     local glow=ui:image("cells","surge",692,604,430,430)
     gui.set_color(glow,sim.outcome=="victory" and vmath.vector4(.88,.70,.30,.20) or vmath.vector4(.28,.78,.83,.18))
-    local body=portrait(ui,692,594,154,recipe)
-    gui.set_color(body,Interface.color(color))
-    local anatomy=Anatomy.new(ui.group)
-    ui:remember(anatomy.node)
     local preview={player_genome=recipe,build=sim.build,facing=sim.facing,elapsed=sim.elapsed,
         enemies={},pickups={},remains={},effects={},hp=math.max(0,sim.hp),max_hp=sim.max_hp,
         body_radius=function() return 154 end,body_color=function() return color end}
-    Anatomy.update(anatomy,preview,ui:layout_x(692),594,154)
-    for _,node in ipairs(anatomy.ribbons) do ui:remember(node) end
+    portrait(ui,692,594,154,recipe,preview)
     local stats=sim.combat_stats or {}
     local kills=0
     for _,count in pairs(stats.kills_by_source or {}) do kills=kills+count end
@@ -1628,6 +1639,7 @@ function init(self)
     app.hud=Interface.new()
     app.hud.group="hud"
     app.modal=Interface.new()
+    app.modal.tissue_atlas=app.scene.atlas
     app.fixed=Interface.new()
     app.fixed.group="feedback"
     app.toast=app.fixed:text(82,145,"",.81,app.fixed.colors.pale,1510)
@@ -1800,7 +1812,12 @@ function init(self)
         app:inventory(1,true);check_window()
         app:stock_sources(true);check_window()
         app:pause();check_window()
+        local prior_stock=sim.world.colonies[1].stock
+        sim.world.colonies[1].stock={{id="acid",price=24},{id="enzymes",price=22},{id="heal",price=12}}
         app:colony(1);check_window()
+        assert(gui.get_text(app.modal.buttons[4].text)=="Лечиться",
+            "Colony healing must use a dedicated purchase action")
+        sim.world.colonies[1].stock=prior_stock
         app:show_run()
         sim.level,sim.pending_levels=10,1
         sim.build.biomass=108
@@ -1883,6 +1900,27 @@ function init(self)
             and update.sha==string.rep("a",64)
             and update.url=="https://github.com/Magral/Microgen/releases/download/defold-1.5.10/Microgen-Defold-1.5.10.apk",
             "Auto-update must select the verified stable APK newer than 1.5.9")
+        local current=update_fixture("1.5.9",false)
+        local next_release=update_fixture("1.5.10",false)
+        local checked=Updater.new("1.5.9",nil,false,function() end)
+        local requests=0
+        checked.request=function(url, method, callback)
+            requests=requests+1
+            if requests==1 then
+                assert(url:find("/latest?t=",1,true))
+                callback(nil,nil,{status=200,response=json.encode(current)})
+            else
+                assert(url:find("?per_page=50&t=",1,true))
+                callback(nil,nil,{status=200,response=json.encode({current,next_release})})
+            end
+        end
+        checked:check()
+        assert(requests==2 and checked.state=="desktop" and checked.asset.label=="1.5.10",
+            "A stale latest response must fall back to the release list")
+        next_release.assets[1].digest=nil
+        requests=0
+        checked:check()
+        assert(checked.state=="incomplete","A newer release without a verified APK must not report current")
         print("MICROGEN UPDATE PATH READY")
         sim.build.organs.enzymes=previous_organs.enzymes
         sim.build.organs.devour=previous_organs.devour

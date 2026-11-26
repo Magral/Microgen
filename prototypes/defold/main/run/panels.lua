@@ -382,13 +382,13 @@ function Panels.offer_cards(ui,choices,y,choose,preview)
             elseif choice.kind=="evolution" then display="Эволюция · "..display
             elseif choice.kind=="temporary" then display="Временная мутация · "..display end
             local icon=(Catalog.ORGANS[id] or Catalog.ADAPTATIONS[id]
-                or Catalog.TEMP_MUTATIONS[id] or Catalog.EVOLUTIONS[id]) and id or nil
+                or Catalog.EVOLUTIONS[id]) and id or (Catalog.TEMP_MUTATIONS[id] or {}).organ
             local image_atlas,image_frame
             if choice.kind=="biomass" then image_atlas,image_frame="collectibles","bio"
             elseif id=="heal" then image_atlas,image_frame="collectibles","heal" end
             items[#items+1] = {id=id,grade=choice.grade or choice.quality or 0,
                 title=choice.title or display, icon=icon,image_atlas=image_atlas,image_frame=image_frame,
-                rank=choice.rank, detail=detail, meta=choice.meta, rarity=choice.rarity or Rewards.quality_name(choice.grade or choice.quality or 0),
+                rank=choice.rank, detail=detail, meta=choice.meta, rarity=not choice.service and (choice.rarity or Rewards.quality_name(choice.grade or choice.quality or 0)), service=choice.service,
                 extra=choice.extra, extra_color=choice.extra_color, action=choice.action, sold=choice.sold, data=choice}
         end
     end

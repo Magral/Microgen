@@ -998,13 +998,15 @@ function Simulation:_apply_award(id, replace_id, grade, award)
     return self.build:apply(id, replace_id, grade)
 end
 
+Simulation.COLONY_HEAL = 40
+
 function Simulation:buy_colony(index, stock_index, replace_id, award)
     local colony = self.world.colonies[index]
     local item = colony and colony.stock[stock_index]
     if self:nearby_colony() ~= index or not item or item.sold or self.build.biomass < item.price then return false end
     if item.id == "heal" then
         if self.hp >= self.max_hp then return false end
-        self:heal_player(40)
+        self:heal_player(Simulation.COLONY_HEAL)
     elseif not self:_apply_award(item.id, replace_id, item.quality or 0, award) then
         return false
     end
