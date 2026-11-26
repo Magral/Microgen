@@ -88,7 +88,8 @@ local function entries(section)
         if section=="synergies" then detail=title(data.needs[1]).." + "..title(data.needs[2])
         elseif section=="evolutions" then detail=title(id).." 6/6 + "..title(data.passive).." 3/3"
         elseif section=="organs" or section=="adaptations" then detail=Catalog.effect_text(id,1) end
-        rows[#rows+1]={id=id,icon=(Catalog.ORGANS[id] or Catalog.ADAPTATIONS[id]) and id or nil,
+        local item=Catalog.item(id)
+        rows[#rows+1]={id=id,icon=(Catalog.ORGANS[id] or Catalog.ADAPTATIONS[id]) and (item.icon or id) or nil,
             organ=section=="temporary" and data.organ or id,title=data.name,
             detail=detail,desc=data.desc or data.summary or detail}
     end
@@ -119,7 +120,8 @@ function Panels.catalog(app,section,page,leave,selected)
         app.close_current=close
         local left=ui:panel(entry.title,entry.detail,close,1545)
         if Catalog.ORGANS[entry.organ] or Catalog.ADAPTATIONS[entry.organ] then
-            ui:image("icons","icon_"..entry.organ,left+193,600,244,244)
+            local icon=Catalog.item(entry.organ).icon or entry.organ
+            ui:image("icons","icon_"..icon,left+193,600,244,244)
         end
         ui:text(left+361,638,entry.desc,1.02,ui.colors.pale,1110)
         ui:button(1230,206,1480,75,"Назад",close)
@@ -381,8 +383,9 @@ function Panels.offer_cards(ui,choices,y,choose,preview)
             if choice.kind=="biomass" then display,detail="Биомасса","+"..choice.amount
             elseif choice.kind=="evolution" then display="Эволюция · "..display
             elseif choice.kind=="temporary" then display="Временная мутация · "..display end
+            local item=Catalog.item(id)
             local icon=(Catalog.ORGANS[id] or Catalog.ADAPTATIONS[id]
-                or Catalog.EVOLUTIONS[id]) and id or (Catalog.TEMP_MUTATIONS[id] or {}).organ
+                or Catalog.EVOLUTIONS[id]) and (item.icon or id) or (Catalog.TEMP_MUTATIONS[id] or {}).organ
             local image_atlas,image_frame
             if choice.kind=="biomass" then image_atlas,image_frame="collectibles","bio"
             elseif id=="heal" then image_atlas,image_frame="collectibles","heal" end

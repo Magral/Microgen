@@ -527,7 +527,7 @@ function App:body(live)
             self.body_synergy_page=1
             self:body(live)
         end,current)
-        ui:image("icons","icon_"..part.kind,organs_x-245,y,55,55)
+        ui:image("icons","icon_"..(Catalog.item(part.kind).icon or part.kind),organs_x-245,y,55,55)
         ui:fit_text(organs_x-204,y,name(part.kind),1,current and Interface.color("09272c") or ui.colors.pale,390,57)
         ui:text(organs_x+245,y,tostring(part.rank),1.03,current and Interface.color("09272c") or ui.colors.mint,nil,true)
     end
@@ -715,7 +715,7 @@ function App:equipment(organ,location,page,live,target,return_to,tab)
         end
         choose(1)
     end
-    ui:image("icons","icon_"..organ.kind,left+183,613,255,255)
+    ui:image("icons","icon_"..(Catalog.item(organ.kind).icon or organ.kind),left+183,613,255,255)
     local locations={equipped="В теле",stock="В запасе",reserve="В архиве"}
     ui:text(left+365,825,part_caption(organ).." · "..locations[location],.95,ui.colors.mint)
     for i,item in ipairs({{"Показатели","stats"},{"Синергии","synergies"},{"Рост","growth"},{"Специализация","specialization"}}) do
