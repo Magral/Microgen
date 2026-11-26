@@ -518,6 +518,7 @@ local function validate_form_specialization_data()
     archived_state.legacy.research = {"toxic"}
     archived_state.legacy.selected_form = "toxic"
     local old_with_archive = Util.copy(old_profile)
+    old_with_archive.checkpoint.family_id = "family-2"
     old_with_archive.families = {
         version = 1, active = "family-2", next_id = 3,
         items = {
@@ -526,7 +527,8 @@ local function validate_form_specialization_data()
         },
     }
     local migrated_archive = SaveStore.normalize_profile(old_with_archive)
-    assert(migrated_archive and Util.index(migrated_archive.families.items[1].state.unlocked, "osmotic_vacuole"),
+    assert(migrated_archive, "Archived family profile must remain valid after migration")
+    assert(Util.index(migrated_archive.families.items[1].state.unlocked, "osmotic_vacuole"),
         "Archived family migration must restore the signature organ from its saved research")
 
     local fresh = SaveStore.defaults()
