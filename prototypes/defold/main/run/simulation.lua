@@ -391,7 +391,7 @@ end
 function Simulation:_update_ecology()
     for _, resident in ipairs(self.residents) do
         if not resident.dead and not resident.active and #self.enemies < ENEMY_CAP and distance_squared(self.player, resident.pos) <= 650^2
-            and (self.elapsed >= 8 or self:_touches(resident.pos, resident.r)) then
+            and self.elapsed >= 8 then
             local enemy = self:spawn_enemy(resident.pos, "hunter")
             enemy.id, enemy.resident_id, enemy.r = resident.id, resident.id, resident.r
             enemy.hp, enemy.max_hp, enemy.genome, enemy.speed = resident.hp, resident.max_hp, copy(resident.genome), 23
