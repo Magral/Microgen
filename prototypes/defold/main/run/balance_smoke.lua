@@ -1,5 +1,6 @@
 local Simulation = require "main.run.simulation"
 local Catalog = require "main.run.catalog"
+local Size = require "main.run.size_rules"
 
 local M = {}
 local STEP = 1 / 60
@@ -322,7 +323,26 @@ local function validate_combat_checkpoint()
     print("MICROGEN COMBAT CHECKPOINT READY")
 end
 
+local function validate_contact_balance()
+    local sim = Simulation.new(147, nil, nil, "colony")
+    local function impact(ratio, elite)
+        local rules = Size.profile(100, 100 * ratio, 1, 0, 0, false)
+        return sim:contact_impact(rules, elite), rules.impact
+    end
+    local small, original_small = impact(1.2, false)
+    local medium, original_medium = impact(1.8, false)
+    local large, original_large = impact(2.4, false)
+    local elite, original_elite = impact(2.4, true)
+    assert(small == original_small, "Small contact damage must remain unchanged")
+    assert(medium < original_medium and medium > small, "Large contact damage must scale smoothly")
+    assert(math.abs(large - original_large * 0.75) < 0.00001 and large > medium,
+        "Largest ordinary amoebas must deal 25 percent less contact damage")
+    assert(math.abs(elite - original_elite * 1.2) < 0.00001, "Elite contact damage must remain unchanged")
+    print("MICROGEN CONTACT BALANCE READY")
+end
+
 function M.run()
+    validate_contact_balance()
     validate_resident_start_safety()
     validate_combat_checkpoint()
     for _, scenario in ipairs(BRANCHES) do

@@ -26,6 +26,13 @@ function Combat:boss_attack(index, seed)
     return PATTERNS[(seed + index) % #PATTERNS + 1]
 end
 
+-- Крупные обычные амёбы оставляют больше времени для выхода из контакта.
+-- Урон мини-боссов и боссов сохраняет исходный множитель.
+function Combat:contact_impact(rules, elite)
+    if elite then return rules.impact * 1.2 end
+    return rules.impact * (1 - 0.25 * Size.smoothstep(1.25, 2.4, rules.ratio))
+end
+
 function Combat:_enemy_label(enemy)
     if enemy.kind == "boss" then return enemy.title or "Архицит" end
     if enemy.kind == "miniboss" then return enemy.title or "Минибосс" end
@@ -367,7 +374,7 @@ function Combat:_update_enemy(i, dt, radius, safe)
     end
     if distance < enemy.r + radius * 0.75 and rules.impact > 0 and self.invuln <= 0 and not safe
         and not self:_can_be_absorbed(enemy, radius) then
-        self:hurt_player(rules.impact * (elite and 1.2 or 1), { kind = "collision", name = self:_enemy_label(enemy), pos = enemy.pos, id = enemy.id })
+        self:hurt_player(self:contact_impact(rules, elite), { kind = "collision", name = self:_enemy_label(enemy), pos = enemy.pos, id = enemy.id })
         self.invuln, enemy.impulse = 0.65, point(-x * 24, -y * 24)
         self:_effect("hurt", self.player, 45, 0.3)
     end
