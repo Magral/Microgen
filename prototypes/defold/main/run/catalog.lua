@@ -62,7 +62,7 @@ M.FORM_SPECIALIZATIONS = {
             damage_multiplier = 1.25, absorb_refund = 2, minimum_cooldown = 10,
         },
         passive = {
-            id = "feast", name = "Пиршество", heal_fraction = 0.03,
+            id = "feast", name = "Пиршество", desc = "Поглощение: +3% макс. HP (до 4), раз в 5 с.", heal_fraction = 0.03,
             heal_cap = 4, cooldown = 5,
         },
         evolution = {
@@ -79,7 +79,7 @@ M.FORM_SPECIALIZATIONS = {
             fields_do_not_stack = true,
         },
         passive = {
-            id = "toxic_regulation", name = "Токсикорегуляция",
+            id = "toxic_regulation", name = "Токсикорегуляция", desc = "Контактный урон от отравленных врагов −8%, от боссов −4%.",
             enemy_contact_reduction = 0.08, boss_contact_reduction = 0.04,
         },
         evolution = {
@@ -95,7 +95,7 @@ M.FORM_SPECIALIZATIONS = {
             radius = 260, clone_damage_multiplier = 0.40, maximum_clone_hit_equivalents = 2,
         },
         passive = {
-            id = "shared_membrane", name = "Общая мембрана",
+            id = "shared_membrane", name = "Общая мембрана", desc = "Защита +1,2% за копию, до 6%; с бронёй до 60%.",
             reduction_per_clone = 0.012, maximum_clones = 5, maximum_reduction = 0.06,
         },
         evolution = {

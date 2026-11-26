@@ -343,7 +343,9 @@ function Simulation:enter_next_stage(prepared_world)
     self.player, self.previous_player, self.player_velocity = self.world.start, self.world.start, point()
     self.last_damage, self._danger_at = {}, -10
     self.enemies, self.remains, self.fields, self.shots, self.effects, self.damage_markers = {}, {}, {}, {}, {}, {}
+    local feast_cd = self.cooldowns.form_feast
     self.cooldowns, self.explored, self.events, self.current_offers, self.offer_quality = {}, {}, {}, {}, {}
+    self.cooldowns.form_feast = feast_cd
     self.digesting_id, self.boss_spawned, self.boss_marker = -1, false, point()
     self.minibosses_spawned, self.minibosses_defeated = 0, 0
     self.stage_transition, self.boss_reward, self.boss_breakup = false, {}, {}
@@ -606,6 +608,7 @@ function Simulation:_assimilate(recipe, amount, pos, pigment)
     self.tissue_pigment.mass = min(80, self.tissue_pigment.mass)
     self:_feedback("absorb", self.player)
     self:_effect("assimilate", self.player, 36, 1.1, { ["end"] = pos, color = V.pigment_color(pigment) })
+    self:_feast()
 end
 
 function Simulation:_infected_meal()

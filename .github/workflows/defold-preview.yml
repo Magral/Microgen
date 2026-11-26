@@ -203,6 +203,8 @@ jobs:
                 grep -Fq "MICROGEN COLONY COVERAGE READY" "$log"
                 grep -Fq "MICROGEN TOXIN OVERLAP READY" "$log"
                 grep -Fq "MICROGEN SAVE RECOVERY READY" "$log"
+                grep -Fq "MICROGEN FORM SPECIALIZATION DATA READY" "$log"
+                grep -Fq "MICROGEN FORM PASSIVES READY" "$log"
                 grep -Fq "MICROGEN ENEMY MARKERS READY" "$log"
                 grep -F "MICROGEN BALANCE RUN" "$log"
                 grep -F "MICROGEN BALANCE SUMMARY" "$log"

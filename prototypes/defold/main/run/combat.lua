@@ -91,13 +91,64 @@ function Combat:barrier_capacity()
     return rank > 0 and Catalog.scaled_damage(8 + rank * 6, rank) * self.build:power("barrier") or 0
 end
 
+-- Форма определяется стартовым комплектом, а не веткой предложений или органами.
+function Combat:form_passive()
+    return Catalog.form_specialization(self.run_loadout.form).passive or {}
+end
+
+function Combat:_feast()
+    local passive = self:form_passive()
+    if passive.id ~= "feast" or self.hp <= 0 or self.hp >= self.max_hp
+        or not self:_ready("form_feast") then return end
+    self.cooldowns.form_feast = passive.cooldown
+    self:heal_player(min(self.max_hp * passive.heal_fraction, passive.heal_cap))
+end
+
+-- Проверяем только действующий яд игрока, а не собственные ядовитые признаки
+-- врага, вражеские облака или истёкшие поля. Ферменты сами по себе не яд.
+function Combat:_player_poisoned(enemy)
+    if not enemy or enemy.hp <= 0 or enemy.captured then return false end
+    if (enemy.infect or 0) > 0 then return true end
+    local rank = self.build:rank("acid")
+    if rank > 0 then
+        local reach = (75 + rank * 9) * self.build:specialization_value("acid", "radius_mult") * self:ability_scale()
+        if distance_squared(self.player, enemy.pos) < self:_attack_reach(enemy, reach)^2 then return true end
+    end
+    for _, field in ipairs(self.fields) do
+        if not field.hostile and field.life > 0 and field.damage > 0
+            and (field.kind == "poison" or field.kind == "spore" or field.kind == "mantle" or field.kind == "acid_arc")
+            and distance_squared(field.pos, enemy.pos) < (field.r + enemy.r * 0.5)^2 then
+            return true
+        end
+    end
+    return false
+end
+
+function Combat:active_clone_count()
+    local rank = self.build:rank("division")
+    if rank <= 0 then return 0 end
+    return min(6, Catalog.clone_count(rank) + self.build:specialization_bonus("division", "clone_bonus"))
+end
+
+function Combat:damage_reduction(source)
+    local passive = self:form_passive()
+    local bonus = 0
+    if passive.id == "toxic_regulation" and source.kind == "collision" and self:_player_poisoned(source.enemy) then
+        local kind = source.enemy.kind
+        bonus = (kind == "boss" or kind == "miniboss") and passive.boss_contact_reduction or passive.enemy_contact_reduction
+    elseif passive.id == "shared_membrane" then
+        bonus = min(passive.maximum_reduction, min(passive.maximum_clones, self:active_clone_count()) * passive.reduction_per_clone)
+    end
+    return min(0.60, self.build:passive("armor") + bonus)
+end
+
 function Combat:hurt_player(amount, source)
     if self.hp <= 0 then return end
     source = source or {}
     local kind, origin = source.kind or "unknown", source.pos or self.player
     local label = source.name or "Неизвестный источник"
     local incoming = max(0, amount) * (kind == "collision" and self:has_trait("elastic") and 1.08 or 1)
-    local damage = incoming * (1 - self.build:passive("armor"))
+    local damage = incoming * (1 - self:damage_reduction(source))
     if damage > 0 and self.build:rank("barrier") > 0 and self:_ready("barrier") then
         damage = max(0, damage - self:barrier_capacity())
         self.cooldowns.barrier = 8
@@ -374,7 +425,7 @@ function Combat:_update_enemy(i, dt, radius, safe)
     end
     if distance < enemy.r + radius * 0.75 and rules.impact > 0 and self.invuln <= 0 and not safe
         and not self:_can_be_absorbed(enemy, radius) then
-        self:hurt_player(self:contact_impact(rules, elite), { kind = "collision", name = self:_enemy_label(enemy), pos = enemy.pos, id = enemy.id })
+        self:hurt_player(self:contact_impact(rules, elite), { kind = "collision", name = self:_enemy_label(enemy), pos = enemy.pos, id = enemy.id, enemy = enemy })
         self.invuln, enemy.impulse = 0.65, point(-x * 24, -y * 24)
         self:_effect("hurt", self.player, 45, 0.3)
     end
@@ -546,7 +597,7 @@ end
 
 function Combat:clone_positions()
     local result = {}
-    local count = min(6, Catalog.clone_count(self.build:rank("division")) + self.build:specialization_bonus("division", "clone_bonus"))
+    local count = self:active_clone_count()
     for i = 0, count - 1 do result[#result + 1] = offset(self.player, self.elapsed * 1.6 + i * TAU / count, 105) end
     return result
 end

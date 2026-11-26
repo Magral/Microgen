@@ -617,8 +617,125 @@ local function validate_enemy_markers()
     print("MICROGEN ENEMY MARKERS READY")
 end
 
+local function validate_form_passives()
+    local function new(form, branch, traits)
+        return Simulation.new(147, nil, nil, branch or form,
+            {form = form, branch = branch or form, seed = 147, traits = traits or {}})
+    end
+    local function near(actual, expected, label)
+        assert(math.abs(actual - expected) < 0.00001, label .. ": " .. tostring(actual))
+    end
+    local function take(sim, amount, source, expected, label)
+        sim.hp = sim.max_hp
+        sim:hurt_player(amount, source)
+        near(sim.max_hp - sim.hp, expected, label)
+    end
+
+    -- Убийство не лечит; завершённое поглощение лечит в дополнение к старой пасти.
+    local predator = new("predator", "toxic")
+    predator.hp = 50
+    predator.enemies = {}
+    predator:spawn_enemy(predator.player, "prey")
+    predator:_die(1, false)
+    near(predator.hp, 50, "Kill without absorption must not heal")
+    predator:spawn_enemy(predator.player, "prey")
+    predator:_die(1, true)
+    near(predator.hp, 53.8, "Feast plus existing mouth healing")
+    near(predator.cooldowns.form_feast, 5, "Feast cooldown")
+    predator:spawn_enemy(predator.player, "prey")
+    predator:_die(1, true)
+    near(predator.hp, 54.6, "Second absorption must not bypass cooldown")
+    predator.cooldowns.form_feast = 2.5
+    local restored = assert(Simulation.restore(predator:snapshot()))
+    near(restored.cooldowns.form_feast, 2.5, "Feast cooldown survives checkpoint")
+    restored.stage_transition, restored.pending_stage_seed = true, 171
+    assert(restored:enter_next_stage())
+    near(restored.cooldowns.form_feast, 2.5, "Stage transition must not reset feast cooldown")
+    restored.cooldowns.form_feast = 0
+    restored.max_hp, restored.hp = 200, 100
+    restored:_feast()
+    near(restored.hp, 104, "Feast capped at four HP")
+    local folds = new("predator", "predator", {"folds"})
+    folds.hp = 50
+    folds:_feast()
+    near(folds.hp, 52.7, "Feast respects inherited healing penalty")
+    folds.cooldowns.form_feast, folds.hp = 0, 99
+    folds:_feast()
+    near(folds.hp, 100, "Feast cannot exceed maximum health")
+    local legacy = predator:snapshot()
+    legacy.cooldowns.form_feast = nil
+    local old = assert(Simulation.restore(legacy))
+    assert(old:_ready("form_feast"), "Old checkpoint defaults to ready")
+
+    local toxic = new("toxic", "colony")
+    toxic.build.organs.acid = nil
+    toxic.enemies = {}
+    local enemy = assert(toxic:spawn_enemy(toxic.player, "hunter"))
+    enemy.infect = 2
+    local contact = {kind = "collision", enemy = enemy}
+    take(toxic, 10, contact, 9.2, "Toxic form infected contact")
+    enemy.kind = "boss"
+    take(toxic, 10, contact, 9.6, "Boss contact reduction")
+    enemy.kind = "miniboss"
+    take(toxic, 10, contact, 9.6, "Miniboss contact reduction")
+    enemy.kind = "hunter"
+    take(toxic, 10, {kind = "projectile", enemy = enemy}, 10, "Projectiles unaffected")
+    take(toxic, 10, {kind = "toxin", enemy = enemy}, 10, "Hostile toxins unaffected")
+    enemy.infect = 0
+    enemy.enzyme_time = 2
+    toxic.fields = {}
+    toxic:_field(enemy.pos, 48, 6, 2, "enemy_toxin", true)
+    take(toxic, 10, contact, 10, "Enemy toxin and enzymes alone do not qualify")
+    toxic:_field(enemy.pos, 48, 6, 2, "poison")
+    toxic:_field(enemy.pos, 48, 6, 2, "spore")
+    take(toxic, 10, contact, 9.2, "Overlapping player poison does not stack defense")
+    enemy.infect = 2
+    take(toxic, 10, contact, 9.2, "Infection and fields do not stack defense")
+    enemy.infect = 0
+    toxic.fields[2].life, toxic.fields[3].life = 0, 0
+    take(toxic, 10, contact, 10, "Expired player poison does not qualify")
+    toxic.build.organs.acid = 1
+    take(toxic, 10, contact, 9.2, "Active acid aura counts as player poison")
+    toxic.build.adaptations.armor = 4
+    take(toxic, 10, contact, 4.4, "Toxic defense adds to armor")
+    toxic.build.adaptations.armor = 6
+    take(toxic, 10, contact, 4, "Toxic defense obeys 60 percent cap")
+
+    local colony = new("colony", "predator")
+    local projectile = {kind = "projectile"}
+    take(colony, 10, projectile, 9.76, "Two starter copies protect")
+    colony.build.organs.division = 4
+    take(colony, 10, projectile, 9.4, "Five copies protect at six percent")
+    colony.build.specializations.division = "division_hunter_buds"
+    assert(colony:active_clone_count() == 6, "Existing specialization still grants sixth copy")
+    take(colony, 10, projectile, 9.4, "Sixth copy cannot exceed defense cap")
+    colony.build.adaptations.armor = 6
+    take(colony, 10, projectile, 4, "Colony and armor obey shared cap")
+    colony.build.adaptations.armor = nil
+    colony.build.organs.division = nil
+    assert(#colony:clone_positions() == 0, "No division means no active copies")
+    take(colony, 10, projectile, 10, "No copies means no defense")
+    colony.hp = 50
+    colony:_feast()
+    near(colony.hp, 50, "Colony cannot inherit feast from foreign mouth")
+    colony.build.organs.devour, colony.build.organs.acid = 1, 1
+    take(colony, 10, contact, 10, "Colony cannot inherit toxic regulation")
+    predator.build.organs.division = 4
+    predator.build.organs.synaptic_node = 1
+    take(predator, 10, projectile, 10, "Foreign copies and signature cannot grant colony passive")
+    toxic.hp = 50
+    toxic.build.organs.devour = 1
+    toxic:_feast()
+    near(toxic.hp, 50, "Foreign mouth cannot grant feast")
+    local unselected = Simulation.new(147, nil, nil, "colony")
+    unselected.build.organs.division = 4
+    take(unselected, 10, projectile, 10, "Legacy no-form run retains original behavior")
+    print("MICROGEN FORM PASSIVES READY")
+end
+
 function M.run()
     validate_form_specialization_data()
+    validate_form_passives()
     validate_enemy_markers()
     validate_save_recovery()
     validate_toxin_overlap()
