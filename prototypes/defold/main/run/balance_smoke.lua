@@ -1,6 +1,8 @@
 local Simulation = require "main.run.simulation"
 local Catalog = require "main.run.catalog"
 local Size = require "main.run.size_rules"
+local SaveStore = require "main.run.save_store"
+local Util = require "main.run.meta_util"
 
 local M = {}
 local STEP = 1 / 60
@@ -391,7 +393,56 @@ local function validate_toxin_overlap()
     print("MICROGEN TOXIN OVERLAP READY")
 end
 
+local function validate_save_recovery()
+    -- Изолированный backend: настоящие файлы профиля игрока не затрагиваются.
+    local records, fail_write = {}, false
+    local backend = {
+        get_save_file = function(_, filename) return filename end,
+        load = function(path) return Util.copy(records[path]) end,
+        save = function(path, record)
+            if fail_write then return false end
+            records[path] = Util.copy(record)
+            return true
+        end,
+    }
+    local store = SaveStore.new("balance_recovery", backend)
+    assert(store:create_family("Первая", "predator"), "Initial family must be saved")
+    local family = store:family_id()
+    local sim = Simulation.new(147, nil, nil, "predator", {form = "predator", branch = "predator", seed = 147})
+    sim.family_id, sim.hp, sim.elapsed = family, 62, 45
+    assert(store:save_checkpoint(sim:snapshot(), family), "Checkpoint must be committed")
+    assert(store:credit_once("test-reward", 7), "Reward must be credited once")
+    local committed = store.revision
+    fail_write = true
+    assert(not store:bank(9) and store.revision == committed and store.profile.cores == 7,
+        "Failed write must not change the committed in-memory profile")
+    fail_write = false
+    local reopened = SaveStore.new("balance_recovery", backend)
+    reopened:load_profile()
+    assert(reopened.revision == committed and reopened.profile.cores == 7,
+        "Failed write must leave the last committed profile readable")
+    assert(not reopened:credit_once("test-reward", 7) and reopened.profile.cores == 7,
+        "Reload must not duplicate a previously credited reward")
+    local restored = assert(Simulation.restore(reopened.profile.checkpoint))
+    assert(restored.family_id == family and restored.hp == 62 and restored.elapsed == 45,
+        "Reload must preserve the checkpoint and family identity")
+    -- Повреждаем только самый свежий слот и проверяем предыдущую ревизию.
+    records[reopened.paths[reopened.active_file]] = { revision = committed, profile = { version = -1 } }
+    local fallback = SaveStore.new("balance_recovery", backend)
+    fallback:load_profile()
+    assert(fallback.revision == committed - 1 and fallback:family_id() == family,
+        "Corrupted newest slot must fall back to the previous valid revision")
+    local previous = assert(Simulation.restore(fallback.profile.checkpoint))
+    assert(previous.hp == 62 and previous.elapsed == 45, "Fallback must retain the last valid checkpoint")
+    assert(fallback:create_family("Вторая", "colony"), "Second family must be saved")
+    assert(not fallback:save_checkpoint(sim:snapshot(), family), "Stale checkpoint must not overwrite another family")
+    assert(fallback:select_family(family), "Original family must remain selectable")
+    assert(fallback.profile.checkpoint.family_id == family, "Family switching must retain its own checkpoint")
+    print("MICROGEN SAVE RECOVERY READY")
+end
+
 function M.run()
+    validate_save_recovery()
     validate_toxin_overlap()
     validate_colony_coverage()
     validate_contact_balance()
