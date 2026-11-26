@@ -418,16 +418,10 @@ function Scene:draw_body(sim, actor, is_player, serial)
     end
     if not is_player and not actor.captured then
         if actor.kind=="boss" then Effects.draw_boss(self,sim,actor,phase)
-        else Effects.draw_enemy_marker(self,actor) end
+        else Effects.draw_enemy_marker(self,sim,actor,phase) end
         if actor.kind=="spitter" then Effects.draw_spitter(self,sim,actor,phase) end
         if infected then Effects.draw_infection(self,actor,phase) end
         if (actor.enzyme_time or 0)>0 then Effects.draw_infection(self,actor,phase,true) end
-        if actor.max_hp and actor.hp>0 and actor.kind and actor.kind~="boss" then
-            local interaction=sim:interaction(actor)
-            if interaction.eligible then
-                self:draw_effect(self.effects,"shield",actor.pos,radius*1.25,vmath.vector4(.47,1,.68,.52),phase*22)
-            end
-        end
     end
     return slot.pose
 end

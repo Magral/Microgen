@@ -301,13 +301,33 @@ function Effects.draw_spitter(scene, sim, enemy, time)
 end
 
 local ENEMY_MARKERS = {
-    hunter = {frame = "barb", color = "ffac79"},
     spitter = {frame = "plume", color = "e4f694"},
     miniboss = {frame = "corona", color = "ddadfb"},
 }
 
-function Effects.draw_enemy_marker(scene, actor)
-    local marker = ENEMY_MARKERS[actor.kind]
+function Effects.draw_enemy_marker(scene, sim, actor, time)
+    local kind = actor.kind
+    if kind ~= "prey" and kind ~= "hunter" and kind ~= "spitter" and kind ~= "miniboss" then return end
+    if actor.captured or not actor.hp or actor.hp <= 0 or not actor.max_hp then return end
+    local scale = max(0.01, scene.scale)
+    -- Метка использует те же ограничения, что и фактическое поглощение в бою.
+    if sim:_can_be_absorbed(actor) then
+        local radius = max(actor.r * 1.23, 25 / scale)
+        local pulse = 0.5 + 0.5 * sin(time * tau / 0.8)
+        wave(scene, "ring", actor.pos, radius, "123c35", 0.95, 0)
+        wave(scene, "ring", actor.pos, radius, "70ffbb", 0.85 + 0.15 * pulse, 0)
+        wave(scene, "ring", actor.pos, radius + (5 + 7 * pulse) / scale, "70ffbb", 0.28 + 0.18 * (1 - pulse), 0)
+        local label = point(actor.pos.x, actor.pos.y - radius - 14 / scale)
+        scene:draw_number(point(label.x + 1 / scale, label.y + 1 / scale), "ПОГЛОТИТЬ", rgb("102c26", 1), .74)
+        scene:draw_number(label, "ПОГЛОТИТЬ", rgb("a2ffcf", 1), .74)
+        return
+    end
+    -- Обычная метка охотника больше не использует абстрактный оранжевый значок.
+    if kind == "hunter" and actor.r > sim:body_radius() * 1.08 then
+        wave(scene, "ring", actor.pos, actor.r * 1.23, "ff8398", .78, 0)
+        return
+    end
+    local marker = ENEMY_MARKERS[kind]
     if not marker then return end
     local size = max(24, min(48, actor.r))
     local center = point(actor.pos.x, actor.pos.y + actor.r + size * 0.45)

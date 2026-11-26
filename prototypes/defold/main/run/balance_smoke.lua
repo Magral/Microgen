@@ -3,6 +3,7 @@ local Catalog = require "main.run.catalog"
 local Size = require "main.run.size_rules"
 local SaveStore = require "main.run.save_store"
 local Util = require "main.run.meta_util"
+local Effects = require "main.run.effects_view"
 
 local M = {}
 local STEP = 1 / 60
@@ -441,7 +442,50 @@ local function validate_save_recovery()
     print("MICROGEN SAVE RECOVERY READY")
 end
 
+local function validate_enemy_markers()
+    local sim = Simulation.new(147, nil, nil, "toxic", {form = "toxic", seed = 147})
+    local radius = sim:body_radius()
+    local frames, labels = {}, {}
+    local scene = {
+        scale = 3, effects = {},
+        draw_combat = function(_, _, frame, _, _, _, color)
+            frames[#frames + 1] = {frame = frame, color = color}
+        end,
+        draw_number = function(_, _, label) labels[#labels + 1] = label end,
+    }
+    local function inspect(kind, ratio, hp, captured)
+        frames, labels = {}, {}
+        local actor = {kind = kind, pos = {x = sim.player.x + 100, y = sim.player.y},
+            r = radius * ratio, hp = hp, max_hp = 100, captured = captured}
+        Effects.draw_enemy_marker(scene, sim, actor, 0.2)
+        local green = false
+        for _, item in ipairs(frames) do
+            assert(item.frame ~= "barb", "Hunter must never show the old orange icon")
+            if item.frame == "ring" and item.color.y > 0.9 and item.color.x < 0.6 then green = true end
+        end
+        local marked = #labels > 0 and labels[#labels] == "ПОГЛОТИТЬ"
+        assert(green == marked, "Absorption label and green ring must agree")
+        return marked, actor
+    end
+    assert(inspect("prey", 0.5, 100), "Small prey must be clearly marked")
+    assert(inspect("hunter", 1.0, 10), "Weakened edible hunter must be marked")
+    assert(not inspect("hunter", 1.0, 100), "Healthy non-edible hunter must not be marked")
+    assert(not inspect("hunter", 2.0, 1) and #frames == 1 and frames[1].frame == "ring",
+        "Oversized hunter must show threat ring, not an absorption marker")
+    assert(not inspect("miniboss", 0.5, 20), "Miniboss above 15 percent health must not be marked")
+    assert(inspect("miniboss", 0.5, 15), "Eligible weakened miniboss must be marked")
+    assert(not inspect("boss", 0.5, 1), "Boss must never have an absorption marker")
+    assert(not inspect("prey", 0.5, 0) and #frames == 0, "Dead actor must not be marked")
+    assert(not inspect("prey", 0.5, 100, true) and #frames == 0, "Captured actor must not be marked")
+    assert(not inspect("clone", 0.5, 100) and #frames == 0, "Friendly clone must not be marked")
+    assert(not inspect(nil, 0.5, 100) and #frames == 0, "Inactive resident must not be marked")
+    assert(not inspect("spitter", 1.0, 100) and #frames == 1 and frames[1].frame == "plume",
+        "Non-edible spitter must retain its distinct marker")
+    print("MICROGEN ENEMY MARKERS READY")
+end
+
 function M.run()
+    validate_enemy_markers()
     validate_save_recovery()
     validate_toxin_overlap()
     validate_colony_coverage()
