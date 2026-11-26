@@ -16,6 +16,10 @@ local PATTERNS = {
     { name = "Кислотный поток", hint = "Уйди поперёк потока", organ = "acid", count = 3, spread = 0.10, speed = 250, color = "d8ef8b" },
 }
 
+function Combat:boss_ray_angle(angle, pattern, ray)
+    return angle + (ray - (pattern.count - 1) * 0.5) * pattern.spread
+end
+
 function Combat:boss_attack(index, seed)
     seed = seed and seed >= 0 and seed or self.world.seed_value
     index = index and index > 0 and index or self.stage_index
@@ -202,7 +206,7 @@ function Combat:_boss_windup(enemy, dt)
         if enemy.boss_windup == 0 then
             local attack = self:boss_attack()
             for ray = 0, attack.count - 1 do
-                local heading = enemy.boss_angle + (ray - (attack.count - 1) * 0.5) * attack.spread
+                local heading = self:boss_ray_angle(enemy.boss_angle, attack, ray)
                 self:_shot(enemy.pos, offset(point(), heading, attack.speed), 13, true, "enemy", self:_enemy_label(enemy) .. " · " .. attack.name, enemy.id)
             end
             enemy.boss_exposed = 1.5

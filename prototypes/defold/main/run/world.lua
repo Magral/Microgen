@@ -200,6 +200,10 @@ function World:biome(x, y)
     return x > boundary and 2 or 1
 end
 
+function World:biome_name(biome)
+    return biome == 1 and "Холодная зона" or "Тёплая зона"
+end
+
 function World:condition_name(biome)
     return CONDITION_NAMES[self.conditions[biome] + 1]
 end

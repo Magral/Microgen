@@ -17,6 +17,7 @@ local NEST_BASE = vmath.vector4(.43,.25,.63,1)
 local NEST_RIM = vmath.vector4(.84,.62,1,.93)
 local NEST_BUD = vmath.vector4(.91,.66,.95,1)
 local NEST_CORE = vmath.vector4(1,.75,.54,1)
+local BIOME_TINT = {vmath.vector4(.72,.88,1,1), vmath.vector4(1,.89,.60,1)}
 local WORLD_GRAIN = 2147483647
 local TAU = 2*math.pi
 
@@ -191,7 +192,7 @@ function Scene:terrain_frame(world,col,row)
         local x,y=(col+.5)*world.tile_size,(row+.5)*world.tile_size
         local biome=world:biome(x,y)
         local phase=math.floor(grain(col,row,world.seed_value,0)*4+.5)%4
-        entry={frame=kind.."_"..(biome-1).."_"..phase,x=x,y=y,solid=solid}
+        entry={frame=kind.."_"..(biome-1).."_"..phase,x=x,y=y,solid=solid,tint=BIOME_TINT[biome]}
     else entry=false end
     self.frames[id]=entry
     return entry
@@ -210,6 +211,10 @@ function Scene:render_ground(sim)
             if entry then
                 local slot=take(entry.solid and self.walls or self.bed)
                 sprite(slot,"terrain",entry.frame)
+                if slot.tint~=entry.tint then
+                    gui.set_color(slot.node,entry.tint)
+                    slot.tint=entry.tint
+                end
                 local x,y=CX+(entry.x-self.x)*scale,CY-(entry.y-self.y)*scale
                 if slot.x~=x or slot.y~=y then
                     position(slot.node,x,y)
@@ -412,7 +417,8 @@ function Scene:draw_body(sim, actor, is_player, serial)
         gui.set_rotation(bar.node,vmath.vector3())
     end
     if not is_player and not actor.captured then
-        if actor.kind=="boss" then Effects.draw_boss(self,sim,actor,phase) end
+        if actor.kind=="boss" then Effects.draw_boss(self,sim,actor,phase)
+        else Effects.draw_enemy_marker(self,actor) end
         if actor.kind=="spitter" then Effects.draw_spitter(self,sim,actor,phase) end
         if infected then Effects.draw_infection(self,actor,phase) end
         if (actor.enzyme_time or 0)>0 then Effects.draw_infection(self,actor,phase,true) end

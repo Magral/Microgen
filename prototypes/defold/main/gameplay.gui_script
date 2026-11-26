@@ -467,6 +467,15 @@ function App:leave_body(live)
     self:show_run()
 end
 
+function App:synergy_detail(row, back)
+    self:overlay("synergy_detail")
+    self.close_current=back
+    local ui=self.modal
+    local left=ui:panel(row.name,row.status,back)
+    ui:fit_text(left+58,700,row.requirements,1.00,ui.colors.mint,1380,106)
+    ui:fit_text(left+58,525,row.description,1.10,ui.colors.pale,1380,196)
+end
+
 function App:body(live)
     self:overlay(live and "build" or "preparation")
     local profile,ui=self.store.profile,self.modal
@@ -560,7 +569,9 @@ function App:body(live)
         local row=rows[(self.body_synergy_page-1)*3+i]
         if not row then break end
         local y=678-(i-1)*104
-        ui:surface(synergies_x,y,598,94,row.related and "button" or "card")
+        ui:button(synergies_x,y,598,94,"",function()
+            self:synergy_detail(row,function() self:body(live) end)
+        end,false)
         if row.related then ui:box(synergies_x-282,y,5,66,ui.colors.mint) end
         ui:fit_text(synergies_x-263,y+22,row.name,.92,ui.colors.pale,524,38)
         ui:fit_text(synergies_x-263,y-18,row.status,.82,row.active and ui.colors.mint or Interface.color("c4aeea"),524,42)
@@ -851,6 +862,7 @@ function App:show_run()
     self.metrics=ui:fit_text(safe_left+16,bottom+32,"0000 FPS · P95 ≤ 0000.0 мс",.73,
         color("a5d6ce"),math.max(1,math.min(550,right-safe_left-32)),48)
     gui.set_text(self.metrics,"")
+    self.biome_caption=ui:text(safe_left+16,bottom+70,"",.75,ui.colors.pale,650)
     self.hud_has_barrier=nil
     if not self.minimap then self.minimap=Minimap.new(self.sim.world) end
     ui:surface(right-442,top-97,204,194,"panel")
@@ -912,6 +924,8 @@ function App:draw_hud()
             or ("Щит · восстановление %.1f с"):format(cooldown))
         gui.set_size(self.shield,vmath.vector3(math.max(.01,720*(1-math.min(1,cooldown/8))),10,0))
     end
+    local biome=sim.world:biome(sim.player.x,sim.player.y)
+    gui.set_text(self.biome_caption,sim.world:biome_name(biome).." · "..sim.world:condition_name(biome))
     self.minimap:update(sim)
     Interface.button_enabled(self.colony_label,sim:nearby_colony()>0)
     local damage=sim.last_damage or {}
@@ -1020,9 +1034,7 @@ function App:build(page,tab,live)
                 extra=data.requirements,extra_color=data.active and ui.colors.mint or ui.colors.dim,
                 detail=data.description,badge=data.active and "+" or "?",
                 color=data.active and ui.colors.mint or ui.colors.pale,action=function()
-                    self:overlay("build")
-                    local left=ui:panel(data.title,data.requirements,function() self:build(page,tab,live) end)
-                    ui:fit_text(left+64,580,data.description,1.02,ui.colors.pale,1430,520)
+                    self:synergy_detail(data,function() self:build(page,tab,live) end)
                 end}
         end
     elseif tab=="temporary" then
@@ -1290,7 +1302,8 @@ function App:level_up()
             local gain=Catalog.ORGANS[id] and Catalog.duplicate_rank_gain(grade) or 1
             local rank=current==0 and 1 or math.min(Catalog.max_rank(id),current+gain)
             local quality=({ "Обычная", "Редкая", "Эпическая", "Легендарная" })[grade+1]
-            local baseline=Catalog.effect_text(id,Catalog.effective_rank(rank))
+            local baseline=Inspector.offer_effect(sim.build,id,grade,sim:ability_scale(),sim:cooldown_factor())
+                or Catalog.effect_text(id,Catalog.effective_rank(rank))
             local rank_text=current==0 and "НОВЫЙ · РАНГ 1" or ("РАНГ %d · СТАНЕТ %d"):format(current,rank)
             local hints,synergy_ready={},false
             for _, synergy_id in ipairs(Catalog.SYNERGY_IDS) do
@@ -1847,9 +1860,14 @@ function init(self)
             "Smoke setup must cover active and inactive synergy states")
         app:build(1,"synergies",true)
         check_window()
+        app:synergy_detail(synergy_rows[1],function() app:body(true) end)
+        check_window()
         print("MICROGEN SYNERGY EFFECT CARDS READY")
         local organ_probe=Build.new()
         organ_probe.organs.tentacle=2
+        local offer_effect=Inspector.offer_effect(organ_probe,"tentacle",2,1,1)
+        assert(offer_effect and offer_effect:find(" → ",1,true) and organ_probe:stored_rank("tentacle")==2,
+            "Organ offer must compare the upgrade without changing installed organs")
         local organ_effect=Inspector.effect_text(organ_probe,"tentacle",1,1)
         assert(organ_effect:find("Урон",1,true) and organ_effect:find("DPS",1,true)
             and organ_effect:find("интервал",1,true) and organ_effect:find("щупалец 2",1,true)
@@ -1883,6 +1901,18 @@ function init(self)
             and math.abs(spitter_probe.shots[1].velocity.y)<.001
             and test_spitter.shot_cd==2,
             "Spitter shot must follow the telegraphed aim after its windup")
+        local boss_beams,boss_labels=0,{}
+        local boss_fx={
+            effects={},
+            draw_combat=function(_,_,frame)
+                if frame=="beam" then boss_beams=boss_beams+1 end
+            end,
+            draw_number=function(_,_,label) boss_labels[#boss_labels+1]=label end,
+        }
+        local boss_pattern=sim:boss_attack()
+        Effects.draw_boss(boss_fx,sim,{pos=vmath.vector3(),r=100,boss_angle=0,boss_windup=.5},1)
+        assert(boss_beams==boss_pattern.count and boss_labels[1]==boss_pattern.name
+            and boss_labels[2]==boss_pattern.hint,"Boss warning must show all firing directions and a dodge hint")
         print("MICROGEN SPITTER TELEGRAPH READY")
         local function update_fixture(version, prerelease)
             local tag="defold-"..version

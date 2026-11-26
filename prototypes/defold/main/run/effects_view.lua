@@ -300,21 +300,39 @@ function Effects.draw_spitter(scene, sim, enemy, time)
         0.30 + charge * 0.35, angle)
 end
 
+local ENEMY_MARKERS = {
+    hunter = {frame = "barb", color = "ffac79"},
+    spitter = {frame = "plume", color = "e4f694"},
+    miniboss = {frame = "corona", color = "ddadfb"},
+}
+
+function Effects.draw_enemy_marker(scene, actor)
+    local marker = ENEMY_MARKERS[actor.kind]
+    if not marker then return end
+    local size = max(24, min(48, actor.r))
+    local center = point(actor.pos.x, actor.pos.y + actor.r + size * 0.45)
+    scene:draw_combat(scene.effects, marker.frame, center, size, size, rgb(marker.color, .92), 0)
+end
+
 function Effects.draw_boss(scene, sim, boss, time)
     if (boss.boss_windup or 0) > 0 then
         local attack = sim:boss_attack()
         local charge = 1 - clamp(boss.boss_windup / 1.1)
         for ray = 0, attack.count - 1 do
-            local angle = boss.boss_angle + (ray - (attack.count - 1) * 0.5) * attack.spread
+            local angle = sim:boss_ray_angle(boss.boss_angle, attack, ray)
             local root = offset(boss.pos, angle, boss.r * 0.85)
             local tip = offset(boss.pos, angle, attack.speed * 2)
-            filament(scene, "beam", root, tip, 18 + 4 * charge, attack.color, 0.55 + charge * 0.4)
+            filament(scene, "beam", root, tip, 22 + 6 * charge, attack.color, 0.62 + charge * 0.32)
         end
+        wave(scene, "ring", boss.pos, boss.r * (1.13 - .15 * charge), attack.color, .55 + .35 * charge, 0)
+        scene:draw_number(point(boss.pos.x, boss.pos.y - boss.r - 24), attack.name, rgb(attack.color, 1), .83)
+        scene:draw_number(point(boss.pos.x, boss.pos.y - boss.r - 49), attack.hint, rgb("f8efe3", .97), .72)
     end
     if (boss.boss_exposed or 0) > 0 then
         local pulse = 0.5 + 0.5 * sin(time * 12)
         wave(scene, "skin", boss.pos, boss.r * 0.28, "80ffe6", 0.65 + pulse * 0.35, time)
         wave(scene, "membrane", boss.pos, boss.r * 0.29, "a2ffe1", 0.96, -time)
+        scene:draw_number(point(boss.pos.x, boss.pos.y - boss.r - 24), "УЯЗВИМ", rgb("a2ffe1", .98), .82)
     end
 end
 

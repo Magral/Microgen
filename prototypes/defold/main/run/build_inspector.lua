@@ -150,6 +150,21 @@ function M.effect_text(build, id, scale, tempo)
     return format("Урон %.2f; DPS %.2f; интервал %.2f с", two(damage), two(damage / interval), two(interval)) .. details
 end
 
+function M.offer_effect(build, id, quality, scale, tempo)
+    local projected = Build.new()
+    projected:from_dict(build:to_dict())
+    if not projected:apply(id, "", quality) then return nil end
+
+    local function primary(source)
+        local effect = M.effect_text(source, id, scale, tempo)
+        return effect:match("^[^;]+") or effect
+    end
+
+    local after = primary(projected)
+    if build:rank(id) == 0 then return after end
+    return primary(build) .. " → " .. after
+end
+
 function M.comparison(build, id, quality, replace_id, scale, tempo)
     replace_id = replace_id or ""
     local projected = Build.new()
