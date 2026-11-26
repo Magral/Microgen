@@ -1744,6 +1744,8 @@ function init(self)
         local reaction_facing=reaction_sim.facing
         local hit_pos={x=reaction_sim.player.x+math.cos(reaction_facing)*100,
             y=reaction_sim.player.y+math.sin(reaction_facing)*100}
+        -- Establish the renderer's pre-hit health baseline before applying damage.
+        app.scene:render(reaction_sim)
         reaction_sim:hurt_player(12,{kind="collision",name="Тестовый удар по мембране",pos=hit_pos,id=-909})
         app.scene:render(reaction_sim)
         assert(app.scene.reaction>0 and app.scene.impact_strength>.99
