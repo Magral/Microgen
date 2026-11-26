@@ -4,6 +4,7 @@ local Build = require "main.run.build_model"
 local Legacy = require "main.run.genome_legacy"
 local Size = require "main.run.size_rules"
 local SaveStore = require "main.run.save_store"
+local StageRewards = require "main.run.stage_rewards"
 local Util = require "main.run.meta_util"
 local Effects = require "main.run.effects_view"
 
@@ -16,6 +17,26 @@ local BRANCHES = {
     {form = "predator", starter = "devour"},
     {form = "toxic", starter = "acid"},
     {form = "colony", starter = "division"},
+}
+local ADVANCED_SEEDS = {147, 247, 347}
+local HYBRID_SCENARIOS = {
+    {form="predator",starter="devour",name="acid_bite",
+        seed_organs={osmotic_vacuole=2,acid=2},expected_synergies={"acid_bite"}},
+    {form="toxic",starter="acid",name="enzyme_target",
+        seed_organs={chemoreceptor_ridge=2,enzymes=2,devour=2},expected_synergies={"enzyme_target"}},
+    {form="toxic",starter="acid",name="shared_shell",
+        seed_organs={synaptic_node=2,division=3,barrier=2},expected_synergies={"shared_shell"}},
+}
+local EVOLUTION_SCENARIOS = {
+    {form="predator",starter="devour",name="apex_predator",
+        seed_organs={chemoreceptor_ridge=6,devour=3,tentacle=2},
+        seed_adaptations={magnet=3,armor=2,regen=2}},
+    {form="toxic",starter="acid",name="living_reactor",
+        seed_organs={osmotic_vacuole=6,acid=3,infection=2},
+        seed_adaptations={catalysis=3,armor=2,regen=2}},
+    {form="colony",starter="division",name="collective_mind",
+        seed_organs={synaptic_node=6,division=4,barrier=2},
+        seed_adaptations={armor=3,regen=2}},
 }
 local DIRECTIONS = {
     {1, 0}, {0.70710678, 0.70710678}, {0, 1}, {-0.70710678, 0.70710678},
@@ -185,8 +206,19 @@ local function run(seed, scenario, horizon_seconds)
     local unlocked=Catalog.base_unlocked()
     local signature=Catalog.signature_organ(branch)
     if not Util.index(unlocked,signature) then unlocked[#unlocked+1]=signature end
+    for id in pairs(scenario.seed_organs or {}) do
+        if not Util.index(unlocked,id) then unlocked[#unlocked+1]=id end
+    end
     local sim = Simulation.new(seed, unlocked, nil, branch, {form = branch, branch = branch, seed = seed})
     assert(sim.build:rank(starter) == 1, "Balance run must start with its form's organ")
+    for id,rank in pairs(scenario.seed_organs or {}) do sim.build.organs[id]=rank end
+    for id,rank in pairs(scenario.seed_adaptations or {}) do sim.build.adaptations[id]=rank end
+    sim.build._synergy_signature=nil
+    if scenario.evolve then assert(sim.build:evolve(signature),"Advanced evolution fixture must meet its requirements") end
+    if scenario.block_evolution then sim.build.evolution_candidates=function() return {} end end
+    for _,id in ipairs(scenario.expected_synergies or {}) do
+        assert(Util.index(sim.build:active_synergies(),id),"Hybrid fixture must activate "..id)
+    end
     local max_enemies, max_fields, max_remains = 0, 0, 0
     local steps, first_hit = 0, nil
     local toxin_sources = {}
@@ -214,7 +246,7 @@ local function run(seed, scenario, horizon_seconds)
 
         local move_x, move_y = direction(sim, tick)
         local health_before = sim.hp
-        if sim:form_ability_ready() and tick % 30 == 0 then
+        if scenario.use_ability ~= false and sim:form_ability_ready() and tick % 30 == 0 then
             if branch=="predator" then
                 local target=sim:_nearest(110,function(e) return not e.captured and sim:_can_be_absorbed(e) end)
                 if target then sim:activate_form_ability(target.pos.x-sim.player.x,target.pos.y-sim.player.y) end
@@ -276,12 +308,31 @@ local function run(seed, scenario, horizon_seconds)
             entry.damage, entry.hits, entry.first, entry.last or entry.first)
     end
     local toxin_source_summary = #toxin_summary > 0 and table.concat(toxin_summary, ";") or "none"
+    local marker=scenario.run_marker or "MICROGEN BALANCE RUN"
     print(string.format(
-        "MICROGEN BALANCE RUN seed=%d branch=%s starter=%s pilot=kite seconds=%.1f stage=%d level=%d kills=%d hp=%.1f damage_taken=%.1f first_hit=%s last_hit=%s damage_sources=%s toxin_sources=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d",
-        seed, branch, starter, sim.elapsed, sim.stage_index, sim.level, sim.kills, sim.hp,
-        sim.combat_stats.damage_taken, first_hit or "none", cause, source_summary, toxin_source_summary,
-        sim.outcome == "" and "alive" or sim.outcome, steps, max_enemies, max_fields, max_remains))
-    return { alive = sim.outcome == "", seconds = sim.elapsed, hp = sim.hp, level = sim.level, kills = sim.kills }
+        "%s seed=%d branch=%s starter=%s scenario=%s pilot=kite seconds=%.1f stage=%d level=%d kills=%d hp=%.1f damage_taken=%.1f first_hit=%s last_hit=%s damage_sources=%s toxin_sources=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d",
+        marker,seed,branch,starter,scenario.name or "base",sim.elapsed,sim.stage_index,sim.level,sim.kills,sim.hp,
+        sim.combat_stats.damage_taken,first_hit or "none",cause,source_summary,toxin_source_summary,
+        sim.outcome=="" and "alive" or sim.outcome,steps,max_enemies,max_fields,max_remains))
+    return {alive=sim.outcome=="",seconds=sim.elapsed,hp=sim.hp,level=sim.level,kills=sim.kills,
+        stage=sim.stage_index,damage_taken=sim.combat_stats.damage_taken}
+end
+
+local function run_batch(marker,scenario,seeds)
+    local seconds,levels,kills,damage,stages,survivors=0,0,0,0,0,0
+    for _,seed in ipairs(seeds) do
+        local config=Util.copy(scenario)
+        config.run_marker=marker
+        local result=run(seed,config)
+        seconds,levels,kills,damage,stages=seconds+result.seconds,levels+result.level,
+            kills+result.kills,damage+result.damage_taken,stages+result.stage
+        if result.alive then survivors=survivors+1 end
+        collectgarbage("collect")
+    end
+    local summary=marker:gsub(" RUN$"," SUMMARY")
+    print(string.format("%s form=%s scenario=%s maps=%d mean_seconds=%.1f mean_stage=%.2f mean_level=%.2f mean_kills=%.2f mean_damage_taken=%.1f survivors=%d",
+        summary,scenario.form,scenario.name or "base",#seeds,seconds/#seeds,stages/#seeds,
+        levels/#seeds,kills/#seeds,damage/#seeds,survivors))
 end
 
 local function validate_resident_start_safety()
@@ -951,6 +1002,26 @@ local function validate_form_evolutions_and_synergies()
         assert(sim:claim_reward(1) and sim.build:evolved(id),"Reward activates evolution")
         assert(not sim.build:evolve(id),"Evolution cannot be claimed twice")
     end
+    local function equipment_roundtrip(sim,id,adapt,form)
+        local profile=SaveStore.defaults()
+        profile.organism=nil
+        profile.legacy=Legacy.defaults()
+        profile.legacy.selected_form=form
+        profile.checkpoint={build=sim.build:to_dict()}
+        local state,err=StageRewards.capture_equipment(profile,sim.build)
+        assert(state,err or "Evolved equipment must be capturable")
+        local found=false
+        for _,part in ipairs(state.equipped) do if part.kind==id and part.evolved then found=true end end
+        assert(found,"Evolution flag must survive family equipment capture")
+        local family=Build.new()
+        family.form=form
+        family.unlocked=Util.copy(Catalog.base_unlocked())
+        StageRewards.apply_equipment(state,family)
+        assert(family:rank(id)==6 and family.stats.evolutions[id],"Family equipment must restore evolved organ")
+        assert(not family:evolved(id),"Evolution stays dormant until its passive requirement is met")
+        family.adaptations[adapt]=3
+        assert(family:evolved(id),"Restored evolution activates again when its requirement is met")
+    end
     local pred=fresh("predator")
     pred.build.branch="toxic"
     evolve(pred,"chemoreceptor_ridge","magnet")
@@ -958,6 +1029,7 @@ local function validate_form_evolutions_and_synergies()
     near(pred.build:power("chemoreceptor_ridge"),1,"No generic damage multiplier on form evolution")
     local restored=assert(Simulation.restore(pred:snapshot()))
     near(restored:form_ability().cooldown,12.5,"Evolution survives reload")
+    equipment_roundtrip(pred,"chemoreceptor_ridge","magnet","predator")
     local foreign=fresh("toxic")
     foreign.build.organs.chemoreceptor_ridge=6
     foreign.build.adaptations.magnet=3
@@ -973,6 +1045,7 @@ local function validate_form_evolutions_and_synergies()
     local e=target(toxic);e.pos=toxic.player
     toxic:_update_fields(.1)
     near(e.rupture_strength,.20,"Reactor slows actual target")
+    equipment_roundtrip(toxic,"osmotic_vacuole","catalysis","toxic")
     local colony=fresh("colony")
     evolve(colony,"synaptic_node","armor")
     colony.build.organs.division=4
@@ -980,19 +1053,34 @@ local function validate_form_evolutions_and_synergies()
     near(colony:damage_reduction({kind="projectile"}),colony.build:passive("armor")+.075,"Collective defense")
     colony.build.adaptations.armor=6
     near(colony:damage_reduction({kind="projectile"}),.60,"Armor cap")
+    equipment_roundtrip(colony,"synaptic_node","armor","colony")
     local t=target(colony)
     local dealt=0
-    colony.hit_enemy=function(_,_,amount,source) assert(source=="division");dealt=dealt+amount;return amount end
+    colony.hit_enemy=function(_,_,amount,source,limit)
+        assert(source=="division")
+        local actual=math.min(amount,limit or amount)
+        dealt=dealt+actual
+        return actual
+    end
     assert(colony:activate_form_ability())
     colony:_advance_rally(.3)
     local first=dealt
     assert(first>0 and colony.rally_echo)
+    near(colony.rally_echo.limit,first*.35,"Second wave is 35% of actual first hit")
     colony:_advance_rally(.3)
     colony.elapsed=.99;colony:_advance_rally_echo();near(dealt,first,"No early echo")
     local reload=assert(Simulation.restore(colony:snapshot()))
-    assert(reload.rally_echo,"Pending echo survives checkpoint")
+    assert(reload.rally_echo and reload.rally_echo.limit==colony.rally_echo.limit,"Pending echo limit survives checkpoint")
     colony.elapsed=1;colony:_advance_rally_echo();near(dealt,first*1.35,"Second wave")
     colony:_advance_rally_echo();near(dealt,first*1.35,"No duplicate echo")
+    local capped=fresh("colony")
+    local cap_target=target(capped)
+    cap_target.tissue_budget=1
+    local first_actual=capped:hit_enemy(cap_target,100,"division")
+    near(first_actual,1,"First hit obeys tissue budget")
+    cap_target.tissue_budget=100
+    local echo_actual=capped:hit_enemy(cap_target,100,"division",first_actual*.35)
+    near(echo_actual,first_actual*.35,"Second hit cannot exceed 35% of actual first hit")
 
     pred.build.organs.enzymes=1
     local marked=target(pred)
@@ -1009,7 +1097,7 @@ local function validate_form_evolutions_and_synergies()
     pred.vacuole_charges={pred.elapsed+10}
     pred:hit_enemy(marked,1,"devour")
     near(pred.cooldowns.form_ability,7,"Acid bite refund")
-    assert(pred:vacuole_charge_count()==0,"Hybrid spends available charge")
+    assert(pred:vacuole_charge_count()==1,"Acid bite must not consume a vacuole charge")
     pred:hit_enemy(marked,1,"devour")
     near(pred.cooldowns.form_ability,7,"Acid bite cooldown prevents repeat")
     pred.cooldowns.acid_bite=0;marked.infect=0;pred.fields={}
@@ -1025,7 +1113,6 @@ local function validate_form_evolutions_and_synergies()
     assert(#Catalog.EVOLUTION_IDS==9 and #Catalog.SYNERGY_IDS==13,"Preserve old recipes and add three each")
     print("MICROGEN FORM EVOLUTIONS SYNERGIES READY")
 end
-
 function M.run()
     validate_form_specialization_data()
     validate_form_evolutions_and_synergies()
@@ -1039,19 +1126,37 @@ function M.run()
     validate_contact_balance()
     validate_resident_start_safety()
     validate_combat_checkpoint()
-    for _, scenario in ipairs(BRANCHES) do
-        local seconds, levels, kills, survivors = 0, 0, 0, 0
-        for _, seed in ipairs(SEEDS) do
-            local result = run(seed, scenario)
-            seconds = seconds + result.seconds
-            levels = levels + result.level
-            kills = kills + result.kills
-            if result.alive then survivors = survivors + 1 end
+    for _,scenario in ipairs(BRANCHES) do
+        local seconds,levels,kills,survivors=0,0,0,0
+        for _,seed in ipairs(SEEDS) do
+            local result=run(seed,scenario)
+            seconds,levels,kills=seconds+result.seconds,levels+result.level,kills+result.kills
+            if result.alive then survivors=survivors+1 end
             collectgarbage("collect")
         end
         print(string.format("MICROGEN BALANCE SUMMARY branch=%s maps=%d mean_seconds=%.1f mean_level=%.2f mean_kills=%.2f survivors=%d",
-            scenario.form, #SEEDS, seconds / #SEEDS, levels / #SEEDS, kills / #SEEDS, survivors))
+            scenario.form,#SEEDS,seconds/#SEEDS,levels/#SEEDS,kills/#SEEDS,survivors))
     end
+    for _,scenario in ipairs(BRANCHES) do
+        local control=Util.copy(scenario)
+        control.name="без активной способности"
+        control.use_ability=false
+        run_batch("MICROGEN BALANCE CONTROL RUN",control,SEEDS)
+    end
+    for _,scenario in ipairs(HYBRID_SCENARIOS) do
+        run_batch("MICROGEN HYBRID BALANCE RUN",scenario,ADVANCED_SEEDS)
+    end
+    for _,scenario in ipairs(EVOLUTION_SCENARIOS) do
+        local control=Util.copy(scenario)
+        control.name="без высшей эволюции"
+        control.block_evolution=true
+        run_batch("MICROGEN EVOLUTION BALANCE RUN",control,ADVANCED_SEEDS)
+        local evolved=Util.copy(scenario)
+        evolved.name="с высшей эволюцией"
+        evolved.evolve=true
+        run_batch("MICROGEN EVOLUTION BALANCE RUN",evolved,ADVANCED_SEEDS)
+    end
+    print("MICROGEN STAGE SIX BALANCE READY")
     print("MICROGEN BALANCE SMOKE READY")
 end
 

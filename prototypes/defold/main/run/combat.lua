@@ -40,7 +40,7 @@ function Combat:_enemy_label(enemy)
     return enemy.r > self:body_radius() * 1.08 and "Крупная амёба" or "Враждебная амёба"
 end
 
-function Combat:hit_enemy(enemy, amount, source)
+function Combat:hit_enemy(enemy, amount, source, maximum_damage)
     if enemy.hp <= 0 or enemy.captured then return 0 end
     source = source or "unknown"
     local build = self.build
@@ -56,7 +56,8 @@ function Combat:hit_enemy(enemy, amount, source)
     if giant and not (weak or piercing or enemy.fractured) then return 0 end
     if exposed then raw = raw * 1.6 end
     local budget = enemy.tissue_budget or enemy.max_hp * 0.01
-    local dealt = min(enemy.hp, raw, budget)
+    local damage_cap = maximum_damage and max(0, maximum_damage) or math.huge
+    local dealt = min(enemy.hp, raw, budget, damage_cap)
     enemy.tissue_budget = max(0, budget - dealt)
     enemy.hp = enemy.hp - dealt
     if dealt <= 0 then return 0 end
@@ -244,9 +245,6 @@ function Combat:_acid_bite_refund()
     if not self:form_ability().id or cd<=0 or not self:_ready("acid_bite") then return end
     self.cooldowns.form_ability=max(0,cd-cfg.cooldown_refund)
     self.cooldowns.acid_bite=cfg.interval
-    -- Гибрид может расходовать накопленный заряд на прикус. Отсутствие
-    -- заряда не отменяет предусмотренный спецификацией возврат секунды.
-    if self.run_loadout.form~="toxic" and self:vacuole_charge_count()>0 then table.remove(self.vacuole_charges,1) end
 end
 
 function Combat:_apply_enzymes(enemy,duration)
@@ -723,7 +721,8 @@ function Combat:_advance_rally(dt)
                 local amount = damage(rank, 8, 4) * min(ability.maximum_clone_hit_equivalents, count * ability.clone_damage_multiplier)
                 local dealt=self:hit_enemy(target,amount,"division")
                 if ability.second_wave_delay and dealt>0 and target.hp>0 then
-                    self.rally_echo={target_id=target.id,due=self.elapsed+ability.second_wave_delay,amount=amount*ability.second_wave_multiplier}
+                    self.rally_echo={target_id=target.id,due=self.elapsed+ability.second_wave_delay,
+                        amount=amount*ability.second_wave_multiplier,limit=dealt*ability.second_wave_multiplier}
                 end
                 self:_effect("pulse", target.pos, target.r + 20, .5)
             end
@@ -742,7 +741,7 @@ function Combat:_advance_rally_echo()
     for _,target in ipairs(self.enemies) do
         if target.id==echo.target_id and target.hp>0 and not target.captured and not self:_is_engulfing(target)
             and distance_squared(self.player,target.pos)<=(self:form_ability().radius+60)^2 then
-            self:hit_enemy(target,echo.amount,"division")
+            self:hit_enemy(target,echo.amount,"division",echo.limit)
             self:_effect("pulse",target.pos,target.r+20,.5)
             break
         end

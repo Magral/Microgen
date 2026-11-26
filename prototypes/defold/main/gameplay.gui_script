@@ -1906,22 +1906,33 @@ function init(self)
         local previous_organs={
             enzymes=sim.build.organs.enzymes,devour=sim.build.organs.devour,
             acid=sim.build.organs.acid,tentacle=sim.build.organs.tentacle,
+            chemoreceptor_ridge=sim.build.organs.chemoreceptor_ridge,
+            osmotic_vacuole=sim.build.organs.osmotic_vacuole,
+            synaptic_node=sim.build.organs.synaptic_node,barrier=sim.build.organs.barrier,
+            division=sim.build.organs.division,
         }
         sim.build.organs.enzymes,sim.build.organs.devour=1,1
         sim.build.organs.acid,sim.build.organs.tentacle=1,1
+        sim.build.organs.chemoreceptor_ridge,sim.build.organs.osmotic_vacuole=1,1
+        sim.build.organs.synaptic_node,sim.build.organs.barrier,sim.build.organs.division=1,1,1
         local synergy_rows=Inspector.synergy_rows(sim.build)
         assert(#synergy_rows==#Catalog.SYNERGY_IDS,
             "Synergy screen must include every known synergy")
         local active_bite,active_grasp,inactive_conductive=false,false,false
+        local active_enzyme_target,active_acid_bite,active_shared_shell=false,false,false
         for _,row in ipairs(synergy_rows) do
             assert(row.description and row.description~="" and row.requirements and row.requirements~="",
                 "Synergy cards must show both effect and required organs")
             if row.id=="enzyme_bite" then active_bite=row.active end
             if row.id=="acid_grasp" then active_grasp=row.active end
             if row.id=="conductive_bath" then inactive_conductive=not row.active end
+            if row.id=="enzyme_target" then active_enzyme_target=row.active end
+            if row.id=="acid_bite" then active_acid_bite=row.active end
+            if row.id=="shared_shell" then active_shared_shell=row.active end
         end
-        assert(active_bite and active_grasp and inactive_conductive,
-            "Smoke setup must cover active and inactive synergy states")
+        assert(active_bite and active_grasp and inactive_conductive
+            and active_enzyme_target and active_acid_bite and active_shared_shell,
+            "Smoke setup must cover all new hybrid synergies and active/inactive states")
         app:build(1,"synergies",true)
         check_window()
         app:synergy_detail(synergy_rows[1],function() app:body(true) end)
@@ -1988,17 +1999,17 @@ function init(self)
             }}}
         end
         local update=Updater.select({
-            update_fixture("1.5.10",false),
-            update_fixture("1.5.11",false),
-            update_fixture("1.5.12",true),
-        },"1.5.10")
-        assert(update and update.label=="1.5.11" and update.size==4096
+            update_fixture("1.5.12",false),
+            update_fixture("1.5.13",false),
+            update_fixture("1.5.14",true),
+        },"1.5.12")
+        assert(update and update.label=="1.5.13" and update.size==4096
             and update.sha==string.rep("a",64)
-            and update.url=="https://github.com/Magral/Microgen/releases/download/defold-1.5.11/Microgen-Defold-1.5.11.apk",
-            "Auto-update must select the verified stable APK newer than 1.5.10")
-        local current=update_fixture("1.5.10",false)
-        local next_release=update_fixture("1.5.11",false)
-        local checked=Updater.new("1.5.10",nil,false,function() end)
+            and update.url=="https://github.com/Magral/Microgen/releases/download/defold-1.5.13/Microgen-Defold-1.5.13.apk",
+            "Auto-update must select the verified stable APK newer than 1.5.12")
+        local current=update_fixture("1.5.12",false)
+        local next_release=update_fixture("1.5.13",false)
+        local checked=Updater.new("1.5.12",nil,false,function() end)
         local requests=0
         checked.request=function(url, method, callback)
             requests=requests+1
@@ -2011,7 +2022,7 @@ function init(self)
             end
         end
         checked:check()
-        assert(requests==2 and checked.state=="desktop" and checked.asset.label=="1.5.11",
+        assert(requests==2 and checked.state=="desktop" and checked.asset.label=="1.5.13",
             "A stale latest response must fall back to the release list")
         next_release.assets[1].digest=nil
         requests=0
@@ -2019,9 +2030,9 @@ function init(self)
         assert(checked.state=="incomplete","A newer release without a verified APK must not report current")
         assert(checked.asset==nil and not checked.needs_permission,
             "Incomplete check must clear stale verified metadata")
-        local malformed=update_fixture("1.5.12",false)
+        local malformed=update_fixture("1.5.14",false)
         table.insert(malformed.assets,1,false)
-        assert(Updater.select({malformed},"1.5.11").label=="1.5.12",
+        assert(Updater.select({malformed},"1.5.13").label=="1.5.14",
             "Malformed asset entries must not block valid assets")
         local installs,downloads,status=0,0,1
         local native={
@@ -2033,9 +2044,9 @@ function init(self)
             status=function() return status end,
             install=function() installs=installs+1; return 3 end,
         }
-        local lifecycle=Updater.new("1.5.10",native,false,function() end)
+        local lifecycle=Updater.new("1.5.12",native,false,function() end)
         lifecycle.request=function(_,_,callback)
-            callback(nil,nil,{status=200,response=json.encode(update_fixture("1.5.11",false))})
+            callback(nil,nil,{status=200,response=json.encode(update_fixture("1.5.13",false))})
         end
         lifecycle:install()
         assert(installs==0,"Unverified APK must not open the installer")
@@ -2059,6 +2070,11 @@ function init(self)
         sim.build.organs.devour=previous_organs.devour
         sim.build.organs.acid=previous_organs.acid
         sim.build.organs.tentacle=previous_organs.tentacle
+        sim.build.organs.chemoreceptor_ridge=previous_organs.chemoreceptor_ridge
+        sim.build.organs.osmotic_vacuole=previous_organs.osmotic_vacuole
+        sim.build.organs.synaptic_node=previous_organs.synaptic_node
+        sim.build.organs.barrier=previous_organs.barrier
+        sim.build.organs.division=previous_organs.division
         app:body(false)
         assert(app.screen=="preparation")
         app:show_run()

@@ -200,6 +200,13 @@ jobs:
                 grep -Fq "MICROGEN BALANCE SMOKE READY" "$log"
                 test "$(grep -c "MICROGEN BALANCE RUN" "$log")" -eq 18
                 test "$(grep -c "MICROGEN BALANCE SUMMARY" "$log")" -eq 3
+                test "$(grep -c "MICROGEN BALANCE CONTROL RUN" "$log")" -eq 18
+                test "$(grep -c "MICROGEN BALANCE CONTROL SUMMARY" "$log")" -eq 3
+                test "$(grep -c "MICROGEN HYBRID BALANCE RUN" "$log")" -eq 9
+                test "$(grep -c "MICROGEN HYBRID BALANCE SUMMARY" "$log")" -eq 3
+                test "$(grep -c "MICROGEN EVOLUTION BALANCE RUN" "$log")" -eq 18
+                test "$(grep -c "MICROGEN EVOLUTION BALANCE SUMMARY" "$log")" -eq 6
+                grep -Fq "MICROGEN STAGE SIX BALANCE READY" "$log"
                 grep -Fq "MICROGEN CONTACT BALANCE READY" "$log"
                 grep -Fq "MICROGEN COLONY COVERAGE READY" "$log"
                 grep -Fq "MICROGEN TOXIN OVERLAP READY" "$log"
@@ -209,6 +216,7 @@ jobs:
                 grep -Fq "MICROGEN FORM ABILITIES READY" "$log"
                 grep -Fq "MICROGEN SIGNATURE ORGANS READY" "$log"
                 grep -Fq "MICROGEN FORM EVOLUTIONS SYNERGIES READY" "$log"
+                grep -Fq "MICROGEN STAGE SIX BALANCE READY" "$log"
                 grep -F "MICROGEN FORM EVOLUTIONS SYNERGIES READY" "$log"
                 grep -F "MICROGEN SIGNATURE ORGANS READY" "$log"
                 grep -F "MICROGEN FORM ABILITIES READY" "$log"

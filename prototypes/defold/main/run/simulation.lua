@@ -1189,8 +1189,10 @@ function Simulation.restore(saved)
     self.run_loadout = Heredity.normalize(saved.run_loadout)
     self.build.form=self.run_loadout.form or ""
     local echo=self.rally_echo
-    if type(echo)~="table" or not finite(echo.target_id) or not finite(echo.due) or not finite(echo.amount)
-        or echo.due>self.elapsed+1 or echo.amount<=0 or not self.build:evolved("synaptic_node") then self.rally_echo=nil end
+    if type(echo)~="table" or not finite(echo.target_id) or echo.target_id<=0 or echo.target_id%1~=0
+        or not finite(echo.due) or not finite(echo.amount) or not finite(echo.limit)
+        or echo.due>self.elapsed+1 or echo.amount<=0 or echo.amount>100000
+        or echo.limit<=0 or echo.limit>100000 or not self.build:evolved("synaptic_node") then self.rally_echo=nil end
     if type(self.vacuole_charges)~="table" then self.vacuole_charges={} end
     self:vacuole_charge_count()
     if not finite(self.signature_mark_id) or not finite(self.signature_mark_until) or self.signature_mark_until>self.elapsed+4.2 then

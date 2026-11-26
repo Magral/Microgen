@@ -140,7 +140,7 @@ M.SYNERGIES = {
     toxic_colony = { name = "Токсичная колония", needs = { "division", "trail" }, desc = "Копии оставляют собственные ядовитые облака." },
     spore_feast = { name = "Споровый пир", needs = { "infection", "devour" }, desc = "Поглощение заражённой цели создаёт облако спор." },
     enzyme_target = { name = "Ферментативный прицел", needs = { "chemoreceptor_ridge", "enzymes" }, desc = "Ферменты на отмеченной цели действуют на 25% дольше.", duration_multiplier = 1.25 },
-    acid_bite = { name = "Кислотный прикус", needs = { "osmotic_vacuole", "devour" }, desc = "Урон пастью по отравленной цели возвращает 1 с перезарядки способности; раз в 4 с. В гибриде расходует заряд вакуоли, если он есть.", cooldown_refund = 1, interval = 4 },
+    acid_bite = { name = "Кислотный прикус", needs = { "osmotic_vacuole", "devour" }, desc = "Урон пастью по отравленной цели возвращает 1 с перезарядки способности; раз в 4 с.", cooldown_refund = 1, interval = 4 },
     shared_shell = { name = "Общий панцирь", needs = { "synaptic_node", "barrier" }, desc = "Ёмкость щита +10% за активную копию, до +30%.", per_clone = .10, cap = .30 },
 }
 
