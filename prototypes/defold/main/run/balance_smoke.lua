@@ -341,7 +341,27 @@ local function validate_contact_balance()
     print("MICROGEN CONTACT BALANCE READY")
 end
 
+local function validate_colony_coverage()
+    local sim = Simulation.new(147, nil, nil, "colony", {form = "colony", branch = "colony", seed = 147})
+    assert(sim.build:rank("division") == 1, "Colony must start with division")
+    assert(Catalog.clone_count(1) == 3 and Catalog.clone_count(2) == 4
+        and Catalog.clone_count(3) == 5 and Catalog.clone_count(10) == 5,
+        "Early clone count and late clone cap must match the balance rules")
+    local clones = sim:clone_positions()
+    assert(#clones == 3, "Colony must start with three actual clones")
+    for index, p in ipairs(clones) do
+        local q = clones[index % #clones + 1]
+        local dx, dy = p.x - q.x, p.y - q.y
+        assert(math.abs(dx * dx + dy * dy - 3 * 105 * 105) < 0.01,
+            "Three clones must be spaced evenly around the player")
+    end
+    local restored = assert(Simulation.restore(sim:snapshot()))
+    assert(#restored:clone_positions() == 3, "Reload must preserve colony coverage")
+    print("MICROGEN COLONY COVERAGE READY")
+end
+
 function M.run()
+    validate_colony_coverage()
     validate_contact_balance()
     validate_resident_start_safety()
     validate_combat_checkpoint()
