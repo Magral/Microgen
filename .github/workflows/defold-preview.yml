@@ -14,8 +14,9 @@ defaults:
     shell: bash
 
 concurrency:
-  group: defold-preview-${{ github.ref }}
-  cancel-in-progress: true
+  # Не отменять балансные прогоны предыдущих коммитов рабочей ветки.
+  group: defold-preview-${{ github.ref }}${{ github.ref == 'refs/heads/preview/defold' && format('-{0}', github.sha) || '' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/preview/defold' }}
 
 jobs:
   build:
