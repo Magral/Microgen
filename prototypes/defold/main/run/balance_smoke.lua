@@ -226,6 +226,28 @@ local function run(seed, scenario, horizon_seconds)
             for _,id in ipairs(active) do if id~=scenario.disabled_synergy then filtered[#filtered+1]=id end end
             return filtered
         end
+        assert(not Util.index(sim.build:active_synergies(),scenario.disabled_synergy),
+            "Hybrid control must actually disable "..scenario.disabled_synergy)
+    end
+    local synergy_triggers={acid_bite=0,enzyme_target=0,shared_shell=0}
+    local original_acid_bite=sim._acid_bite_refund
+    sim._acid_bite_refund=function(self)
+        synergy_triggers.acid_bite=synergy_triggers.acid_bite+1
+        return original_acid_bite(self)
+    end
+    local original_apply_enzymes=sim._apply_enzymes
+    sim._apply_enzymes=function(self,enemy,duration)
+        if Util.index(self.build:active_synergies(),"enzyme_target") and self:is_chemoreceptor_marked(enemy) then
+            synergy_triggers.enzyme_target=synergy_triggers.enzyme_target+1
+        end
+        return original_apply_enzymes(self,enemy,duration)
+    end
+    local original_barrier_capacity=sim.barrier_capacity
+    sim.barrier_capacity=function(self)
+        if Util.index(self.build:active_synergies(),"shared_shell") then
+            synergy_triggers.shared_shell=synergy_triggers.shared_shell+1
+        end
+        return original_barrier_capacity(self)
     end
     local max_enemies, max_fields, max_remains = 0, 0, 0
     local steps, first_hit = 0, nil
@@ -319,17 +341,19 @@ local function run(seed, scenario, horizon_seconds)
     local toxin_source_summary = #toxin_summary > 0 and table.concat(toxin_summary, ";") or "none"
     local marker=scenario.run_marker or "MICROGEN BALANCE RUN"
     print(string.format(
-        "%s seed=%d branch=%s starter=%s scenario=%s pilot=kite seconds=%.1f stage=%d level=%d kills=%d absorbed=%d hp=%.1f damage_dealt=%.1f damage_taken=%.1f first_hit=%s last_hit=%s damage_sources=%s toxin_sources=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d",
+        "%s seed=%d branch=%s starter=%s scenario=%s pilot=kite seconds=%.1f stage=%d level=%d kills=%d absorbed=%d hp=%.1f damage_dealt=%.1f damage_taken=%.1f first_hit=%s last_hit=%s damage_sources=%s toxin_sources=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d synergy_triggers=acid:%d,enzyme:%d,shell:%d",
         marker,seed,branch,starter,scenario.name or "base",sim.elapsed,sim.stage_index,sim.level,sim.kills,
         sim.absorbed or 0,sim.hp,sim.combat_stats.damage_dealt,sim.combat_stats.damage_taken,first_hit or "none",cause,source_summary,toxin_source_summary,
-        sim.outcome=="" and "alive" or sim.outcome,steps,max_enemies,max_fields,max_remains))
+        sim.outcome=="" and "alive" or sim.outcome,steps,max_enemies,max_fields,max_remains,
+        synergy_triggers.acid_bite,synergy_triggers.enzyme_target,synergy_triggers.shared_shell))
     return {alive=sim.outcome=="",seconds=sim.elapsed,hp=sim.hp,level=sim.level,kills=sim.kills,
         absorbed=sim.absorbed or 0,stage=sim.stage_index,damage_dealt=sim.combat_stats.damage_dealt,
-        damage_taken=sim.combat_stats.damage_taken}
+        damage_taken=sim.combat_stats.damage_taken,synergy_triggers=synergy_triggers}
 end
 
 local function run_batch(marker,scenario,seeds)
     local seconds,levels,kills,absorbed,dealt,damage,stages,survivors=0,0,0,0,0,0,0,0
+    local acid_triggers,enzyme_triggers,shell_triggers=0,0,0
     for _,seed in ipairs(seeds) do
         local config=Util.copy(scenario)
         config.run_marker=marker
@@ -341,9 +365,10 @@ local function run_batch(marker,scenario,seeds)
         collectgarbage("collect")
     end
     local summary=marker:gsub(" RUN$"," SUMMARY")
-    print(string.format("%s form=%s scenario=%s maps=%d mean_seconds=%.1f mean_stage=%.2f mean_level=%.2f mean_kills=%.2f mean_absorbed=%.2f mean_damage_dealt=%.1f mean_damage_taken=%.1f survivors=%d",
+    print(string.format("%s form=%s scenario=%s maps=%d mean_seconds=%.1f mean_stage=%.2f mean_level=%.2f mean_kills=%.2f mean_absorbed=%.2f mean_damage_dealt=%.1f mean_damage_taken=%.1f survivors=%d mean_synergy_triggers=acid:%.2f,enzyme:%.2f,shell:%.2f",
         summary,scenario.form,scenario.name or "base",#seeds,seconds/#seeds,stages/#seeds,
-        levels/#seeds,kills/#seeds,absorbed/#seeds,dealt/#seeds,damage/#seeds,survivors))
+        levels/#seeds,kills/#seeds,absorbed/#seeds,dealt/#seeds,damage/#seeds,survivors,
+        acid_triggers/#seeds,enzyme_triggers/#seeds,shell_triggers/#seeds))
 end
 
 local function validate_resident_start_safety()
@@ -1131,6 +1156,15 @@ local function validate_form_evolutions_and_synergies()
     near(pred:barrier_capacity(),base*1.3,"Shield cap")
     pred.build.organs.division=nil
     near(pred:barrier_capacity(),base,"No copies, no shield bonus")
+    local protected,unprotected=fresh("toxic"),fresh("toxic")
+    for _,probe in ipairs({protected,unprotected}) do
+        probe.build.organs.synaptic_node=1;probe.build.organs.barrier=1;probe.build.organs.division=1
+        probe.hp=100
+    end
+    unprotected.build.active_synergies=function() return {} end
+    protected:hurt_player(100,{kind="projectile"})
+    unprotected:hurt_player(100,{kind="projectile"})
+    assert(protected.hp>unprotected.hp,"Shared shell must reduce actual damage through the barrier, not only the preview value")
     assert(#Catalog.EVOLUTION_IDS==9 and #Catalog.SYNERGY_IDS==13,"Preserve old recipes and add three each")
     print("MICROGEN FORM EVOLUTIONS SYNERGIES READY")
 end
@@ -1154,6 +1188,9 @@ function M.run()
             seconds,levels,kills,absorbed,dealt,damage,stages=seconds+result.seconds,levels+result.level,
                 kills+result.kills,absorbed+result.absorbed,dealt+result.damage_dealt,
                 damage+result.damage_taken,stages+result.stage
+        acid_triggers=acid_triggers+result.synergy_triggers.acid_bite
+        enzyme_triggers=enzyme_triggers+result.synergy_triggers.enzyme_target
+        shell_triggers=shell_triggers+result.synergy_triggers.shared_shell
             if result.alive then survivors=survivors+1 end
             collectgarbage("collect")
         end
