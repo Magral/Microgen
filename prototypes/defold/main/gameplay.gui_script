@@ -1740,6 +1740,19 @@ function init(self)
         assert(Scene.damage_impact(player_point,50,{pos=vmath.vector3(100,0,0),time=4},4.5)==nil
             and Scene.damage_impact(player_point,50,{time=4},4)==nil,
             "Membrane impact pulse must expire and ignore damage without a source position")
+        local reaction_sim=Simulation.new(49)
+        local reaction_facing=reaction_sim.facing
+        local hit_pos={x=reaction_sim.player.x+math.cos(reaction_facing)*100,
+            y=reaction_sim.player.y+math.sin(reaction_facing)*100}
+        reaction_sim:hurt_player(12,{kind="collision",name="Тестовый удар по мембране",pos=hit_pos,id=-909})
+        app.scene:render(reaction_sim)
+        assert(app.scene.reaction>0 and app.scene.impact_strength>.99
+            and app.scene.impact_x>.99 and math.abs(app.scene.impact_y)<.01,
+            "A live collision must deform the rendered membrane toward the impact")
+        print("MICROGEN MEMBRANE HIT RESPONSE READY")
+        app.scene.reaction,app.scene.impact_x,app.scene.impact_y,app.scene.impact_strength=0,0,0,0
+        app.scene.last_hp=sim.hp
+        app.scene:render(sim)
         print("MICROGEN ORGANISM BREATHING READY")
         local feed_item={entry_angle=0,entry_distance=100,r=100}
         local feed_start,scale_start,alpha_start=Scene.feeding_pose(sim,feed_item,0)
