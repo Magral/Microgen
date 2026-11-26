@@ -115,6 +115,19 @@ local function damage_shape(reaction)
     return 1-impact*.035,1+impact*.022
 end
 
+local function damage_direction(player, facing, source)
+    local origin = source and source.pos
+    if not origin then return 0, 0 end
+    local x, y = origin.x or origin[1], origin.y or origin[2]
+    if type(x) ~= "number" or type(y) ~= "number" then return 0, 0 end
+    local dx, dy = x - player.x, y - player.y
+    local length = math.sqrt(dx * dx + dy * dy)
+    if length < 0.0001 then return 0, 0 end
+    dx, dy = dx / length, dy / length
+    local cos_facing, sin_facing = math.cos(facing or 0), math.sin(facing or 0)
+    return dx * cos_facing + dy * sin_facing, -dx * sin_facing + dy * cos_facing
+end
+
 local function feeding_turn(progress)
     local crossing=smoothstep(.12,.72,math.max(0,math.min(1,progress or 0)))
     return math.sin(crossing*math.pi)*.14
@@ -147,6 +160,7 @@ function Scene.new(tissue_atlas)
         fields=pool("fields"), organisms=pool("organisms"), fragments=pool("organisms"), objects=pool("objects"),
         effects=pool("effects"), labels=pool("world_labels",true),
         motions=setmetatable({},{__mode="k"}), scale=1,
+        impact_x=0,impact_y=0,impact_strength=0,
     },Scene)
 end
 
@@ -366,7 +380,8 @@ function Scene:draw_body(sim, actor, is_player, serial)
     gui.set_color(slot.node,tint)
     Tissue.update(slot.pose,motion,phase,angle,dimensions[1]/(2*source_radius),dimensions[2]/(2*source_radius),
         cx,cy,bite,infected and .55 or (is_player and .67 or .4),pigment,health,is_player and self.reaction or 0,
-        not is_player and radius*self.scale<32)
+        is_player and self.impact_x or 0,is_player and self.impact_y or 0,
+        is_player and self.impact_strength or 0,not is_player and radius*self.scale<32)
     if not is_player and actor.id and slot.pose then
         local look=slot.body_look or {}
         slot.body_look=look
@@ -466,6 +481,7 @@ function Scene:render(sim, breakup_time)
     if self.sim~=sim or self.world~=sim.world then
         self.sim,self.world=sim,sim.world
         self.scale,self.visual_time,self.elapsed,self.reaction=target,0,sim.elapsed,0
+        self.impact_x,self.impact_y,self.impact_strength=0,0,0
         self.last_hp=sim.hp
         self.motions=setmetatable({},{__mode="k"})
         self.clones={}
@@ -483,10 +499,15 @@ function Scene:render(sim, breakup_time)
     self:render_ground(sim)
     local time=self.visual_time
     self.reaction=math.max(0,self.reaction-dt*1.4)
-    -- Turn actual health loss into a short, bounded membrane impact response.
+    self.impact_strength=math.max(0,self.impact_strength-dt*2.5)
+    -- Health loss curls the membrane away from the direction the hit arrived.
     if sim.hp < (self.last_hp or sim.hp) then
         local lost=(self.last_hp or sim.hp)-sim.hp
         self.reaction=math.max(self.reaction,math.min(1,.28+lost/math.max(1,sim.max_hp)*2.4))
+        local hit_x,hit_y=damage_direction(sim.player,sim.facing,sim.last_damage)
+        if hit_x*hit_x+hit_y*hit_y>0 then
+            self.impact_x,self.impact_y,self.impact_strength=hit_x,hit_y,1
+        end
     end
     self.last_hp=sim.hp
     local rich=0
@@ -576,6 +597,7 @@ Scene.feeding_turn=feeding_turn
 Scene.breathing_scale=breathing_scale
 Scene.breathing_shape=breathing_shape
 Scene.damage_shape=damage_shape
+Scene.damage_direction=damage_direction
 Scene.damage_impact=Effects.damage_impact
 
 return Scene
