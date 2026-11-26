@@ -277,7 +277,8 @@ local function run(seed, scenario, horizon_seconds)
         assert(#sim.remains <= 96, "Balance run exceeded the remains cap")
     end
 
-    assert(finite(sim.elapsed) and finite(sim.build.biomass) and finite(sim.kills),
+    assert(finite(sim.elapsed) and finite(sim.build.biomass) and finite(sim.kills) and finite(sim.absorbed)
+        and finite(sim.combat_stats.damage_dealt) and finite(sim.combat_stats.damage_taken),
         "Balance run ended with invalid summary values")
     local history = sim.combat_stats.history
     local last_hit = history[#history]
@@ -312,8 +313,8 @@ local function run(seed, scenario, horizon_seconds)
     local marker=scenario.run_marker or "MICROGEN BALANCE RUN"
     print(string.format(
         "%s seed=%d branch=%s starter=%s scenario=%s pilot=kite seconds=%.1f stage=%d level=%d kills=%d absorbed=%d hp=%.1f damage_dealt=%.1f damage_taken=%.1f first_hit=%s last_hit=%s damage_sources=%s toxin_sources=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d",
-        marker,seed,branch,starter,scenario.name or "base",sim.elapsed,sim.stage_index,sim.level,sim.kills,sim.hp,
-        sim.absorbed or 0,sim.combat_stats.damage_dealt,sim.combat_stats.damage_taken,first_hit or "none",cause,source_summary,toxin_source_summary,
+        marker,seed,branch,starter,scenario.name or "base",sim.elapsed,sim.stage_index,sim.level,sim.kills,
+        sim.absorbed or 0,sim.hp,sim.combat_stats.damage_dealt,sim.combat_stats.damage_taken,first_hit or "none",cause,source_summary,toxin_source_summary,
         sim.outcome=="" and "alive" or sim.outcome,steps,max_enemies,max_fields,max_remains))
     return {alive=sim.outcome=="",seconds=sim.elapsed,hp=sim.hp,level=sim.level,kills=sim.kills,
         absorbed=sim.absorbed or 0,stage=sim.stage_index,damage_dealt=sim.combat_stats.damage_dealt,
