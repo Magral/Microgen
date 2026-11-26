@@ -457,6 +457,8 @@ local function validate_form_specialization_data()
         local organ = Catalog.ORGANS[data.signature_organ]
         assert(organ and organ.signature and organ.form == form_id, "Signature organ must belong to its form")
         assert(Catalog.cell_cost(data.signature_organ) == expected_form.cells, "Signature organ cell cost changed")
+        assert(Catalog.SIGNATURE_ORGANS[data.signature_organ].form == form_id, "Signature organ parameters must match their form")
+        assert(data.evolution.passive and data.evolution.passive_rank == 3, "Form evolution must use the shared passive-rank contract")
         assert(#(Catalog.SPECIALIZATIONS[data.signature_organ] or {}) == 2, "Every signature organ must have two specializations")
         local legacy_form = Legacy.FORMS[form_id]
         assert(legacy_form.signature_organ == data.signature_organ and legacy_form.ability == data.ability
@@ -509,6 +511,24 @@ local function validate_form_specialization_data()
         and Util.index(migrated_colony.unlocked, "synaptic_node"),
         "Legacy division unlock must imply colony research and its new signature organ")
 
+    local archived_state = SaveStore.defaults()
+    archived_state.families = nil
+    archived_state.unlocked = Util.copy(old_unlocked)
+    archived_state.legacy = Legacy.defaults()
+    archived_state.legacy.research = {"toxic"}
+    archived_state.legacy.selected_form = "toxic"
+    local old_with_archive = Util.copy(old_profile)
+    old_with_archive.families = {
+        version = 1, active = "family-2", next_id = 3,
+        items = {
+            {id = "family-1", name = "Архивная железистая", form = "toxic", slot = 1, state = archived_state},
+            {id = "family-2", name = "Активная хищная", form = "predator", slot = 2, state = {}},
+        },
+    }
+    local migrated_archive = SaveStore.normalize_profile(old_with_archive)
+    assert(migrated_archive and Util.index(migrated_archive.families.items[1].state.unlocked, "osmotic_vacuole"),
+        "Archived family migration must restore the signature organ from its saved research")
+
     local fresh = SaveStore.defaults()
     fresh.unlocked = Util.copy(old_unlocked)
     fresh.legacy = Legacy.defaults()
@@ -530,6 +550,21 @@ local function validate_form_specialization_data()
         "Toxic research must unlock the osmotic vacuole")
     assert(store:research("colony") and Util.index(store.profile.unlocked, "synaptic_node")
         and Util.index(store.profile.unlocked, "division"), "Colony research must unlock division and the synaptic node")
+
+    local family_records = {}
+    local family_backend = {
+        get_save_file = function(_, filename) return filename end,
+        load = function(path) return Util.copy(family_records[path]) end,
+        save = function(path, record) family_records[path] = Util.copy(record); return true end,
+    }
+    local family_store = SaveStore.new("signature_families", family_backend)
+    assert(family_store:create_family("Железистая", "toxic")
+        and Util.index(family_store.profile.unlocked, "osmotic_vacuole"),
+        "Creating a researched toxic family must unlock its signature organ")
+    assert(family_store:create_family("Колониальная", "colony")
+        and Util.index(family_store.profile.unlocked, "synaptic_node")
+        and Util.index(family_store.profile.unlocked, "division"),
+        "Creating a colony family must unlock its signature organ and division")
 
     local old_build = Build.new()
     old_build:from_dict({unlocked = old_unlocked, organs = {devour = 1}})

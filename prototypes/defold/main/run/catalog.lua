@@ -67,7 +67,7 @@ M.FORM_SPECIALIZATIONS = {
         },
         evolution = {
             id = "apex_predator", name = "Вершинный хищник",
-            organ = "chemoreceptor_ridge", organ_rank = 6, adaptation = "magnet", adaptation_rank = 3,
+            organ = "chemoreceptor_ridge", organ_rank = 6, passive = "magnet", passive_rank = 3,
             ability_cooldown = 12.5, marked_bite_bonus = 0.12,
         },
     },
@@ -84,7 +84,7 @@ M.FORM_SPECIALIZATIONS = {
         },
         evolution = {
             id = "living_reactor", name = "Живой реактор",
-            organ = "osmotic_vacuole", organ_rank = 6, adaptation = "catalysis", adaptation_rank = 3,
+            organ = "osmotic_vacuole", organ_rank = 6, passive = "catalysis", passive_rank = 3,
             duration_bonus = 1, slow = 0.20,
         },
     },
@@ -100,7 +100,7 @@ M.FORM_SPECIALIZATIONS = {
         },
         evolution = {
             id = "collective_mind", name = "Коллективный разум",
-            organ = "synaptic_node", organ_rank = 6, adaptation = "armor", adaptation_rank = 3,
+            organ = "synaptic_node", organ_rank = 6, passive = "armor", passive_rank = 3,
             second_wave_delay = 1, second_wave_multiplier = 0.35,
             ability_cooldown = 18, maximum_reduction = 0.075,
         },
