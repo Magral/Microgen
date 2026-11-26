@@ -211,6 +211,14 @@ local function run(seed, scenario, horizon_seconds)
 
         local move_x, move_y = direction(sim, tick)
         local health_before = sim.hp
+        if sim:form_ability_ready() and tick % 30 == 0 then
+            if branch=="predator" then
+                local target=sim:_nearest(110,function(e) return not e.captured and sim:_can_be_absorbed(e) end)
+                if target then sim:activate_form_ability(target.pos.x-sim.player.x,target.pos.y-sim.player.y) end
+            elseif branch=="toxic" then
+                if sim:_nearest(115) then sim:activate_form_ability() end
+            else sim:activate_form_ability() end
+        end
         sim:step(STEP, move_x, move_y)
         if not first_hit and sim.hp < health_before then
             local hit = sim.last_damage
@@ -733,8 +741,99 @@ local function validate_form_passives()
     print("MICROGEN FORM PASSIVES READY")
 end
 
+local function validate_form_abilities()
+    local function fresh(form)
+        local sim = Simulation.new(147,nil,nil,form,{form=form,branch=form,seed=147})
+        sim.enemies,sim.residents,sim.fields = {},{},{}
+        return sim
+    end
+    local function near(actual,expected,label)
+        assert(math.abs(actual-expected)<.0001,label..": "..tostring(actual))
+    end
+    local predator=fresh("predator")
+    local origin=Util.copy(predator.player)
+    predator._move_player_against_bodies=function(self,x,y) return {x=self.player.x+x,y=self.player.y+y} end
+    local prey=assert(predator:spawn_enemy({x=origin.x+45,y=origin.y},"prey"))
+    prey.r,prey.hp,prey.max_hp=12,100,100
+    prey.tissue_budget=100
+    assert(predator:activate_form_ability(1,0) and not predator:activate_form_ability(1,0))
+    near(predator.cooldowns.form_ability,14,"Dash cooldown")
+    predator:_advance_dash(.12)
+    assert(predator.player.x>origin.x and predator.form_action.hit,"Dash moves and hits in facing direction")
+    local after=prey.hp
+    predator:_advance_dash(.12)
+    near(prey.hp,after,"Dash hits only once")
+    assert(not predator.form_action.kind)
+    near(predator.player.x-origin.x,96,"Dash distance")
+    assert(after<100,"Dash must deal damage")
+    predator:_refund_dash(prey)
+    near(predator.cooldowns.form_ability,12,"Absorption refund")
+    predator:_refund_dash(prey)
+    near(predator.cooldowns.form_ability,12,"No repeated refund")
+    prey.form_dash_until=predator.elapsed+3
+    predator.cooldowns.form_ability=9
+    predator:_refund_dash(prey)
+    near(predator.cooldowns.form_ability,9,"Refund never increases cooldown")
+    predator.cooldowns.form_ability=0
+    assert(predator:activate_form_ability(1,0))
+    local restored=assert(Simulation.restore(predator:snapshot()))
+    assert(restored.form_action.kind=="dash" and restored.cooldowns.form_ability==14)
+    local saved=predator:snapshot()
+    saved.form_action=nil;saved.cooldowns.form_ability=nil
+    local old=assert(Simulation.restore(saved))
+    assert(not old.form_action.kind and old:form_ability_ready(),"Legacy save defaults to ready")
+    predator._move_player_against_bodies=function(self) return self.player end
+    local blocked=Util.copy(predator.player)
+    predator:_advance_dash(.24)
+    near(predator.player.x,blocked.x,"Dash cannot bypass blocked movement")
+    local toxic=fresh("toxic")
+    assert(toxic:activate_form_ability())
+    local field=toxic.fields[1]
+    assert(field and field.kind=="rupture" and field.source=="acid")
+    near(field.life,3,"Rupture duration")
+    near(field.damage,Catalog.scaled_damage(7,1)*.60,"Rupture DPS")
+    near(toxic.cooldowns.form_ability,16,"Rupture cooldown")
+    local enemy=assert(toxic:spawn_enemy(toxic.player,"hunter"))
+    enemy.r,enemy.hp,enemy.max_hp,enemy.tissue_budget=12,100,100,100
+    toxic:_field(toxic.player,field.r,field.damage*2,3,"poison")
+    local hits={}
+    toxic.hit_enemy=function(_,target,amount,source) hits[#hits+1]={amount=amount,source=source};return amount end
+    toxic:_update_fields(.25)
+    assert(#hits==1 and hits[1].source=="trail","Only strongest player field hits each target")
+    near(hits[1].amount,field.damage*.5,"Overlapping field damage")
+    near(enemy.rupture_slow,1.5,"Rupture slow survives overlapping poison")
+    assert(toxic:_player_poisoned(enemy))
+    local restored_toxic=assert(Simulation.restore(toxic:snapshot()))
+    assert(restored_toxic.fields[1].kind=="rupture" and restored_toxic.enemies[1].rupture_slow==1.5)
+    local colony=fresh("colony")
+    assert(not colony:form_ability_ready() and not colony:activate_form_ability(),"No rally without target")
+    local target=assert(colony:spawn_enemy({x=colony.player.x+150,y=colony.player.y},"hunter"))
+    target.r,target.hp,target.max_hp=22,100,100
+    colony.build.organs.division=4
+    colony.build.specializations.division="division_hunter_buds"
+    local dealt=0
+    colony.hit_enemy=function(_,e,amount,source) assert(e==target and source=="division");dealt=dealt+amount;return amount end
+    assert(colony:activate_form_ability())
+    near(colony.cooldowns.form_ability,15,"Rally cooldown")
+    colony:_advance_rally(.3)
+    near(dealt,Catalog.scaled_damage(8+4*4,4)*2,"Rally capped at two clone hits")
+    assert(colony.form_action.hit and #colony:clone_positions()==6,"Rally preserves copies")
+    local resumed=assert(Simulation.restore(colony:snapshot()))
+    assert(resumed.form_action.kind=="rally" and resumed.form_action.hit,"Rally cannot hit twice after reload")
+    colony:_advance_rally(.3)
+    assert(not colony.form_action.kind)
+    near(dealt,Catalog.scaled_damage(24,4)*2,"Rally strikes only once")
+    colony.cooldowns.form_ability=0
+    colony.build.organs.division=nil
+    assert(not colony:activate_form_ability(),"No rally without copies")
+    predator.build.organs.acid=1
+    assert(predator:form_ability().id=="predator_dash","Hybrid cannot receive foreign ability")
+    print("MICROGEN FORM ABILITIES READY")
+end
+
 function M.run()
     validate_form_specialization_data()
+    validate_form_abilities()
     validate_form_passives()
     validate_enemy_markers()
     validate_save_recovery()

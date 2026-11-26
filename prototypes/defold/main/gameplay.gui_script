@@ -87,7 +87,7 @@ function App:notice(message)
 end
 
 function App:clear_pointer()
-    self.touch_id,self.stick,self.press_action = nil,nil,nil
+    self.touch_id,self.stick,self.press_action,self.ability_touch = nil,nil,nil,nil
     self.keys={}
     gui.set_enabled(self.stick_base,false)
     gui.set_enabled(self.stick_tip,false)
@@ -558,7 +558,7 @@ function App:body(live)
     portrait(ui,1230,592,112,recipe,preview)
     if selected then
         local kind=selected.kind
-        ui:image("icons","icon_"..kind,1005,388,50,50)
+        ui:image("icons","icon_"..(Catalog.item(kind).icon or kind),1005,388,50,50)
         ui:fit_text(1048,388,name(kind),.92,ui.colors.mint,394,62)
     end
 
@@ -822,7 +822,8 @@ function App:start(seed)
     self.equipment_state=nil
     self:show_run()
     self:save_run()
-    self:notice("Веди палец по свободной части экрана")
+    local ability=self.sim:form_ability()
+    self:notice(ability.id and (ability.name..": "..ability.desc) or "Веди палец по свободной части экрана")
     print("MICROGEN RUN READY " .. tostring(self.sim.world.seed_value))
 end
 
@@ -836,6 +837,29 @@ local function safe_edges()
     -- and meters retain their 23-unit inner padding; other controls still
     -- respect the platform safe area on the right and vertically.
     return 0,right,top,bottom,left
+end
+
+function App:use_form_ability()
+    if self.screen ~= "run" then return false end
+    local x,y = self:drive()
+    local used = self.sim:activate_form_ability(x,y)
+    if used then self:draw_hud() end
+    return used
+end
+
+-- Отдельный палец способности не захватывает и не сбрасывает палец движения.
+function App:ability_pointer(id,x,y,pressed,released)
+    if self.ability_touch == id then
+        if released then self.ability_touch=nil end
+        return true
+    end
+    if self.screen=="run" and self.ability_button and pressed and self.ability_touch==nil
+        and id~=self.touch_id and gui.pick_node(self.ability_button.node,x,y) then
+        self.ability_touch=id
+        self:use_form_ability()
+        return true
+    end
+    return false
 end
 
 function App:show_run()
@@ -874,6 +898,20 @@ function App:show_run()
         self:body(true)
     end)
     ui:button(control_x,bottom+47,288,75,"Ⅱ  Пауза",function() self:pause() end)
+    self.ability_button=nil
+    local ability=self.sim:form_ability()
+    local ax,ay,aw,ah=ScreenLayout.ability_slot(safe_left,right,top,bottom)
+    if ax and ability.id then
+        self.ability_button=ui:button(ax,ay,aw,ah,"",function() self:use_form_ability() end)
+        local accent=color(ability.color)
+        self.ability_icon=ui:image("icons","icon_"..ability.icon,ax-86,ay,64,64)
+        self.ability_ring=ui:remember(gui.new_pie_node(vmath.vector3(ax-86,ay,0),vmath.vector3(92,92,0)))
+        gui.set_color(self.ability_ring,accent)
+        gui.set_inner_radius(self.ability_ring,39)
+        gui.set_perimeter_vertices(self.ability_ring,48)
+        self.ability_name=ui:fit_text(ax-35,ay+22,ability.name,.74,accent,167,42)
+        self.ability_status=ui:fit_text(ax-35,ay-22,"Нет цели / органа",.68,ui.colors.pale,167,44)
+    end
     self.reward_x,self.reward_y=control_x,top-250
     self.reward_button=false
     self.colony_label=ui:button(1230,bottom+83,420,81,"Войти в колонию",function()
@@ -923,6 +961,15 @@ function App:draw_hud()
         gui.set_text(self.shield_metric,cooldown<=0 and ("Щит готов · до %.0f урона"):format(sim:barrier_capacity())
             or ("Щит · восстановление %.1f с"):format(cooldown))
         gui.set_size(self.shield,vmath.vector3(math.max(.01,720*(1-math.min(1,cooldown/8))),10,0))
+    end
+    if self.ability_button then
+        local ability=sim:form_ability()
+        local cd=math.max(0,sim.cooldowns.form_ability or 0)
+        local ready=sim:form_ability_ready()
+        gui.set_fill_angle(self.ability_ring,math.max(.01,360*(1-math.min(1,cd/ability.cooldown))))
+        gui.set_color(self.ability_icon,ready and vmath.vector4(1,1,1,1) or vmath.vector4(.55,.55,.55,.8))
+        gui.set_color(self.ability_name,ready and Interface.color(ability.color) or self.hud.colors.dim)
+        gui.set_text(self.ability_status,cd>0 and ("%.1f с"):format(cd) or ready and "Готово" or "Нет цели / органа")
     end
     local biome=sim.world:biome(sim.player.x,sim.player.y)
     gui.set_text(self.biome_caption,sim.world:biome_name(biome).." · "..sim.world:condition_name(biome))
@@ -1229,7 +1276,7 @@ function App:open_pending()
                 self.close_current=close
                 local ui=self.modal
                 ui:panel("Запас заполнен","Находка сохранена в архиве семейства",close)
-                ui:image("icons","icon_"..part.kind,1230,677,218,218)
+                ui:image("icons","icon_"..(Catalog.item(part.kind).icon or part.kind),1230,677,218,218)
                 ui:text(1230,526,part_caption(part),1.05,ui.colors.mint,nil,true)
                 ui:button(946,391,520,88,"Управление",function()
                     self:equipment(part,"reserve",1,true,nil,function() self:open_pending() end)
@@ -1719,6 +1766,23 @@ function init(self)
             assert(app.home_slot==3 and app.screen=="home")
         end
         app:start(47)
+        assert(app.ability_button,"Selected form must have an ability HUD")
+        local node=app.ability_button.node
+        local pos,size=gui.get_position(node),gui.get_size(node)
+        assert(pos.x-size.x/2>=left-1 and pos.x+size.x/2<=right+1
+            and pos.y-size.y/2>bottom+85 and pos.y+size.y/2<top-291,
+            "Ability HUD must stay inside safe area and clear other controls")
+        local old_stick={ox=100,oy=100,x=200,y=100}
+        app.touch_id,app.stick="movement-fixture",old_stick
+        local old_action=app.sim.form_action
+        local old_cd=app.sim.cooldowns.form_ability
+        assert(app:ability_pointer("ability-fixture",pos.x,pos.y,true,false))
+        assert(app.touch_id=="movement-fixture" and app.stick==old_stick,"Ability must preserve movement touch")
+        assert(app:ability_pointer("ability-fixture",pos.x,pos.y,false,true) and app.ability_touch==nil)
+        app.sim.form_action,app.sim.cooldowns.form_ability=old_action,old_cd
+        app:clear_pointer()
+        app:draw_hud()
+        print("MICROGEN FORM ABILITY HUD READY")
     end
     if smoke and sys.get_config_string("microgen.smoke_balance","0")=="1" then
         require("main.run.balance_smoke").run()
@@ -2237,7 +2301,8 @@ function update(self,dt)
             state.step=step
             for i,icon in ipairs(state.icons) do
                 local ids=Catalog.ORGAN_IDS
-                gui.play_flipbook(icon,"icon_"..ids[(step*7+i*3)%#ids+1])
+                local organ_id=ids[(step*7+i*3)%#ids+1]
+                gui.play_flipbook(icon,"icon_"..(Catalog.item(organ_id).icon or organ_id))
             end
         end
         local scale=.72+fraction*.52+.04*math.sin(state.time*18)
@@ -2306,6 +2371,7 @@ function update(self,dt)
 end
 
 local function pointer(app,id,x,y,pressed,released)
+    if app:ability_pointer(id,x,y,pressed,released) then return end
     if pressed and app.touch_id==nil then
         local press_action=app.modal:hit(x,y) or (app.screen=="run" and app.hud:hit(x,y))
         local left,right=touch_zones()
@@ -2340,6 +2406,7 @@ end
 function on_input(self,id,action)
     local app=self.app
     if action.pressed and app.screen=="run" then
+        if id==hash("form_ability") then app:use_form_ability();return true end
         if id==hash("map") then app:map();return true end
         if id==hash("build") then app.development_origin=nil;app:body(true);return true end
         if id==hash("colony") then

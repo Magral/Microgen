@@ -116,7 +116,7 @@ function Combat:_player_poisoned(enemy)
     end
     for _, field in ipairs(self.fields) do
         if not field.hostile and field.life > 0 and field.damage > 0
-            and (field.kind == "poison" or field.kind == "spore" or field.kind == "mantle" or field.kind == "acid_arc")
+            and (field.kind == "poison" or field.kind == "spore" or field.kind == "mantle" or field.kind == "acid_arc" or field.kind == "rupture")
             and distance_squared(field.pos, enemy.pos) < (field.r + enemy.r * 0.5)^2 then
             return true
         end
@@ -303,6 +303,7 @@ function Combat:_update_enemy_status(enemy, dt, radius)
     if enemy.kind == "boss" and (enemy.boss_exposed or 0) > 0 then rate = rate * 1.6 end
     enemy.tissue_budget = min(enemy.max_hp * 0.06, (enemy.tissue_budget or 0) + enemy.max_hp * rate * dt)
     enemy.slow = max(0, enemy.slow - dt)
+    enemy.rupture_slow = max(0, (enemy.rupture_slow or 0) - dt)
     enemy.grasp = max(0, (enemy.grasp or 0) - dt)
     enemy.crown_time = max(0, (enemy.crown_time or 0) - dt)
     if enemy.crown_time > 0 then
@@ -376,7 +377,7 @@ function Combat:_update_enemy(i, dt, radius, safe)
     end
     if enemy.kind == "spitter" and distance < 300 then dx, dy = -dx * 0.3, -dy * 0.3 end
     if safe and enemy.kind ~= "prey" then dx, dy = -dx, -dy end
-    local speed = enemy.speed * rules.speed * (enemy.slow > 0 and 0.35 or 1) * (contains(enemy.traits, "swift") and 1.2 or 1)
+    local speed = enemy.speed * rules.speed * min(enemy.slow > 0 and 0.35 or 1, (enemy.rupture_slow or 0) > 0 and 0.85 or 1) * (contains(enemy.traits, "swift") and 1.2 or 1)
     dx, dy = dx * speed, dy * speed
     local pull_range = self:attraction_radius()
     if enemy.grasp > 0 then
@@ -459,9 +460,121 @@ function Combat:_nearest(radius, accept)
     return nearest
 end
 
+function Combat:form_ability()
+    return Catalog.form_specialization(self.run_loadout.form).ability or {}
+end
+
+function Combat:_rally_target(radius)
+    return self:_nearest(radius, function(enemy)
+        return not enemy.captured and not self:_is_engulfing(enemy)
+    end)
+end
+
+function Combat:form_ability_ready()
+    local ability = self:form_ability()
+    if not ability.id or self.hp <= 0 or self.paused or self.stage_transition or self.outcome ~= ""
+        or not self:_ready("form_ability") or self.form_action.kind then return false end
+    if ability.id == "predator_dash" then return self.build:rank("devour") > 0 end
+    if ability.id == "toxic_rupture" then return self.build:rank("acid") > 0 end
+    if ability.id == "colony_rally" then
+        return self:active_clone_count() > 0 and self:_rally_target(ability.radius) ~= nil
+    end
+    return false
+end
+
+function Combat:activate_form_ability(x, y)
+    if not self:form_ability_ready() then return false end
+    local ability = self:form_ability()
+    if ability.id == "predator_dash" then
+        local dx, dy, length = V.normal(x or 0, y or 0)
+        if length < .05 then dx, dy = math.cos(self.facing), math.sin(self.facing) end
+        self.facing = V.angle(dx, dy)
+        self.form_action = {kind = "dash", dx = dx, dy = dy, age = 0, hit = false}
+    elseif ability.id == "toxic_rupture" then
+        local rank = self.build:rank("acid")
+        local radius = (75 + rank * 9) * self.build:specialization_value("acid", "radius_mult") * self:ability_scale()
+        self:_field(self.player, radius * ability.radius_multiplier,
+            damage(rank, 4, 3) * ability.damage_multiplier, ability.duration, "rupture")
+        self:_effect("pulse", self.player, radius * ability.radius_multiplier, .65)
+    elseif ability.id == "colony_rally" then
+        local target = self:_rally_target(ability.radius)
+        if not target then return false end
+        self.form_action = {kind = "rally", target_id = target.id, pos = V.copy(target.pos), age = 0, hit = false}
+    else return false end
+    self.cooldowns.form_ability = ability.cooldown
+    return true
+end
+
+-- Подшаги рывка проходят штатные проверки рельефа и тел.
+function Combat:_advance_dash(dt)
+    local action, ability = self.form_action, self:form_ability()
+    local travel = min(dt, max(0, ability.duration - action.age)) * ability.distance / ability.duration
+    local steps = max(1, math.ceil(travel / 8))
+    local origin = self.player
+    for i = 1, steps do
+        self.player = self:_move_player_against_bodies(action.dx * travel / steps, action.dy * travel / steps)
+        if not action.hit then
+            local target = self:_nearest(math.huge, function(enemy)
+                return not enemy.captured and self:mouth_contact(enemy)
+            end)
+            if target then
+                local rank = self.build:rank("devour")
+                if rank > 0 then
+                    local bio = contains(self.build:active_synergies(), "enzyme_bite")
+                    self:hit_enemy(target, damage(rank, 7, 5) * (bio and 1.25 or 1) * ability.damage_multiplier, "devour")
+                    if bio then target.enzyme_time = 3 end
+                    if target.kind ~= "boss" and target.hp > 0 then
+                        target.form_dash_until = self.elapsed + ability.refund_window
+                    end
+                    self.bite_flash = 1
+                    self.cooldowns.bite = 0.45 * self.build:specialization_value("devour", "bite_cooldown_mult")
+                    self:_effect("bite", self.player, self:body_radius(), .35, {["end"] = target.pos})
+                end
+                action.hit = true
+            end
+        end
+    end
+    if distance_squared(origin, self.player) > 1 then
+        self:_effect("cilia", origin, self:body_radius(), .28, {["end"] = self.player})
+    end
+    action.age = action.age + dt
+    if action.age >= ability.duration - .000001 then self.form_action = {} end
+end
+
+function Combat:_refund_dash(enemy)
+    local ability = self:form_ability()
+    if ability.id ~= "predator_dash" or enemy.kind == "boss" or not enemy.form_dash_until or enemy.form_dash_until < self.elapsed then return end
+    local cd = self.cooldowns.form_ability or 0
+    self.cooldowns.form_ability = cd - min(ability.absorb_refund, max(0, cd - ability.minimum_cooldown))
+    enemy.form_dash_until = nil
+end
+
+function Combat:_advance_rally(dt)
+    local action, ability = self.form_action, self:form_ability()
+    local target
+    for _, enemy in ipairs(self.enemies) do
+        if enemy.id == action.target_id and enemy.hp > 0 and not enemy.captured then target = enemy; break end
+    end
+    if not action.hit and target then action.pos = V.copy(target.pos) end
+    action.age = action.age + dt
+    if not action.hit and action.age >= ability.approach_time then
+        action.hit = true
+        if target and not self:_is_engulfing(target) and distance_squared(self.player, target.pos) <= (ability.radius + 60)^2 then
+            local rank, count = self.build:rank("division"), self:active_clone_count()
+            if rank > 0 and count > 0 then
+                -- Один условный удар равен секундному контактному урону копии.
+                local amount = damage(rank, 8, 4) * min(ability.maximum_clone_hit_equivalents, count * ability.clone_damage_multiplier)
+                self:hit_enemy(target, amount, "division")
+                self:_effect("pulse", target.pos, target.r + 20, .5)
+            end
+        end
+    end
+    if action.age >= ability.approach_time + ability.return_time then self.form_action = {} end
+end
+
 function Combat:_bite(combos)
     local rank = self.build:rank("devour")
-    if rank <= 0 or not self:_ready("bite") then return end
+    if rank <= 0 or self.form_action.kind == "dash" or not self:_ready("bite") then return end
     local target = self:_nearest(math.huge, function(enemy) return not enemy.captured and self:mouth_contact(enemy) end)
     if not target then return end
     self.cooldowns.bite = 0.45 * self.build:specialization_value("devour", "bite_cooldown_mult")
@@ -598,7 +711,20 @@ end
 function Combat:clone_positions()
     local result = {}
     local count = self:active_clone_count()
-    for i = 0, count - 1 do result[#result + 1] = offset(self.player, self.elapsed * 1.6 + i * TAU / count, 105) end
+    local action = self.form_action
+    for i = 0, count - 1 do
+        local angle = self.elapsed * 1.6 + i * TAU / count
+        local p = offset(self.player, angle, 105)
+        if action.kind == "rally" then
+            local a = self:form_ability()
+            local t = action.age <= a.approach_time and action.age / a.approach_time
+                or max(0, 1 - (action.age - a.approach_time) / a.return_time)
+            t = Size.smoothstep(0, 1, t)
+            local q = offset(action.pos, angle, 12)
+            p = point(p.x + (q.x-p.x)*t, p.y + (q.y-p.y)*t)
+        end
+        result[#result + 1] = p
+    end
     return result
 end
 
@@ -669,7 +795,7 @@ function Combat:_attack(dt)
         end
     end
     rank = build:rank("division")
-    if rank > 0 then
+    if rank > 0 and self.form_action.kind ~= "rally" then
         for _, p in ipairs(self:clone_positions()) do
             for _, enemy in ipairs(self.enemies) do
                 if not self:_is_engulfing(enemy) and distance_squared(p, enemy.pos) < (enemy.r + 18)^2 then
@@ -755,7 +881,7 @@ function Combat:_field(pos, radius, amount, life, kind, hostile, name, id)
     if #self.fields >= 80 then table.remove(self.fields, 1) end
     self.fields[#self.fields + 1] = {
         pos = pos, r = radius, damage = amount, life = life, max = life, kind = kind, hostile = hostile,
-        source = ({ spore = "infection", mantle = "acid", acid_arc = "electric" })[kind] or "trail",
+        source = ({ spore = "infection", mantle = "acid", acid_arc = "electric", rupture = "acid" })[kind] or "trail",
         actor_name = name, actor_id = id,
     }
 end
@@ -783,8 +909,10 @@ function Combat:_update_fields(dt)
             end
         end
     end
+    local player_hits = {}
     for i = #pending, 1, -1 do
         local field = pending[i]
+        local active_dt = min(dt, max(0, field.life))
         field.life = field.life - dt
         if field.hostile then
             local id = field.actor_id
@@ -794,14 +922,28 @@ function Combat:_update_fields(dt)
                     pos = field.pos, id = field.actor_id,
                 })
             end
-        else
+        elseif active_dt > 0 then
             for _, enemy in ipairs(self.enemies) do
-                if distance_squared(field.pos, enemy.pos) < (field.r + enemy.r * 0.5)^2 then
-                    self:hit_enemy(enemy, field.damage * dt, field.source)
+                if enemy.hp > 0 and not enemy.captured and distance_squared(field.pos, enemy.pos) < (field.r + enemy.r * 0.5)^2 then
+                    local amount = field.damage * active_dt
+                    local effective = amount * self.build:power(field.source)
+                    local previous = player_hits[enemy]
+                    if not previous or effective > previous.effective then
+                        player_hits[enemy] = { amount = amount, effective = effective, source = field.source }
+                    end
+                    if field.kind == "rupture" then
+                        enemy.rupture_slow = max(enemy.rupture_slow or 0, Catalog.FORM_SPECIALIZATIONS.toxic.ability.slow_duration)
+                    end
                     if ferment then enemy.enzyme_time = 2 end
                 end
             end
         end
+    end
+    -- Все поля игрока имеют один источник: только сильнейшее воздействие за такт.
+    -- Порядок врагов сохраняется для воспроизводимости симуляции.
+    for _, enemy in ipairs(self.enemies) do
+        local hit = player_hits[enemy]
+        if hit then self:hit_enemy(enemy, hit.amount, hit.source) end
     end
     for i = #fields, 1, -1 do if fields[i].life <= 0 then table.remove(fields, i) end end
 end

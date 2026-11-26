@@ -24,6 +24,13 @@ end
 
 M.safe_bounds = safe_bounds
 
+-- Слот между паузой и верхними кнопками. При экстремальных отступах скрываем
+-- его вместо наложения на карту, организм, награду или системную область.
+function M.ability_slot(left,right,top,bottom)
+    if right-left < 600 or top-bottom < 530 then return nil end
+    return right-144,bottom+174,288,118
+end
+
 function M.test()
     local function near(actual, expected)
         assert(math.abs(actual - expected) < 0.001,
@@ -76,6 +83,9 @@ function M.test()
     near(top, 1047)
     near(bottom, 33)
 
+    local x,y,w,h = M.ability_slot(90,2346,1007,65)
+    assert(x+w/2<=2346 and y-h/2>65+85 and y+h/2<1007-291,"Ability slot overlaps HUD")
+    assert(not M.ability_slot(1230,1230,540,540),"Collapsed area must hide ability")
     return true
 end
 

@@ -12,3 +12,4 @@ key_trigger { input: KEY_ESC action: "back" }
 key_trigger { input: KEY_M action: "map" }
 key_trigger { input: KEY_B action: "build" }
 key_trigger { input: KEY_E action: "colony" }
+key_trigger { input: KEY_SPACE action: "form_ability" }

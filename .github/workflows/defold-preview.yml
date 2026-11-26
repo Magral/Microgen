@@ -183,6 +183,7 @@ jobs:
               done
               grep -Fq "MICROGEN PREVIEW READY" "$log"
               grep -Fq "MICROGEN RUN READY" "$log"
+              grep -Fq "MICROGEN FORM ABILITY HUD READY" "$log"
               grep -Fq "MICROGEN MUTATION CARDS READY" "$log"
               grep -Fq "MICROGEN SYNERGY EFFECT CARDS READY" "$log"
               grep -Fq "MICROGEN SPITTER TELEGRAPH READY" "$log"
@@ -205,6 +206,8 @@ jobs:
                 grep -Fq "MICROGEN SAVE RECOVERY READY" "$log"
                 grep -Fq "MICROGEN FORM SPECIALIZATION DATA READY" "$log"
                 grep -Fq "MICROGEN FORM PASSIVES READY" "$log"
+                grep -Fq "MICROGEN FORM ABILITIES READY" "$log"
+                grep -F "MICROGEN FORM ABILITIES READY" "$log"
                 grep -Fq "MICROGEN ENEMY MARKERS READY" "$log"
                 grep -F "MICROGEN BALANCE RUN" "$log"
                 grep -F "MICROGEN BALANCE SUMMARY" "$log"

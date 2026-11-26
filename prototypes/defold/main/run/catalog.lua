@@ -58,7 +58,8 @@ M.FORM_SPECIALIZATIONS = {
     predator = {
         research = "", branch = "predator", signature_organ = "chemoreceptor_ridge",
         ability = {
-            id = "predator_dash", name = "Рывок-хватка", cooldown = 14,
+            id = "predator_dash", name = "Рывок-хватка", cooldown = 14, icon = "devour", color = "ffbd88",
+            desc = "Рывок и усиленный укус. Поглощение цели ускоряет восстановление.", distance = 96, duration = 0.24, refund_window = 3,
             damage_multiplier = 1.25, absorb_refund = 2, minimum_cooldown = 10,
         },
         passive = {
@@ -74,7 +75,8 @@ M.FORM_SPECIALIZATIONS = {
     toxic = {
         research = "toxic", branch = "toxic", signature_organ = "osmotic_vacuole",
         ability = {
-            id = "toxic_rupture", name = "Разгерметизация", cooldown = 16,
+            id = "toxic_rupture", name = "Разгерметизация", cooldown = 16, icon = "acid", color = "b2dd75",
+            desc = "Кислотное поле на 3 с, замедляющее врагов.", radius_multiplier = 1.35,
             duration = 3, damage_multiplier = 0.60, slow = 0.15, slow_duration = 1.5,
             fields_do_not_stack = true,
         },
@@ -91,7 +93,8 @@ M.FORM_SPECIALIZATIONS = {
     colony = {
         research = "colony", branch = "colony", signature_organ = "synaptic_node",
         ability = {
-            id = "colony_rally", name = "Сбор колонии", cooldown = 15,
+            id = "colony_rally", name = "Сбор колонии", cooldown = 15, icon = "division", color = "e7a7f5",
+            desc = "Копии сходятся к цели и наносят согласованный удар.", approach_time = 0.30, return_time = 0.30,
             radius = 260, clone_damage_multiplier = 0.40, maximum_clone_hit_equivalents = 2,
         },
         passive = {

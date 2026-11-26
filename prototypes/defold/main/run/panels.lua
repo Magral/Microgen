@@ -315,7 +315,7 @@ function Panels.legacy(app,section,page,leave)
         for _,id in ipairs(legacy.forms) do
             local entry = Legacy.FORMS[id]
             rows[#rows+1] = {title=entry.name,icon=entry.organ,meta=legacy.selected_form==id and "ТЕКУЩАЯ ФОРМА" or "ФОРМА ТЕЛА",
-                detail=entry.passive.name..": "..entry.passive.desc,label=legacy.selected_form==id and "Выбрана" or "Выбрать",
+                detail=entry.passive.name..": "..entry.passive.desc,extra=entry.ability.name,extra_color=Interface.color(entry.ability.color),label=legacy.selected_form==id and "Выбрана" or "Выбрать",
                 action=function() edit("select_form",id) end}
         end
     elseif section=="trait" then

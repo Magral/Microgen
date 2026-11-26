@@ -30,7 +30,7 @@ function Simulation.new(seed, unlocked, upgrades, branch, loadout)
         world = World.generate(seed), rng = Rng.new(seed), build = Build.new(), upgrades = copy(upgrades or {}),
         hp = 100, max_hp = 100, elapsed = 0, xp = 0, level = 1, pending_levels = 0,
         enemies = {}, pickups = {}, remains = {}, fields = {}, shots = {}, effects = {}, residents = {},
-        cysts = {}, events = {}, feedback = {}, explored = {}, cooldowns = {}, damage_markers = {}, last_damage = {},
+        cysts = {}, events = {}, feedback = {}, explored = {}, cooldowns = {}, form_action = {}, damage_markers = {}, last_damage = {},
         combat_stats = Stats.create(),
         reward_queue = {}, reward_options = {}, pending_inventory = {}, offer_quality = {}, claimed_rewards = {},
         current_offers = {}, boss_reward = {}, boss_breakup = {}, material_pending = {}, material_batch = 0,
@@ -343,9 +343,10 @@ function Simulation:enter_next_stage(prepared_world)
     self.player, self.previous_player, self.player_velocity = self.world.start, self.world.start, point()
     self.last_damage, self._danger_at = {}, -10
     self.enemies, self.remains, self.fields, self.shots, self.effects, self.damage_markers = {}, {}, {}, {}, {}, {}
-    local feast_cd = self.cooldowns.form_feast
+    local feast_cd, ability_cd = self.cooldowns.form_feast, self.cooldowns.form_ability
     self.cooldowns, self.explored, self.events, self.current_offers, self.offer_quality = {}, {}, {}, {}, {}
-    self.cooldowns.form_feast = feast_cd
+    self.cooldowns.form_feast, self.cooldowns.form_ability = feast_cd, ability_cd
+    self.form_action = {}
     self.digesting_id, self.boss_spawned, self.boss_marker = -1, false, point()
     self.minibosses_spawned, self.minibosses_defeated = 0, 0
     self.stage_transition, self.boss_reward, self.boss_breakup = false, {}, {}
@@ -737,6 +738,7 @@ function Simulation:_die(index, absorbed)
         self:gain_xp(prey and 4 or floor(6 * scale))
         self.build.biomass = self.build.biomass + (prey and 1 or floor(3 * scale))
         self:heal_player(self.build:rank("devour") * 0.8)
+        self:_refund_dash(enemy)
         if enemy.meal_infected then self:_infected_meal() end
         if enemy.infect > 0 and contains(self.build:active_synergies(), "spore_feast") then self:_field(enemy.pos, 100, 14, 2.5, "spore") end
     elseif enemy.kind ~= "boss" then
@@ -890,7 +892,12 @@ function Simulation:step(dt, x, y)
     local vx, vy = self.player_velocity.x - x, self.player_velocity.y - y
     self.player_velocity = point(x + vx * response, y + vy * response)
     self.bite_flash = max(0, self.bite_flash - dt * 4.5)
-    self.player = self:_move_player_against_bodies(x * dt + vx * inertia * (1 - response), y * dt + vy * inertia * (1 - response))
+    if self.form_action.kind == "dash" then
+        self:_advance_dash(dt)
+        self.player_velocity = point()
+    else
+        self.player = self:_move_player_against_bodies(x * dt + vx * inertia * (1 - response), y * dt + vy * inertia * (1 - response))
+    end
     local biome = world:biome(self.player.x, self.player.y)
     if biome == self.sound_biome then
         self.sound_biome_candidate = nil
@@ -929,6 +936,7 @@ function Simulation:step(dt, x, y)
         self:spawn_enemy(self.world.boss_pos, "boss")
         self:_message("Открыт путь к главной угрозе: " .. self:boss_title() .. ". Найди её на карте.")
     end
+    if self.form_action.kind == "rally" then self:_advance_rally(dt) end
     self:_attack(dt)
     self:_update_shots(dt)
     self:_update_fields(dt)
@@ -1142,7 +1150,7 @@ local SAVED_KEYS = {
     "material_batch", "run_id", "player", "player_velocity", "remains", "digesting_id", "hp", "max_hp", "elapsed", "xp",
     "level", "pending_levels", "enemies", "pickups", "boss_spawned", "boss_marker", "kills", "cores_found",
     "next_id", "upgrades", "cooldowns", "current_offers", "rerolls", "fields", "shots", "spawn_timer", "invuln",
-    "bite_flash", "_danger_at",
+    "bite_flash", "_danger_at", "form_action",
 }
 
 function Simulation:snapshot()
@@ -1172,6 +1180,19 @@ function Simulation.restore(saved)
     self.rng.state = copy(saved.rng_state)
     self.combat_stats = Stats.restore(saved.combat_stats)
     self.run_loadout = Heredity.normalize(saved.run_loadout)
+    -- Старые сохранения не содержат действия. Некорректные/чужие действия
+    -- отменяются, но уже потраченная перезарядка не сбрасывается.
+    local action, ability = self.form_action, self:form_ability()
+    local valid = type(action) == "table" and finite(action.age) and action.age >= 0 and type(action.hit) == "boolean"
+        and ((ability.id == "predator_dash" and action.kind == "dash" and finite(action.dx) and finite(action.dy)
+            and math.abs(action.dx*action.dx + action.dy*action.dy - 1) < .001 and action.age < ability.duration)
+        or (ability.id == "colony_rally" and action.kind == "rally" and finite(action.target_id)
+            and type(action.pos) == "table" and finite(action.pos.x) and finite(action.pos.y)
+            and action.age < ability.approach_time + ability.return_time))
+    if not valid then self.form_action = {} end
+    local cd = self.cooldowns.form_ability
+    if not finite(cd) or cd < 0 then self.cooldowns.form_ability = nil
+    elseif ability.cooldown then self.cooldowns.form_ability = min(cd, ability.cooldown) end
     self.world.colonies, self.world.nests = copy(saved.colonies or self.world.colonies), copy(saved.nests or self.world.nests)
     self.previous_player = self.player
     self.explored = {}
