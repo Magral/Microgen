@@ -272,6 +272,11 @@ local function validate_resident_start_safety()
     assert(not resident.active and #sim.enemies == 0,
         "Resident amoeba became hostile during the initial safety window")
 
+    sim.elapsed = 7.99
+    sim:_update_ecology()
+    assert(not resident.active and #sim.enemies == 0,
+        "Resident amoeba became hostile before the eight-second safety window ended")
+
     sim.elapsed = 8
     sim:_update_ecology()
     assert(resident.active and #sim.enemies == 1,
