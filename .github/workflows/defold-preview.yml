@@ -96,7 +96,10 @@ jobs:
           sha256sum "$apk" > SHA256SUMS.txt
           printf '%s\n' "$GITHUB_SHA" > SOURCE_COMMIT.txt
 
-      - name: Upload Android preview
+      - name: Upload verified Android release candidate
+        if: >-
+          startsWith(github.ref, 'refs/tags/defold-') ||
+          startsWith(github.ref, 'refs/heads/release/defold-')
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Microgen-Defold-Android
