@@ -229,7 +229,25 @@ local function run(seed, branch)
     return sim.elapsed
 end
 
+local function validate_resident_start_safety()
+    local sim = Simulation.new(347, nil, nil, "colony")
+    local resident = sim.residents[1]
+    resident.pos = { x = sim.player.x, y = sim.player.y }
+
+    sim.elapsed = 0
+    sim:_update_ecology()
+    assert(not resident.active and #sim.enemies == 0,
+        "Resident amoeba became hostile during the initial safety window")
+
+    sim.elapsed = 8
+    sim:_update_ecology()
+    assert(resident.active and #sim.enemies == 1,
+        "Resident amoeba did not activate after the initial safety window")
+    print("MICROGEN RESIDENT START SAFETY READY")
+end
+
 function M.run()
+    validate_resident_start_safety()
     for index, branch in ipairs(BRANCHES) do
         for _, seed in ipairs(SEEDS) do
             run(seed + index * 100, branch)
