@@ -47,11 +47,10 @@ local function touch_zones()
     return left,right,top,bottom
 end
 
--- Reserve the right side for HUD and map controls while leaving a broad,
--- comfortable one-finger movement area on the left.
-local MOVEMENT_ZONE_RATIO = .58
-local function in_movement_zone(x,left,right)
-    return x <= left + (right-left)*MOVEMENT_ZONE_RATIO
+-- Let an unoccupied touch move the organism anywhere in the active playfield.
+-- UI hit targets take priority so right-side buttons remain clickable.
+local function can_start_movement(screen,press_action,x,left,right)
+    return screen=="run" and not press_action and x>=left and x<=right
 end
 
 local function stick_visual_origin(x,y)
@@ -833,7 +832,8 @@ function App:show_run()
     self.biomass=ui:text(left+23,top-250,"",.77,ui.colors.dim,width)
     self.goal=ui:text(left+23,top-279,"",.77,ui.colors.gold,width)
     self.last_damage=ui:text(left+23,top-326,"",.77,ui.colors.red,width)
-    self.metrics=ui:text(left,bottom+11,"",.73,color("a5d6ce"))
+    self.metrics=ui:fit_text(left+10,bottom+16,"000 FPS · P95 ≤ 000.0 мс",.73,
+        color("a5d6ce"),math.max(240,right-360),40)
     self.hud_has_barrier=nil
     if not self.minimap then self.minimap=Minimap.new(self.sim.world) end
     ui:surface(right-442,top-97,204,194,"panel")
@@ -1669,16 +1669,16 @@ function init(self)
         if top-bottom>=180 then
             assert(ly>=bottom+89 and ry<=top-89,"Joystick artwork must remain vertically inside safe area")
         end
-        assert(in_movement_zone(left,left,right),
+        assert(can_start_movement("run",nil,left,left,right),
             "Safe-area left edge must start one-finger movement")
-        assert(in_movement_zone(left+(right-left)*.25,left,right),
+        assert(can_start_movement("run",nil,left+(right-left)*.25,left,right),
             "Left quarter must start one-finger movement")
-        assert(in_movement_zone(left+(right-left)*.58,left,right),
-            "Movement zone must include its 58% boundary")
-        assert(not in_movement_zone(left+(right-left)*.59,left,right),
-            "Touches immediately beyond the movement zone must not start movement")
-        assert(not in_movement_zone(left+(right-left)*.80,left,right),
-            "Right-side empty space must not start an accidental movement gesture")
+        assert(can_start_movement("run",nil,left+(right-left)*.80,left,right),
+            "Right-side empty space must also start one-finger movement")
+        assert(not can_start_movement("run",function() end,left+(right-left)*.80,left,right),
+            "A right-side interface button must keep priority over movement")
+        assert(not can_start_movement("map",nil,left+(right-left)*.80,left,right),
+            "Touches on non-gameplay screens must not start movement")
         print("MICROGEN TOUCH ZONES READY")
         if #app.store:family_summaries()==0 then
             app.home_slot=3
@@ -1992,7 +1992,7 @@ function update(self,dt)
     if fps then
         if not app.sampled then print("MICROGEN PREVIEW SAMPLE "..app.driver);app.sampled=true end
         if app.metrics and app.sim and app.show_metrics then
-            gui.set_text(app.metrics,string.format("%.0f FPS  ·  95%% кадров ≤ %.1f мс  ·  %s",fps,p95,app.driver))
+            gui.set_text(app.metrics,string.format("%.0f FPS · P95 ≤ %.1f мс",fps,p95))
         end
     end
     if app.screen=="briefing_roll" then
@@ -2090,13 +2090,12 @@ local function pointer(app,id,x,y,pressed,released)
     if pressed and app.touch_id==nil then
         local press_action=app.modal:hit(x,y) or (app.screen=="run" and app.hud:hit(x,y))
         local left,right=touch_zones()
-        local starts_movement=app.screen=="run" and in_movement_zone(x,left,right)
-        -- Ignore empty touches outside the movement zone entirely; they must
-        -- not capture the single active pointer and block the left thumb.
+        local starts_movement=can_start_movement(app.screen,press_action,x,left,right)
+        -- UI actions win; any other touch within the safe playfield controls movement.
         if press_action or starts_movement then
             app.touch_id=id
             app.press_action=press_action
-            if starts_movement and not press_action then
+            if starts_movement then
                 local visual_x,visual_y=stick_visual_origin(x,y)
                 app.stick={ox=x,oy=y,x=x,y=y,visual_x=visual_x,visual_y=visual_y}
             end
