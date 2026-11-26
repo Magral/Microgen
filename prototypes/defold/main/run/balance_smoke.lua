@@ -6,6 +6,7 @@ local STEP = 1 / 60
 local HORIZON_SECONDS = 600
 local SEEDS = {47, 71}
 local BRANCHES = {"predator", "toxic", "colony"}
+local COLONY_SEEDS = {89, 181, 293, 509}
 local DIRECTIONS = {
     {1, 0}, {0.70710678, 0.70710678}, {0, 1}, {-0.70710678, 0.70710678},
     {-1, 0}, {-0.70710678, -0.70710678}, {0, -1}, {0.70710678, -0.70710678},
@@ -172,6 +173,22 @@ local function run(seed, branch)
     local sim = Simulation.new(seed, nil, nil, branch)
     local max_enemies, max_fields, max_remains = 0, 0, 0
     local steps, first_hit = 0, nil
+    local toxin_sources = {}
+    local original_hurt = sim.hurt_player
+    sim.hurt_player = function(self, amount, source)
+        local health_before = self.hp
+        original_hurt(self, amount, source)
+        local dealt = health_before - self.hp
+        if dealt > 0 and source and source.kind == "toxin" then
+            local id = tostring(source.id or 0)
+            local entry = toxin_sources[id]
+            if not entry then
+                entry = { id = id, name = source.name or "Источник неизвестен", damage = 0, hits = 0, first = self.elapsed }
+                toxin_sources[id] = entry
+            end
+            entry.damage, entry.hits, entry.last = entry.damage + dealt, entry.hits + 1, self.elapsed
+        end
+    end
 
     for tick = 1, HORIZON_SECONDS * 60 do
         if sim.outcome ~= "" then break end
@@ -221,12 +238,25 @@ local function run(seed, branch)
         source_labels[index] = string.format("%s/%s=%.1f(%d)", entry.kind, entry.name, entry.damage, entry.hits)
     end
     local source_summary = #source_labels > 0 and table.concat(source_labels, ";") or "none"
+    local toxin_labels = {}
+    for _, entry in pairs(toxin_sources) do toxin_labels[#toxin_labels + 1] = entry end
+    table.sort(toxin_labels, function(a, b)
+        if a.damage == b.damage then return a.id < b.id end
+        return a.damage > b.damage
+    end)
+    local toxin_summary = {}
+    for index = 1, math.min(4, #toxin_labels) do
+        local entry = toxin_labels[index]
+        toxin_summary[index] = string.format("%s/%s=%.1f(%d)@%.1f-%.1f", entry.id, entry.name,
+            entry.damage, entry.hits, entry.first, entry.last or entry.first)
+    end
+    local toxin_source_summary = #toxin_summary > 0 and table.concat(toxin_summary, ";") or "none"
     print(string.format(
-        "MICROGEN BALANCE RUN seed=%d branch=%s pilot=kite seconds=%.1f stage=%d level=%d kills=%d hp=%.1f damage_taken=%.1f first_hit=%s last_hit=%s damage_sources=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d",
+        "MICROGEN BALANCE RUN seed=%d branch=%s pilot=kite seconds=%.1f stage=%d level=%d kills=%d hp=%.1f damage_taken=%.1f first_hit=%s last_hit=%s damage_sources=%s toxin_sources=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d",
         seed, branch, sim.elapsed, sim.stage_index, sim.level, sim.kills, sim.hp,
-        sim.combat_stats.damage_taken, first_hit or "none", cause, source_summary,
+        sim.combat_stats.damage_taken, first_hit or "none", cause, source_summary, toxin_source_summary,
         sim.outcome == "" and "alive" or sim.outcome, steps, max_enemies, max_fields, max_remains))
-    return sim.elapsed
+    return { alive = sim.outcome == "", seconds = sim.elapsed, hp = sim.hp }
 end
 
 local function validate_resident_start_safety()
@@ -256,6 +286,13 @@ function M.run()
             run(seed + index * 100, branch)
         end
     end
+    local colony_survivors = 0
+    for _, seed in ipairs(COLONY_SEEDS) do
+        local result = run(seed, "colony")
+        if result.alive then colony_survivors = colony_survivors + 1 end
+    end
+    print(string.format("MICROGEN COLONY COHORT survivors=%d/%d horizon=%ds",
+        colony_survivors, #COLONY_SEEDS, HORIZON_SECONDS))
     print("MICROGEN BALANCE SMOKE READY")
 end
 
