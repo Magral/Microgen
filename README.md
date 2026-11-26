@@ -13,6 +13,12 @@
 - **Минимальная версия Android:** API 26
 - **Контрольное устройство:** Poco X8 Pro; игра также рассчитана на другие поддерживаемые Android-смартфоны и соотношения сторон.
 
+## В подготовке · 1.5.12
+
+- Снижение контактного урона крупных амёб, ограничение наложения токсинов одного источника.
+- Восстановление боя, усиленные проверки сохранений и жизненного цикла автообновления.
+- Версия кандидата: 1.5.12, код версии 162. Публикация только после успешных проверок.
+
 ## Стабильный релиз · 1.5.11
 
 - Портреты на главном экране и в разделе «Организм» используют игровую мембрану и сохранённый цвет. Строка FPS помещена в безопасную область экрана.
@@ -60,11 +66,11 @@
 
 ## Сборка и документация
 
-Откройте [`prototypes/defold/game.project`](prototypes/defold/game.project) в Defold Editor. Параметры Android: пакет `org.magral.microgen.defold`, минимальный API 26, версия проекта — 1.5.11, код версии 161.
+Откройте [`prototypes/defold/game.project`](prototypes/defold/game.project) в Defold Editor. Параметры Android: пакет `org.magral.microgen.defold`, минимальный API 26, версия проекта — 1.5.12, код версии 162.
 
 - [ROADMAP.md](ROADMAP.md) — этапы, критерии и незакрытые проверки.
 - [RELEASE_AUTOMATION.md](RELEASE_AUTOMATION.md) — порядок запуска стабильного релиза.
-- [RELEASE_NOTES.md](RELEASE_NOTES.md) — сведения о стабильном релизе 1.5.11.
+- [RELEASE_NOTES.md](RELEASE_NOTES.md) — заметки к готовящемуся выпуску 1.5.12.
 - [CHANGELOG.md](CHANGELOG.md) — история стабильных релизов.
-- [`prototypes/defold/RELEASE_NOTES.md`](prototypes/defold/RELEASE_NOTES.md) — заметки стабильного релиза 1.5.11.
+- [`prototypes/defold/RELEASE_NOTES.md`](prototypes/defold/RELEASE_NOTES.md) — заметки к готовящемуся выпуску 1.5.12.
 - [Технический аудит адаптации интерфейса](docs/development/ui-adaptation.md).
