@@ -1000,8 +1000,8 @@ function App:build(page,tab,live)
     if tab=="synergies" then
         for _,data in ipairs(Inspector.synergy_rows(sim.build)) do
             rows[#rows+1] = {title=data.title,meta=data.active and "СИНЕРГИЯ АКТИВНА" or "НУЖНА ПАРА ОРГАНОВ",
-                extra=data.active and "Эффект действует" or "Собери пару органов",extra_color=data.active and ui.colors.mint or ui.colors.dim,
-                detail=data.requirements,badge=data.active and "+" or "?",
+                extra=data.requirements,extra_color=data.active and ui.colors.mint or ui.colors.dim,
+                detail=data.description,badge=data.active and "+" or "?",
                 color=data.active and ui.colors.mint or ui.colors.pale,action=function()
                     self:overlay("build")
                     local left=ui:panel(data.title,data.requirements,function() self:build(page,tab,live) end)
