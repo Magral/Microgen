@@ -167,6 +167,14 @@ jobs:
                 kill -0 "$pid"
                 sleep 0.2
               done
+              for attempt in {1..240}; do
+                ready=1
+                grep -Fq "MICROGEN MEMBRANE HIT RESPONSE READY" "$log" || ready=0
+                if [[ "$profile" == standard ]] && ! grep -Fq "MICROGEN BALANCE SMOKE READY" "$log"; then ready=0; fi
+                if (( ready )); then break; fi
+                kill -0 "$pid"
+                sleep 0.25
+              done
               grep -Fq "MICROGEN PREVIEW READY" "$log"
               grep -Fq "MICROGEN RUN READY" "$log"
               grep -Fq "MICROGEN MUTATION CARDS READY" "$log"
@@ -179,11 +187,6 @@ jobs:
               grep -Fq "MICROGEN TISSUE LIFECYCLE READY" "$log"
               grep -Fq "MICROGEN MEMBRANE HIT RESPONSE READY" "$log"
               if [[ "$profile" == standard ]]; then
-                for attempt in {1..240}; do
-                  if grep -Fq "MICROGEN BALANCE SMOKE READY" "$log"; then break; fi
-                  kill -0 "$pid"
-                  sleep 0.25
-                done
                 grep -Fq "MICROGEN BALANCE SMOKE READY" "$log"
                 test "$(grep -c "MICROGEN BALANCE RUN" "$log")" -ge 6
                 grep -F "MICROGEN BALANCE RUN" "$log"
