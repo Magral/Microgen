@@ -284,11 +284,42 @@ local function validate_resident_start_safety()
     print("MICROGEN RESIDENT START SAFETY READY")
 end
 
+local function validate_combat_checkpoint()
+    local sim = Simulation.new(347, nil, nil, "predator", {form = "predator", seed = 347})
+    sim.elapsed, sim.hp, sim.bite_flash, sim._danger_at = 120, 20, 0.8, 119.5
+    sim.cooldowns.devour = 0.25
+    local spitter = assert(sim:spawn_enemy({x = sim.player.x + 300, y = sim.player.y}, "spitter"))
+    spitter.shot_cd = 0
+    sim:_spitter_windup(spitter, STEP, 300)
+    local saved = sim:snapshot()
+    local restored = assert(Simulation.restore(saved))
+    assert(restored.bite_flash == sim.bite_flash and restored._danger_at == sim._danger_at
+        and restored.cooldowns.devour == sim.cooldowns.devour,
+        "Reload must preserve bite state and cooldowns")
+
+    local resumed_spitter = restored.enemies[1]
+    assert(resumed_spitter.spit_windup == spitter.spit_windup
+        and resumed_spitter.spit_angle == spitter.spit_angle,
+        "Reload must preserve an ongoing enemy windup")
+    local delay = spitter.spit_windup
+    sim:_spitter_windup(spitter, delay, 300)
+    restored:_spitter_windup(resumed_spitter, delay, 300)
+    local shot, resumed_shot = sim.shots[1], restored.shots[1]
+    assert(shot and resumed_shot and shot.vel.x == resumed_shot.vel.x and shot.vel.y == resumed_shot.vel.y,
+        "Resumed enemy attack must follow the original direction")
+
+    saved.bite_flash, saved._danger_at = nil, nil
+    local legacy = assert(Simulation.restore(saved))
+    assert(legacy.bite_flash == 0 and legacy._danger_at == -10, "Older saves must remain readable")
+    print("MICROGEN COMBAT CHECKPOINT READY")
+end
+
 function M.run()
     validate_resident_start_safety()
-    for index, branch in ipairs(BRANCHES) do
+    validate_combat_checkpoint()
+    for index, scenario in ipairs(BRANCHES) do
         for _, seed in ipairs(SEEDS) do
-            run(seed + index * 100, branch)
+            run(seed + index * 100, scenario)
             collectgarbage("collect")
         end
     end

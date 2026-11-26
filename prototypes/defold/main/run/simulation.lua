@@ -1136,6 +1136,7 @@ local SAVED_KEYS = {
     "material_batch", "run_id", "player", "player_velocity", "remains", "digesting_id", "hp", "max_hp", "elapsed", "xp",
     "level", "pending_levels", "enemies", "pickups", "boss_spawned", "boss_marker", "kills", "cores_found",
     "next_id", "upgrades", "cooldowns", "current_offers", "rerolls", "fields", "shots", "spawn_timer", "invuln",
+    "bite_flash", "_danger_at",
 }
 
 function Simulation:snapshot()
