@@ -110,6 +110,14 @@ local function unit(value)
     return math.min(math.max(value or 0, 0), 1)
 end
 
+local function damage_flow(strength, hit_x, hit_y)
+    local x, y = bounded_direction(hit_x or 0, hit_y or 0)
+    local pulse = unit(strength) * 0.10
+    return -x * pulse, -y * pulse
+end
+
+tissue.damage_flow = damage_flow
+
 local function smoothstep(lo, hi, value)
     local t = unit((value - lo) / (hi - lo))
     return t * t * (3 - 2 * t)
@@ -124,7 +132,7 @@ function tissue.apply_deformation(node, state)
 end
 
 function tissue.update(state, motion, time, angle, half_width, half_height, contact_x, contact_y, bite, pigment, pigment_hex,
-        health_ratio, reaction, compact)
+        health_ratio, reaction, impact_x, impact_y, impact_strength, compact)
     if not state then return end
     local node = state.node
     contact_x, contact_y = bounded_direction(contact_x or 0, contact_y or 0)
@@ -155,8 +163,9 @@ function tissue.update(state, motion, time, angle, half_width, half_height, cont
         0.018 * math.sin(fifth), -0.018 * math.cos(fifth))
 
     local breathing = 1 + 0.025 * math.sin(time * 1.7 + phase + motion:turn()) + unit(reaction) * 0.055
-    state.flow = vmath.vector4(0.064 * math.sin(clock * 1.91 + phase),
-        0.053 * math.sin(clock * 1.47 - phase), breathing, math.cos(clock * 3.45 + phase))
+    local recoil_x, recoil_y = damage_flow(impact_strength, impact_x, impact_y)
+    state.flow = vmath.vector4(0.064 * math.sin(clock * 1.91 + phase) + recoil_x,
+        0.053 * math.sin(clock * 1.47 - phase) + recoil_y, breathing, math.cos(clock * 3.45 + phase))
     state.contact = vmath.vector4(contact_x, contact_y, bite, bite > 0 and math.sin(time * 10.2) or 0)
 
     local distress = smoothstep(0.04, 1, 1 - (health_ratio == nil and 1 or unit(health_ratio)))
