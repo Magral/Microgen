@@ -209,8 +209,9 @@ local function run(seed, scenario, horizon_seconds)
     for id in pairs(scenario.seed_organs or {}) do
         if not Util.index(unlocked,id) then unlocked[#unlocked+1]=id end
     end
-    local sim = Simulation.new(seed, unlocked, nil, branch, {form = branch, branch = branch, seed = seed})
+    local sim = Simulation.new(seed, unlocked, nil, branch, {form = branch, branch = branch, seed = seed, imprint = signature})
     assert(sim.build:rank(starter) == 1, "Balance run must start with its form's organ")
+    assert(sim.build:rank(signature) > 0, "Balance run must equip its form signature organ")
     for id,rank in pairs(scenario.seed_organs or {}) do sim.build.organs[id]=rank end
     for id,rank in pairs(scenario.seed_adaptations or {}) do sim.build.adaptations[id]=rank end
     sim.build._synergy_signature=nil
@@ -230,24 +231,34 @@ local function run(seed, scenario, horizon_seconds)
             "Hybrid control must actually disable "..scenario.disabled_synergy)
     end
     local synergy_triggers={acid_bite=0,enzyme_target=0,shared_shell=0}
-    local original_acid_bite=sim._acid_bite_refund
-    sim._acid_bite_refund=function(self)
-        synergy_triggers.acid_bite=synergy_triggers.acid_bite+1
-        return original_acid_bite(self)
-    end
-    local original_apply_enzymes=sim._apply_enzymes
-    sim._apply_enzymes=function(self,enemy,duration)
-        if Util.index(self.build:active_synergies(),"enzyme_target") and self:is_chemoreceptor_marked(enemy) then
-            synergy_triggers.enzyme_target=synergy_triggers.enzyme_target+1
+    local track_acid=Util.index(scenario.expected_synergies or {},"acid_bite")~=nil or scenario.disabled_synergy=="acid_bite"
+    local track_enzyme=Util.index(scenario.expected_synergies or {},"enzyme_target")~=nil or scenario.disabled_synergy=="enzyme_target"
+    local track_shell=Util.index(scenario.expected_synergies or {},"shared_shell")~=nil or scenario.disabled_synergy=="shared_shell"
+    if track_acid then
+        local original=sim._acid_bite_refund
+        sim._acid_bite_refund=function(self)
+            local before=self.cooldowns.form_ability or 0
+            original(self)
+            if (self.cooldowns.form_ability or 0)<before then synergy_triggers.acid_bite=synergy_triggers.acid_bite+1 end
         end
-        return original_apply_enzymes(self,enemy,duration)
     end
-    local original_barrier_capacity=sim.barrier_capacity
-    sim.barrier_capacity=function(self)
-        if Util.index(self.build:active_synergies(),"shared_shell") then
-            synergy_triggers.shared_shell=synergy_triggers.shared_shell+1
+    if track_enzyme then
+        local original=sim._apply_enzymes
+        sim._apply_enzymes=function(self,enemy,duration)
+            local before=enemy.enzyme_time or 0
+            original(self,enemy,duration)
+            if (enemy.enzyme_time or 0)>before then synergy_triggers.enzyme_target=synergy_triggers.enzyme_target+1 end
         end
-        return original_barrier_capacity(self)
+    end
+    if track_shell then
+        local original=sim.barrier_capacity
+        sim.barrier_capacity=function(self)
+            local capacity=original(self)
+            if capacity>0 and Util.index(self.build:active_synergies(),"shared_shell") then
+                synergy_triggers.shared_shell=synergy_triggers.shared_shell+1
+            end
+            return capacity
+        end
     end
     local max_enemies, max_fields, max_remains = 0, 0, 0
     local steps, first_hit = 0, nil
@@ -341,8 +352,8 @@ local function run(seed, scenario, horizon_seconds)
     local toxin_source_summary = #toxin_summary > 0 and table.concat(toxin_summary, ";") or "none"
     local marker=scenario.run_marker or "MICROGEN BALANCE RUN"
     print(string.format(
-        "%s seed=%d branch=%s starter=%s scenario=%s pilot=kite seconds=%.1f stage=%d level=%d kills=%d absorbed=%d hp=%.1f damage_dealt=%.1f damage_taken=%.1f first_hit=%s last_hit=%s damage_sources=%s toxin_sources=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d synergy_triggers=acid:%d,enzyme:%d,shell:%d",
-        marker,seed,branch,starter,scenario.name or "base",sim.elapsed,sim.stage_index,sim.level,sim.kills,
+        "%s seed=%d branch=%s starter=%s signature=%s signature_rank=%d scenario=%s pilot=kite seconds=%.1f stage=%d level=%d kills=%d absorbed=%d hp=%.1f damage_dealt=%.1f damage_taken=%.1f first_hit=%s last_hit=%s damage_sources=%s toxin_sources=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d synergy_triggers=acid:%d,enzyme:%d,shell:%d",
+        marker,seed,branch,starter,signature,sim.build:rank(signature),scenario.name or "base",sim.elapsed,sim.stage_index,sim.level,sim.kills,
         sim.absorbed or 0,sim.hp,sim.combat_stats.damage_dealt,sim.combat_stats.damage_taken,first_hit or "none",cause,source_summary,toxin_source_summary,
         sim.outcome=="" and "alive" or sim.outcome,steps,max_enemies,max_fields,max_remains,
         synergy_triggers.acid_bite,synergy_triggers.enzyme_target,synergy_triggers.shared_shell))
@@ -839,7 +850,8 @@ end
 
 local function validate_form_abilities()
     local function fresh(form)
-        local sim = Simulation.new(147,nil,nil,form,{form=form,branch=form,seed=147})
+        local signature=Catalog.signature_organ(form)
+        local sim = Simulation.new(147,nil,nil,form,{form=form,branch=form,seed=147,imprint=signature})
         sim.enemies,sim.residents,sim.fields = {},{},{}
         return sim
     end
