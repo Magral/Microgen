@@ -4,7 +4,8 @@ local Catalog = require "main.run.catalog"
 local M = {}
 local STEP = 1 / 60
 local HORIZON_SECONDS = 600
-local SEEDS = {47, 71}
+-- Одинаковые карты для всех форм: сравнение без подмены географии.
+local SEEDS = {147, 171, 247, 271, 347, 371}
 local BRANCHES = {
     {form = "predator", starter = "devour"},
     {form = "toxic", starter = "acid"},
@@ -263,7 +264,7 @@ local function run(seed, scenario, horizon_seconds)
         seed, branch, starter, sim.elapsed, sim.stage_index, sim.level, sim.kills, sim.hp,
         sim.combat_stats.damage_taken, first_hit or "none", cause, source_summary, toxin_source_summary,
         sim.outcome == "" and "alive" or sim.outcome, steps, max_enemies, max_fields, max_remains))
-    return { alive = sim.outcome == "", seconds = sim.elapsed, hp = sim.hp }
+    return { alive = sim.outcome == "", seconds = sim.elapsed, hp = sim.hp, level = sim.level, kills = sim.kills }
 end
 
 local function validate_resident_start_safety()
@@ -324,11 +325,18 @@ end
 function M.run()
     validate_resident_start_safety()
     validate_combat_checkpoint()
-    for index, scenario in ipairs(BRANCHES) do
+    for _, scenario in ipairs(BRANCHES) do
+        local seconds, levels, kills, survivors = 0, 0, 0, 0
         for _, seed in ipairs(SEEDS) do
-            run(seed + index * 100, scenario)
+            local result = run(seed, scenario)
+            seconds = seconds + result.seconds
+            levels = levels + result.level
+            kills = kills + result.kills
+            if result.alive then survivors = survivors + 1 end
             collectgarbage("collect")
         end
+        print(string.format("MICROGEN BALANCE SUMMARY branch=%s maps=%d mean_seconds=%.1f mean_level=%.2f mean_kills=%.2f survivors=%d",
+            scenario.form, #SEEDS, seconds / #SEEDS, levels / #SEEDS, kills / #SEEDS, survivors))
     end
     print("MICROGEN BALANCE SMOKE READY")
 end
