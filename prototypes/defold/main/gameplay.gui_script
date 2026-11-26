@@ -143,6 +143,7 @@ local function portrait(ui,x,y,radius,recipe,preview)
         gui.set_color(body,Interface.color(color))
     end
     if preview then
+        preview.body_radius=preview.body_radius or function() return radius end
         local anatomy=Anatomy.new(ui.group)
         ui:remember(anatomy.node)
         local scale=math.min(ui.horizontal_scale or 1,ui.vertical_scale or 1)
