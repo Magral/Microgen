@@ -376,6 +376,9 @@ local function run_batch(marker,scenario,seeds)
         seconds,levels,kills,absorbed,dealt,damage,stages=seconds+result.seconds,levels+result.level,
             kills+result.kills,absorbed+result.absorbed,dealt+result.damage_dealt,
             damage+result.damage_taken,stages+result.stage
+        acid_triggers=acid_triggers+result.synergy_triggers.acid_bite
+        enzyme_triggers=enzyme_triggers+result.synergy_triggers.enzyme_target
+        shell_triggers=shell_triggers+result.synergy_triggers.shared_shell
         if result.alive then survivors=survivors+1 end
         collectgarbage("collect")
     end
@@ -1206,9 +1209,6 @@ function M.run()
             seconds,levels,kills,absorbed,dealt,damage,stages=seconds+result.seconds,levels+result.level,
                 kills+result.kills,absorbed+result.absorbed,dealt+result.damage_dealt,
                 damage+result.damage_taken,stages+result.stage
-        acid_triggers=acid_triggers+result.synergy_triggers.acid_bite
-        enzyme_triggers=enzyme_triggers+result.synergy_triggers.enzyme_target
-        shell_triggers=shell_triggers+result.synergy_triggers.shared_shell
             if result.alive then survivors=survivors+1 end
             collectgarbage("collect")
         end
