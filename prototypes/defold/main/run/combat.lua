@@ -40,7 +40,7 @@ function Combat:contact_impact(rules, elite)
         elseif evolution.id == "living_reactor" then
             reduction = 0.15 + 0.30 * Size.smoothstep(1.08, 2.4, rules.ratio)
         end
-    elseif self.run_loadout.form == "colony" and rules.ratio > 1.08 then
+    elseif self.run_loadout.form == "colony" and rules.ratio > 1.25 then
         -- Базовая колония получает защиту раньше высшей эволюции:
         -- 10% от крупных целей с плавным ростом до прежнего предела 25%.
         reduction = max(reduction, 0.08 + 0.17 * Size.smoothstep(1.25, 2.4, rules.ratio))
