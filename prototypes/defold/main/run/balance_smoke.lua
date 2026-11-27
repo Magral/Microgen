@@ -339,11 +339,16 @@ colony_direction=function(sim,tick)
         local health=sim.hp/math.max(1,sim.max_hp)
         local supply
         local best_supply_distance=math.huge
+        local best_priority=-1
         for _,item in ipairs(sim.pickups) do
             if not item.captured and item.pos and
                 ((health<.82 and item.type=="heal") or (sim.level<6 and item.type=="dna")) then
                 local d=distance(player,item.pos)
-                if d<best_supply_distance then supply,best_supply_distance=item,d end
+                -- При низком здоровье ближайшая ДНК не должна вытеснять лечение.
+                local priority=(health<.68 and item.type=="heal") and 1 or 0
+                if priority>best_priority or (priority==best_priority and d<best_supply_distance) then
+                    supply,best_supply_distance,best_priority=item,d,priority
+                end
             end
         end
         local dx,dy=0,0
@@ -648,6 +653,15 @@ local function validate_colony_combat_pilot()
     local heal_x,heal_y=colony_direction(sim,2)
     assert(heal_x<0 and heal_x*heal_x+heal_y*heal_y>.5,
         "Colony pilot must prioritize nearby healing at critical health over combat")
+    sim.pickups[#sim.pickups+1]={type="dna",captured=false,pos={x=sim.player.x+60,y=sim.player.y}}
+    sim.level=2
+    heal_x,heal_y=colony_direction(sim,3)
+    assert(heal_x<0,"Critical healing must take priority over closer DNA")
+    sim.hp=sim.max_hp
+    sim.pickups={{type="dna",captured=false,pos={x=sim.player.x-120,y=sim.player.y}}}
+    local dna_x,dna_y=colony_direction(sim,4)
+    assert(dna_x<0 and dna_x*dna_x+dna_y*dna_y>.5,
+        "Early colony must collect nearby DNA instead of chasing a distant enemy")
     print("MICROGEN COLONY COMBAT PILOT READY")
 end
 
