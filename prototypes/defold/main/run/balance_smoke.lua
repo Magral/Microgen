@@ -132,9 +132,10 @@ local function direction(sim, tick)
     local player, radius = sim.player, sim:body_radius()
     local colony_pilot=sim.run_loadout.form=="colony"
     local toxic_pilot=sim.run_loadout.form=="toxic"
-    local cautious_pilot=colony_pilot or toxic_pilot
-    local threat_radius=colony_pilot and 500 or (toxic_pilot and 480 or 380)
-    local danger_radius=colony_pilot and 650 or (toxic_pilot and 620 or 520)
+    -- Возвращаем проверенные в #408 радиусы: расширение зоны избегания
+    -- токсичной формы в #423 ухудшило выживаемость с 2/8 до 0/8.
+    local threat_radius=colony_pilot and 500 or 380
+    local danger_radius=colony_pilot and 650 or 520
     local away_x, away_y, nearest_target, target_score = 0, 0, nil, math.huge
     for _, enemy in ipairs(sim.enemies) do
         if enemy.hp > 0 and not enemy.captured then
@@ -205,9 +206,9 @@ local function direction(sim, tick)
                 local current_distance = math.sqrt(current_x * current_x + current_y * current_y)
                 local next_distance = math.sqrt(next_x * next_x + next_y * next_y)
                 if current_distance < danger_radius or next_distance < danger_radius then
-                    local clearance = enemy.r + radius * 0.75 + (colony_pilot and 115 or (toxic_pilot and 90 or 65))
-                    local separation_weight=colony_pilot and 0.045 or (toxic_pilot and 0.035 or 0.025)
-                    local collision_weight=colony_pilot and 0.055 or (toxic_pilot and 0.045 or 0.03)
+                    local clearance = enemy.r + radius * 0.75 + (colony_pilot and 115 or 65)
+                    local separation_weight=colony_pilot and 0.045 or 0.025
+                    local collision_weight=colony_pilot and 0.055 or 0.03
                     score = score + (next_distance - current_distance) * separation_weight
                         - math.max(0, clearance - next_distance) * collision_weight
                 end
@@ -322,6 +323,16 @@ colony_direction=function(sim,tick)
         if heal then target=nil end
     end
     local player,radius=sim.player,sim:body_radius()
+    -- Не преследуем цель ценой остановки ранней прокачки.
+    if sim.level<6 then
+        for _,item in ipairs(sim.pickups) do
+            if item.type=="dna" and not item.captured and item.pos
+                and distance(player,item.pos)<180 then
+                target=nil
+                break
+            end
+        end
+    end
     if not target then
         -- Если все противники слишком велики для копий, не отдаём управление
         -- общему автопилоту: тот мог выбирать сближение с добычей прямо под телами врагов.
