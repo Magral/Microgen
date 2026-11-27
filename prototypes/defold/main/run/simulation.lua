@@ -345,8 +345,9 @@ function Simulation:enter_next_stage(prepared_world)
     self.last_damage, self._danger_at = {}, -10
     self.enemies, self.remains, self.fields, self.shots, self.effects, self.damage_markers = {}, {}, {}, {}, {}, {}
     local preserved_cooldowns={}
-    for _,id in ipairs({"form_feast","form_ability","chemoreceptor_mark","acid_bite",
-        "defense_active","defense_cooldown","emergency_regen_cooldown"}) do
+    for _,id in ipairs({"form_feast","special_attack","special_defense","chemoreceptor_mark","acid_bite",
+        "predator_frenzy_active","predator_escape_active","toxic_cocoon_active",
+        "colony_swarm_active","colony_bastion_active"}) do
         preserved_cooldowns[id]=self.cooldowns[id]
     end
     self.cooldowns, self.explored, self.events, self.current_offers, self.offer_quality = {}, {}, {}, {}, {}
@@ -892,6 +893,9 @@ function Simulation:step(dt, x, y)
     local condition = world.conditions[current_biome]
     self.sound_biome = self.sound_biome or current_biome
     local speed = (72 + self:body_radius() * 0.6) * (1 + build:passive("speed")) * (condition == 1 and 0.85 or 1)
+    if (self.cooldowns.predator_escape_active or 0)>0 then
+        speed=speed*Catalog.FORM_SPECIALIZATIONS.predator.defense.speed_multiplier
+    end
     local inertia = self:has_trait("elastic") and 0.13 or 0.2
     if self:has_trait("sensory") then speed = speed * 0.95 end
     local magnitude = max(1, sqrt(x * x + y * y))
@@ -929,6 +933,7 @@ function Simulation:step(dt, x, y)
     end
     self:_reveal()
     for id, seconds in pairs(self.cooldowns) do self.cooldowns[id] = max(0, seconds - dt) end
+    if (self.cooldowns.colony_bastion_active or 0)<=0 then self.colony_bastion_hp=0 end
     self.spawn_timer = self.spawn_timer - dt
     if self.spawn_timer <= 0 then
         self.spawn_timer = max(2, 2.6 - self.elapsed / 1000)
@@ -1163,6 +1168,7 @@ local SAVED_KEYS = {
     "level", "pending_levels", "enemies", "pickups", "boss_spawned", "boss_marker", "kills", "absorbed", "cores_found",
     "next_id", "upgrades", "cooldowns", "current_offers", "rerolls", "fields", "shots", "spawn_timer", "invuln",
     "bite_flash", "_danger_at", "form_action", "vacuole_charges", "signature_mark_id", "signature_mark_until", "rally_echo",
+    "colony_bastion_hp",
 }
 
 function Simulation:snapshot()
@@ -1194,11 +1200,8 @@ function Simulation.restore(saved)
     self.run_loadout = Heredity.normalize(saved.run_loadout)
     self.build.form=self.run_loadout.form or ""
     self.absorbed=finite(self.absorbed) and max(0,floor(self.absorbed)) or 0
-    local echo=self.rally_echo
-    if type(echo)~="table" or not finite(echo.target_id) or echo.target_id<=0 or echo.target_id%1~=0
-        or not finite(echo.due) or not finite(echo.amount) or not finite(echo.limit)
-        or echo.due>self.elapsed+1 or echo.amount<=0 or echo.amount>100000
-        or echo.limit<=0 or echo.limit>100000 or not self.build:evolved("synaptic_node") then self.rally_echo=nil end
+    -- Старые отложенные волны прежней кнопки «Сбор колонии» больше не используются.
+    self.rally_echo=nil
     if type(self.vacuole_charges)~="table" then self.vacuole_charges={} end
     self:vacuole_charge_count()
     if not finite(self.signature_mark_id) or not finite(self.signature_mark_until) or self.signature_mark_until>self.elapsed+4.2 then
@@ -1206,17 +1209,49 @@ function Simulation.restore(saved)
     end
     -- Старые сохранения не содержат действия. Некорректные/чужие действия
     -- отменяются, но уже потраченная перезарядка не сбрасывается.
-    local action, ability = self.form_action, self:form_ability()
-    local valid = type(action) == "table" and finite(action.age) and action.age >= 0 and type(action.hit) == "boolean"
-        and ((ability.id == "predator_dash" and action.kind == "dash" and finite(action.dx) and finite(action.dy)
-            and math.abs(action.dx*action.dx + action.dy*action.dy - 1) < .001 and action.age < ability.duration)
-        or (ability.id == "colony_rally" and action.kind == "rally" and finite(action.target_id)
-            and type(action.pos) == "table" and finite(action.pos.x) and finite(action.pos.y)
-            and action.age < ability.approach_time + ability.return_time))
-    if not valid then self.form_action = {} end
-    local cd = self.cooldowns.form_ability
-    if not finite(cd) or cd < 0 then self.cooldowns.form_ability = nil
-    elseif ability.cooldown then self.cooldowns.form_ability = min(cd, ability.cooldown) end
+    if type(self.cooldowns)~="table" then self.cooldowns={} end
+    for id,value in pairs(self.cooldowns) do
+        if not finite(value) or value<0 then self.cooldowns[id]=nil end
+    end
+    -- Миграция старого checkpoint: переносим остаток старого атакующего кулдауна,
+    -- но удаляем универсальные защитные таймеры, которых больше нет в игре.
+    if self.cooldowns.special_attack==nil and finite(self.cooldowns.form_ability) and self:form_evolution() then
+        self.cooldowns.special_attack=min(self.cooldowns.form_ability,self:form_ability().cooldown)
+    end
+    self.cooldowns.form_ability=nil
+    self.cooldowns.defense_active=nil
+    self.cooldowns.defense_cooldown=nil
+    self.cooldowns.emergency_regen_cooldown=nil
+    local ability=self:form_ability()
+    local defense=self:form_defense()
+    if ability.cooldown and self.cooldowns.special_attack then
+        self.cooldowns.special_attack=min(self.cooldowns.special_attack,ability.cooldown)
+    elseif not ability.id then
+        self.cooldowns.special_attack=nil
+    end
+    if defense.cooldown and self.cooldowns.special_defense then
+        self.cooldowns.special_defense=min(self.cooldowns.special_defense,defense.cooldown)
+    elseif not defense.id then
+        self.cooldowns.special_defense=nil
+    end
+    for _,entry in ipairs({
+        {"predator_frenzy_active",5},{"predator_escape_active",6},{"toxic_cocoon_active",6},
+        {"colony_swarm_active",10},{"colony_bastion_active",8},
+    }) do
+        local value=self.cooldowns[entry[1]]
+        if value then self.cooldowns[entry[1]]=min(value,entry[2]) end
+    end
+    local action=self.form_action
+    local valid=type(action)=="table" and finite(action.age) and action.age>=0 and type(action.hit)=="boolean"
+        and ability.id=="predator_primordial_rage" and action.kind=="dash" and finite(action.dx) and finite(action.dy)
+        and math.abs(action.dx*action.dx+action.dy*action.dy-1)<.001 and action.age<ability.duration
+    if not valid then self.form_action={} end
+    local bastion_hp=self.colony_bastion_hp
+    if not finite(bastion_hp) or bastion_hp<0 or (self.cooldowns.colony_bastion_active or 0)<=0 then
+        self.colony_bastion_hp=0
+    else
+        self.colony_bastion_hp=min(bastion_hp,self.max_hp*Catalog.FORM_SPECIALIZATIONS.colony.defense.capacity_fraction)
+    end
     self.world.colonies, self.world.nests = copy(saved.colonies or self.world.colonies), copy(saved.nests or self.world.nests)
     self.previous_player = self.player
     self.explored = {}
