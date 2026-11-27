@@ -237,9 +237,9 @@ local function run(seed, scenario, horizon_seconds)
     if track_acid then
         local original=sim._acid_bite_refund
         sim._acid_bite_refund=function(self)
-            local before=self.cooldowns.form_ability or 0
+            local before=self.cooldowns.special_attack or 0
             original(self)
-            if (self.cooldowns.form_ability or 0)<before then synergy_triggers.acid_bite=synergy_triggers.acid_bite+1 end
+            if (self.cooldowns.special_attack or 0)<before then synergy_triggers.acid_bite=synergy_triggers.acid_bite+1 end
         end
     end
     if track_enzyme then
@@ -980,9 +980,11 @@ local function validate_form_abilities()
     colony:hurt_player(20,{kind="projectile",name="Проверка бастиона"})
     near(colony.hp,hp_before-expected1,"Living bastion absorbs 85% of first hit")
     near(colony.colony_bastion_hp,colony.max_hp*.45-absorbed1,"Living bastion spends limited durability")
-    local expected2=expected_bastion_damage(40)
-    colony:hurt_player(40,{kind="projectile",name="Проверка бастиона"})
-    near(colony.hp,hp_before-expected1-expected2,"Living bastion allows damage through after depletion")
+    local hp_before_second=colony.hp
+    local expected2=expected_bastion_damage(1000)
+    colony:hurt_player(1000,{kind="projectile",name="Проверка бастиона"})
+    near(colony.hp,hp_before_second-math.min(hp_before_second,expected2),
+        "Living bastion allows damage through after its finite shield is depleted")
     assert(colony.colony_bastion_hp==0 and colony.cooldowns.colony_bastion_active==0,
         "Living bastion ends when its finite shield is depleted")
 
@@ -1083,7 +1085,8 @@ local function validate_signature_organs()
     near(colony:damage_reduction({kind="projectile"}),.015,"Gear protection in hybrid")
     colony.build.adaptations.armor=6
     near(colony:damage_reduction({kind="projectile"}),.6,"Armor cap")
-    assert(colony:form_ability().id=="predator_dash" and colony:form_passive().id=="feast","Foreign organs do not grant foreign form abilities")
+    assert(not colony:form_ability().id and not colony:form_defense().id and colony:form_passive().id=="feast",
+        "A signature organ does not unlock ultimate abilities before the matching evolution")
     print("MICROGEN SIGNATURE ORGANS READY")
 end
 
@@ -1136,66 +1139,47 @@ local function validate_form_evolutions_and_synergies()
     local pred=fresh("predator")
     pred.build.branch="toxic"
     evolve(pred,"chemoreceptor_ridge","magnet")
-    near(pred:form_ability().cooldown, 14,"Apex dash")
+    near(pred:form_ability().cooldown, 55,"Primordial rage cooldown")
     near(pred.build:power("chemoreceptor_ridge"),1,"No generic damage multiplier on form evolution")
     local restored=assert(Simulation.restore(pred:snapshot()))
-    near(restored:form_ability().cooldown, 14,"Evolution survives reload")
+    near(restored:form_ability().cooldown, 55,"Evolution survives reload")
     equipment_roundtrip(pred,"chemoreceptor_ridge","magnet","predator")
     local foreign=fresh("toxic")
     foreign.build.organs.chemoreceptor_ridge=6
     foreign.build.adaptations.magnet=3
     assert(not foreign.build:evolve("chemoreceptor_ridge"),"Foreign form cannot evolve signature")
     foreign.build.stats.evolutions.chemoreceptor_ridge=true
-    assert(not foreign.build:evolved("chemoreceptor_ridge") and foreign:form_ability().id=="toxic_rupture","Foreign evolved organ is dormant")
+    assert(not foreign.build:evolved("chemoreceptor_ridge") and not foreign:form_ability().id and not foreign:form_defense().id,
+        "Foreign evolved organ never unlocks another form's ultimate abilities")
     local toxic=fresh("toxic")
     evolve(toxic,"osmotic_vacuole","catalysis")
     assert(toxic:activate_form_ability())
-    near(toxic.fields[1].life,4,"Reactor duration")
-    near(toxic.fields[1].rupture_strength,.20,"Reactor slow")
-    near(toxic.fields[1].damage,Catalog.scaled_damage(7,1)*.6,"Reactor DPS unchanged")
+    near(toxic.fields[1].life,8,"Toxic cataclysm duration")
+    near(toxic.fields[1].rupture_strength,.40,"Toxic cataclysm slow")
+    near(toxic.fields[1].damage,Catalog.scaled_damage(7,1)*1.35,"Toxic cataclysm enhanced DPS")
     local e=target(toxic);e.pos=toxic.player
     toxic:_update_fields(.1)
-    near(e.rupture_strength,.20,"Reactor slows actual target")
+    near(e.rupture_strength,.40,"Toxic cataclysm slows actual target")
     equipment_roundtrip(toxic,"osmotic_vacuole","catalysis","toxic")
     local colony=fresh("colony")
     evolve(colony,"synaptic_node","armor")
     colony.build.organs.division=4
-    near(colony:form_ability().cooldown,15,"Collective cooldown")
+    near(colony:form_ability().cooldown,65,"Great swarm cooldown")
     near(colony:damage_reduction({kind="projectile"}),colony.build:passive("armor")+.075,"Collective defense")
     colony.build.adaptations.armor=6
     near(colony:damage_reduction({kind="projectile"}),.60,"Armor cap")
     equipment_roundtrip(colony,"synaptic_node","armor","colony")
-    local original_target=target(colony)
-    local dealt,hit_ids=0,{}
-    colony.hit_enemy=function(_,enemy,amount,source,limit)
-        assert(source=="division")
-        hit_ids[#hit_ids+1]=enemy.id
-        local actual=math.min(amount,limit or amount)
-        dealt=dealt+actual
-        return actual
-    end
+    local base_clone_count=#colony:clone_positions()
     assert(colony:activate_form_ability())
-    colony:_advance_rally(.3)
-    local first=dealt
-    assert(first>0 and colony.rally_echo)
-    near(colony.rally_echo.limit,first*.35,"Second wave is 35% of actual first hit")
-    original_target.hp=0
-    local replacement=target(colony)
-    colony:_advance_rally(.3)
-    colony.elapsed=.99;colony:_advance_rally_echo();near(dealt,first,"No early echo")
+    assert(colony.cooldowns.colony_swarm_active==10 and #colony:clone_positions()==base_clone_count+2,
+        "Great swarm adds two temporary combat copies")
     local reload=assert(Simulation.restore(colony:snapshot()))
-    assert(reload.rally_echo and reload.rally_echo.limit==colony.rally_echo.limit,"Pending echo limit survives checkpoint")
-    colony.elapsed=1;colony:_advance_rally_echo();near(dealt,first*1.35,"Second wave retargets after first target dies")
-    assert(hit_ids[2]==replacement.id,"Second wave must choose a living replacement target")
-    colony:_advance_rally_echo();near(dealt,first*1.35,"No duplicate echo")
-    local capped=fresh("colony")
-    local cap_target=target(capped)
+    assert(reload.cooldowns.colony_swarm_active==10 and #reload:clone_positions()==base_clone_count+2,
+        "Temporary combat copies and their timer survive checkpoint")
+    local cap_target=target(colony)
     cap_target.tissue_budget=1
-    local first_actual=capped:hit_enemy(cap_target,100,"division")
-    near(first_actual,1,"First hit obeys tissue budget")
-    cap_target.tissue_budget=100
-    local echo_actual=capped:hit_enemy(cap_target,100,"division",first_actual*.35)
-    near(echo_actual,first_actual*.35,"Second hit cannot exceed 35% of actual first hit")
+    local swarm_actual=colony:hit_enemy(cap_target,100,"division")
+    near(swarm_actual,1,"Great swarm still respects the enemy tissue damage budget")
 
     pred.build.organs.enzymes=1
     local marked=target(pred)
@@ -1208,16 +1192,16 @@ local function validate_form_evolutions_and_synergies()
     pred:_apply_enzymes(unmarked,4);near(unmarked.enzyme_time,4,"Unmarked duration")
     pred.build.organs.osmotic_vacuole=1
     marked.infect=2
-    pred.cooldowns.form_ability=8
+    pred.cooldowns.special_attack=8
     pred.vacuole_charges={pred.elapsed+10}
     pred:hit_enemy(marked,1,"devour")
-    near(pred.cooldowns.form_ability,7,"Acid bite refund")
+    near(pred.cooldowns.special_attack,7,"Acid bite refund")
     assert(pred:vacuole_charge_count()==1,"Acid bite must not consume a vacuole charge")
     pred:hit_enemy(marked,1,"devour")
-    near(pred.cooldowns.form_ability,7,"Acid bite cooldown prevents repeat")
+    near(pred.cooldowns.special_attack,7,"Acid bite cooldown prevents repeat")
     pred.cooldowns.acid_bite=0;marked.infect=0;pred.fields={}
     pred:hit_enemy(marked,1,"devour")
-    near(pred.cooldowns.form_ability,7,"Unpoisoned bite does not refund")
+    near(pred.cooldowns.special_attack,7,"Unpoisoned bite does not refund")
     pred.build.organs.synaptic_node=1;pred.build.organs.barrier=1;pred.build.organs.division=1
     local base=Catalog.scaled_damage(14,1)*pred.build:power("barrier")
     near(pred:barrier_capacity(),base*1.2,"Two clones increase shield")
