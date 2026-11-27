@@ -217,6 +217,7 @@ function Interface:cards(items,row_y,callback,set_color,preview)
             local marker=self:surface(x,row_y+height/2-46,width-80,44,"button")
             gui.set_color(marker,vmath.vector4(.15,.55,.43,.95))
             self:fit_text(x,row_y+height/2-46,"РЕКОМЕНДУЕМ",.85,PALE,width-98,40,true)
+            self:fit_text(x,row_y+height/2-90,item.recommendation or "",.72,MINT,width-80,36,true)
         end
         self:box(x-width/2+3,row_y,5,height-30,shade)
         self:box(x+width/2-3,row_y,2,height-30,vmath.vector4(shade.x,shade.y,shade.z,.45))
