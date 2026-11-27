@@ -1866,48 +1866,44 @@ function init(self)
             assert(app.home_slot==3 and app.screen=="home")
         end
         app:start(47)
-        assert(app.ability_button,"Selected form must have an ability HUD")
-        assert(app.defense_button and app.regen_button,"Both defensive abilities must be visible")
+        assert(not app.ability_button and not app.defense_button,
+            "Ultimate buttons must remain locked before the form evolution")
+        local original_sim=app.sim
+        local sim=Simulation.new(147,nil,nil,"predator",{form="predator",branch="predator",seed=147})
+        sim.build.organs.chemoreceptor_ridge=6
+        sim.build.adaptations.magnet=3
+        assert(sim.build:evolve("chemoreceptor_ridge"),"Predator ultimate evolution must be available")
+        app.sim=sim
+        app:show_run()
+        assert(app.ability_button and app.defense_button and not app.regen_button,
+            "Exactly one attack and one defense button must appear after the evolution")
         local defense_pos,defense_size=gui.get_position(app.defense_button.node),gui.get_size(app.defense_button.node)
-        local regen_pos,regen_size=gui.get_position(app.regen_button.node),gui.get_size(app.regen_button.node)
-        local attack_pos=gui.get_position(app.ability_button.node)
-        assert(defense_pos.x-defense_size.x/2>=left-1 and regen_pos.x-regen_size.x/2>=left-1,
-            "Defensive abilities must stay on the left inside the safe area")
-        assert(attack_pos.x>scene_width/2,"Form attack ability must stay on the right")
-        assert(math.abs(defense_pos.y-regen_pos.y)>100,"Defensive buttons must not overlap")
-        local sim=app.sim
-        local old_hp=sim.hp
-        sim.hp=sim.max_hp*.5
-        local damaged_hp=sim.hp
-        assert(sim:activate_defensive_ability("defense"))
-        assert((sim.cooldowns.defense_active or 0)==5 and (sim.cooldowns.defense_cooldown or 0)==70)
-        assert(sim:activate_defensive_ability("emergency_regen"))
-        assert(sim.hp>damaged_hp and sim.hp<=sim.max_hp and (sim.cooldowns.emergency_regen_cooldown or 0)==65)
-        assert((sim.cooldowns.defense_cooldown or 0)==70,"Defensive cooldowns must be independent")
-        sim.cooldowns.defense_active,sim.cooldowns.defense_cooldown,sim.cooldowns.emergency_regen_cooldown=nil,nil,nil
-        sim.hp=old_hp
-        local node=app.ability_button.node
-        local pos,size=gui.get_position(node),gui.get_size(node)
-        assert(pos.x-size.x/2>=left-1 and pos.x+size.x/2<=right+1
-            and pos.y-size.y/2>bottom+85 and pos.y+size.y/2<top-291,
-            "Ability HUD must stay inside safe area and clear other controls")
+        local attack_pos,attack_size=gui.get_position(app.ability_button.node),gui.get_size(app.ability_button.node)
+        assert(defense_pos.x-defense_size.x/2>=left-1 and defense_pos.x<scene_width/2,
+            "The only defensive button must stay on the left inside the safe area")
+        assert(attack_pos.x+attack_size.x/2<=right+1 and attack_pos.x>scene_width/2,
+            "The only attack button must stay on the right inside the safe area")
         local old_stick={ox=100,oy=100,x=200,y=100}
         app.touch_id,app.stick="movement-fixture",old_stick
-        local old_action=app.sim.form_action
-        local old_cd=app.sim.cooldowns.form_ability
-        assert(app:ability_pointer("ability-fixture",pos.x,pos.y,true,false))
-        assert(app.touch_id=="movement-fixture" and app.stick==old_stick,"Ability must preserve movement touch")
-        assert(app:ability_pointer("ability-fixture",pos.x,pos.y,false,true) and app.ability_touch==nil)
-        local dpos=gui.get_position(app.defense_button.node)
-        local rpos=gui.get_position(app.regen_button.node)
+        local dpos,apos=gui.get_position(app.defense_button.node),gui.get_position(app.ability_button.node)
         assert(app:ability_pointer("defense-fixture",dpos.x,dpos.y,true,false))
-        assert(app:ability_pointer("regen-fixture",rpos.x,rpos.y,true,false),
-            "Two defensive controls must accept independent simultaneous fingers")
+        assert(app:ability_pointer("attack-fixture",apos.x,apos.y,true,false),
+            "Two ability fingers must be tracked independently")
         assert(app.touch_id=="movement-fixture" and app.stick==old_stick,
-            "Defensive touches must not cancel movement")
+            "Ability touches must not cancel the movement finger")
         assert(app:ability_pointer("defense-fixture",dpos.x,dpos.y,false,true))
-        assert(app:ability_pointer("regen-fixture",rpos.x,rpos.y,false,true))
-        app.sim.form_action,app.sim.cooldowns.form_ability=old_action,old_cd
+        assert(app:ability_pointer("attack-fixture",apos.x,apos.y,false,true))
+        assert(sim.cooldowns.special_defense==75 and sim.cooldowns.special_attack==55,
+            "Attack and defense must have independent long cooldowns")
+        assert(sim.cooldowns.predator_escape_active==6 and sim.cooldowns.predator_frenzy_active==5,
+            "Both predator effects must start with their own durations")
+        local checkpoint=sim:snapshot()
+        local restored=Simulation.restore(checkpoint)
+        assert(restored and restored.cooldowns.special_defense==75 and restored.cooldowns.special_attack==55
+            and restored.cooldowns.predator_escape_active==6 and restored.cooldowns.predator_frenzy_active==5,
+            "Specialization ability cooldowns and active effects must survive checkpoint restore")
+        app.sim=original_sim
+        app:show_run()
         app:clear_pointer()
         app:draw_hud()
         print("MICROGEN FORM ABILITY HUD READY")
@@ -2240,18 +2236,12 @@ function init(self)
                 end
                 assert(retry,"Download failure must offer a clear retry action")
             end
-            local patch_notes=0
-            for _,node in ipairs(app.modal.nodes) do
-                if gui.get_type(node)==gui.TYPE_TEXT then
-                    local value=gui.get_text(node)
-                    if value:find("1.5.14",1,true)
-                        or value:find("1.5.13",1,true)
-                        or value:find("1.5.12",1,true) then
-                        patch_notes=patch_notes+1
-                    end
-                end
+            assert(#UPDATE_NOTES==3 and #app.update_note_nodes==3,
+                "Update screen must render exactly three recent release notes")
+            for index,note in ipairs(UPDATE_NOTES) do
+                assert(gui.get_text(app.update_note_nodes[index]):find(note.version,1,true),
+                    "Missing player-facing notes for version "..note.version)
             end
-            assert(patch_notes==3,"Update screen must show three player-facing patch notes")
         end
         app.updater=original_updater
         print("MICROGEN UPDATE PATH READY")
