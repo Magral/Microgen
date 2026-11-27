@@ -121,7 +121,13 @@ local function settle_stage(sim)
     assert(sim:enter_next_stage(), "Balance run could not enter the next stage")
 end
 
+local colony_direction
+
 local function direction(sim, tick)
+    if sim.run_loadout.form=="colony" then
+        local x,y=colony_direction(sim,tick)
+        if x then return x,y end
+    end
     local player, radius = sim.player, sim:body_radius()
     local colony_pilot=sim.run_loadout.form=="colony"
     local threat_radius=colony_pilot and 500 or 380
@@ -255,6 +261,84 @@ local function distance(a,b)
     return math.sqrt((a.x-b.x)^2+(a.y-b.y)^2)
 end
 
+local function colony_attack_target(sim)
+    local radius=sim:body_radius()
+    local best,best_score
+    for _,enemy in ipairs(sim.enemies) do
+        if enemy.hp>0 and not enemy.captured and enemy.kind~="prey" then
+            local ratio=enemy.r/math.max(1,radius)
+            local giant=enemy.kind=="boss" or ratio>=1.6
+            local vulnerable=enemy.fractured or (enemy.enzyme_time or 0)>0
+                or (enemy.boss_exposed or 0)>0
+            if not giant or vulnerable then
+                local d=distance(sim.player,enemy.pos)
+                local score=d-(enemy.kind=="miniboss" and 55 or 0)
+                if not best or score<best_score then best,best_score=enemy,score end
+            end
+        end
+    end
+    return best
+end
+
+local function colony_attack_range(sim,enemy)
+    local radius=sim:body_radius()
+    return math.max(enemy.r+radius*.75+35,enemy.r+111)
+end
+
+colony_direction=function(sim,tick)
+    local target=colony_attack_target(sim)
+    if not target then return nil end
+    local player,radius=sim.player,sim:body_radius()
+    local d=math.max(.001,distance(player,target.pos))
+    local range=colony_attack_range(sim,target)
+    local ux,uy=(target.pos.x-player.x)/d,(target.pos.y-player.y)/d
+    local error=d-range
+    local radial=math.max(-1,math.min(1,error/48))
+    local tangent=.28
+    if math.abs(error)<24 then radial=0;tangent=.72 end
+    local desired_x,desired_y=ux*radial-uy*tangent,uy*radial+ux*tangent
+    local length=math.sqrt(desired_x*desired_x+desired_y*desired_y)
+    if length>.001 then desired_x,desired_y=desired_x/length,desired_y/length end
+
+    local best_x,best_y,best_score=0,0,-math.huge
+    local step_distance=math.max(16,85*STEP*2)
+    for _,candidate in ipairs(DIRECTIONS) do
+        local nx,ny=player.x+candidate[1]*step_distance,player.y+candidate[2]*step_distance
+        local next_pos={x=nx,y=ny}
+        local next_distance=distance(next_pos,target.pos)
+        local score=candidate[1]*desired_x+candidate[2]*desired_y
+        score=score-math.abs(next_distance-range)*.0015
+        score=score-math.max(0,target.r+radius*.75+34-next_distance)*.16
+        if not sim.world:walkable(nx,ny,math.min(26,radius*.65)) then score=score-100 end
+        for _,other in ipairs(sim.enemies) do
+            if other~=target and other.hp>0 and not other.captured and other.kind~="prey" then
+                local safe=other.r+radius*.75+38
+                score=score-math.max(0,safe-distance(next_pos,other.pos))*.04
+            end
+        end
+        for _,field in ipairs(sim.fields) do
+            if field.hostile then
+                local safe=field.r+radius*.65+42
+                score=score-math.max(0,safe-distance(next_pos,field.pos))*.045
+            end
+        end
+        for _,shot in ipairs(sim.shots) do
+            if shot.hostile then
+                local vx,vy=shot.vel.x,shot.vel.y
+                local speed2=vx*vx+vy*vy
+                if speed2>1 then
+                    local t=math.max(0,math.min(.65,((nx-shot.pos.x)*vx+(ny-shot.pos.y)*vy)/speed2))
+                    local sx,sy=shot.pos.x+vx*t,shot.pos.y+vy*t
+                    local separation=math.sqrt((nx-sx)^2+(ny-sy)^2)
+                    score=score-math.max(0,radius*.78+22-separation)*.10
+                end
+            end
+        end
+        if score>best_score then best_x,best_y,best_score=candidate[1],candidate[2],score end
+    end
+    return best_x,best_y
+end
+
 local function progression_supply_target(sim)
     local health=sim.hp/math.max(1,sim.max_hp)
     local function nearest(kind,limit)
@@ -314,8 +398,8 @@ local function objective_attack_range(sim,enemy)
         local acid=(75+rank*9)*sim.build:specialization_value("acid","radius_mult")*sim:ability_scale()
         return math.max(damage_contact+35,math.min(enemy.r*.78+acid*.90,enemy.r+acid))
     elseif form=="colony" then
-        -- Копии вращаются на радиусе 105 и наносят контактный урон в пределах r+18.
-        return math.max(damage_contact+35,enemy.r+105+18-12)
+        -- Безопасная дистанция одновременно оставляет цель в зоне орбиты копий.
+        return colony_attack_range(sim,enemy)
     end
     return damage_contact+35
 end
@@ -418,6 +502,23 @@ local function progression_direction(sim,tick,cache)
         end
     end
     return best_x,best_y
+end
+
+local function validate_colony_combat_pilot()
+    local sim=Simulation.new(147,nil,nil,"colony",{form="colony",branch="colony",seed=147})
+    local radius=sim:body_radius()
+    local target={id=9901,kind="hostile",r=radius*1.25,pos={x=sim.player.x+500,y=sim.player.y},hp=100,max_hp=100}
+    local giant={id=9902,kind="hostile",r=radius*1.8,pos={x=sim.player.x+180,y=sim.player.y},hp=100,max_hp=100}
+    sim.enemies={target,giant}
+    assert(colony_attack_target(sim)==target,"Colony pilot must select a target that clones can damage")
+    local range=colony_attack_range(sim,target)
+    assert(range>=target.r+radius*.75+34,"Colony copies must attack outside body collision range")
+    assert(range-105<=target.r+18,"Colony copies must reach the selected target from their orbit")
+    local dx,dy=colony_direction(sim,1)
+    assert(dx>0 and dx*dx+dy*dy>.5,"Colony pilot must approach a distant clone target")
+    sim.enemies={giant}
+    assert(not colony_attack_target(sim),"Colony pilot must not chase a giant that clones cannot damage")
+    print("MICROGEN COLONY COMBAT PILOT READY")
 end
 
 local function validate_progression_pilot()
@@ -567,6 +668,19 @@ local function run(seed, scenario, horizon_seconds)
     local steps, first_hit = 0, nil
     local toxin_sources = {}
     local contact_damage, contact_hits = 0, 0
+    local clone_damage,clone_hits,clone_swarm_damage,clone_swarm_hits=0,0,0,0
+    if branch=="colony" then
+        local original_clone_hit=sim._synaptic_hit
+        sim._synaptic_hit=function(self,enemy,amount,index)
+            local swarm=(self.cooldowns.colony_swarm_active or 0)>0
+            local dealt=original_clone_hit(self,enemy,amount,index)
+            if dealt>0 then
+                clone_damage,clone_hits=clone_damage+dealt,clone_hits+1
+                if swarm then clone_swarm_damage,clone_swarm_hits=clone_swarm_damage+dealt,clone_swarm_hits+1 end
+            end
+            return dealt
+        end
+    end
     local boss_contact_damage,miniboss_contact_damage=0,0
     local original_hurt = sim.hurt_player
     sim.hurt_player = function(self, amount, source)
@@ -632,18 +746,14 @@ local function run(seed, scenario, horizon_seconds)
                 end
                 if target then sim:activate_form_ability() end
             else
-                local use=not scenario.progression
-                if scenario.progression and elite then
-                    use=distance(sim.player,elite.pos)<=objective_attack_range(sim,elite)+70
-                        and (elite.kind~="boss" or (elite.boss_exposed or 0)>0 or (elite.boss_windup or 0)>0)
-                end
-                if scenario.progression and not use then
-                    local nearby=0
-                    for _,other in ipairs(sim.enemies) do
-                        if other.hp>0 and not other.captured and other.kind~="prey"
-                            and distance(sim.player,other.pos)<260 then nearby=nearby+1 end
-                    end
-                    use=nearby>=3
+                local target=scenario.progression and elite or colony_attack_target(sim)
+                local use=false
+                if target then
+                    local d=distance(sim.player,target.pos)
+                    local reach=105+target.r+18
+                    local safe=target.r+sim:body_radius()*.75+12
+                    use=d<=reach and d>=safe
+                        and (target.kind~="boss" or (target.boss_exposed or 0)>0 or (target.boss_windup or 0)>0)
                 end
                 if use then sim:activate_form_ability() end
             end
@@ -731,23 +841,25 @@ local function run(seed, scenario, horizon_seconds)
             "Disabled synergy unexpectedly affected combat: "..scenario.disabled_synergy)
     end
     if scenario.progression then
-        print(string.format("MICROGEN OBJECTIVE RESULT form=%s seed=%d build=%s nests=%d minibosses=%d boss_damage=%.1f boss_hp=%.1f exposed_damage=%.1f boss_contact=%.1f miniboss_contact=%.1f reached_two=%d seconds=%.1f contact_damage=%.1f contact_hits=%d attack_uses=%d defense_uses=%d outcome=%s",
+        print(string.format("MICROGEN OBJECTIVE RESULT form=%s seed=%d build=%s nests=%d minibosses=%d boss_damage=%.1f boss_hp=%.1f exposed_damage=%.1f boss_contact=%.1f miniboss_contact=%.1f clone_damage=%.1f clone_hits=%d swarm_damage=%.1f swarm_hits=%d reached_two=%d seconds=%.1f contact_damage=%.1f contact_hits=%d attack_uses=%d defense_uses=%d outcome=%s",
             branch,seed,scenario.evolve and "evolved" or "base",nests_seen,minibosses,boss_damage,boss_hp_remaining,
-            exposed_damage,boss_contact_damage,miniboss_contact_damage,sim.stage_index>=2 and 1 or 0,
-            sim.elapsed,contact_damage,contact_hits,attack_uses,defense_uses,
+            exposed_damage,boss_contact_damage,miniboss_contact_damage,clone_damage,clone_hits,clone_swarm_damage,clone_swarm_hits,
+            sim.stage_index>=2 and 1 or 0,sim.elapsed,contact_damage,contact_hits,attack_uses,defense_uses,
             sim.stage_index>=2 and "stage2" or (sim.outcome=="" and "timeout" or sim.outcome)))
     end
     local marker=scenario.run_marker or "MICROGEN BALANCE RUN"
     print(string.format(
-        "%s seed=%d branch=%s starter=%s signature=%s signature_rank=%d scenario=%s pilot=%s seconds=%.1f stage=%d level=%d kills=%d absorbed=%d hp=%.1f damage_dealt=%.1f damage_taken=%.1f contact_damage=%.1f contact_hits=%d damage_blocked=%.1f healed=%.1f attack_uses=%d defense_uses=%d first_hit=%s last_hit=%s damage_sources=%s toxin_sources=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d synergy_triggers=acid:%d,enzyme:%d,shell:%d",
+        "%s seed=%d branch=%s starter=%s signature=%s signature_rank=%d scenario=%s pilot=%s seconds=%.1f stage=%d level=%d kills=%d absorbed=%d hp=%.1f damage_dealt=%.1f damage_taken=%.1f contact_damage=%.1f contact_hits=%d clone_damage=%.1f clone_hits=%d swarm_damage=%.1f swarm_hits=%d damage_blocked=%.1f healed=%.1f attack_uses=%d defense_uses=%d first_hit=%s last_hit=%s damage_sources=%s toxin_sources=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d synergy_triggers=acid:%d,enzyme:%d,shell:%d",
         marker,seed,branch,starter,signature,sim.build:rank(signature),scenario.name or "base",scenario.progression and "objective" or "kite",sim.elapsed,sim.stage_index,sim.level,sim.kills,
         sim.absorbed or 0,sim.hp,sim.combat_stats.damage_dealt,sim.combat_stats.damage_taken,contact_damage,contact_hits,
+        clone_damage,clone_hits,clone_swarm_damage,clone_swarm_hits,
         sim.combat_stats.blocked,sim.combat_stats.healed,attack_uses,defense_uses,first_hit or "none",cause,source_summary,toxin_source_summary,
         sim.outcome=="" and "alive" or sim.outcome,steps,max_enemies,max_fields,max_remains,
         synergy_triggers.acid_bite,synergy_triggers.enzyme_target,synergy_triggers.shared_shell))
     return {alive=sim.outcome=="",seconds=sim.elapsed,hp=sim.hp,level=sim.level,kills=sim.kills,
         absorbed=sim.absorbed or 0,stage=sim.stage_index,damage_dealt=sim.combat_stats.damage_dealt,
         damage_taken=sim.combat_stats.damage_taken,contact_damage=contact_damage,contact_hits=contact_hits,
+        clone_damage=clone_damage,clone_hits=clone_hits,clone_swarm_damage=clone_swarm_damage,clone_swarm_hits=clone_swarm_hits,
         blocked=sim.combat_stats.blocked,healed=sim.combat_stats.healed,
         attack_uses=attack_uses,defense_uses=defense_uses,synergy_triggers=synergy_triggers,
         boss_damage=boss_damage,boss_contact_damage=boss_contact_damage,miniboss_contact_damage=miniboss_contact_damage}
@@ -758,6 +870,7 @@ local function run_batch(marker,scenario,seeds)
     local acid_triggers,enzyme_triggers,shell_triggers=0,0,0
     local attack_uses,defense_uses=0,0
     local contact_damage,contact_hits=0,0
+    local clone_damage,clone_hits,clone_swarm_damage,clone_swarm_hits=0,0,0,0
     local boss_damage,boss_contact_damage,miniboss_contact_damage=0,0,0
     local results={}
     for _,seed in ipairs(seeds) do
@@ -775,6 +888,10 @@ local function run_batch(marker,scenario,seeds)
         boss_damage=boss_damage+(result.boss_damage or 0)
         boss_contact_damage=boss_contact_damage+(result.boss_contact_damage or 0)
         miniboss_contact_damage=miniboss_contact_damage+(result.miniboss_contact_damage or 0)
+        clone_damage=clone_damage+(result.clone_damage or 0)
+        clone_hits=clone_hits+(result.clone_hits or 0)
+        clone_swarm_damage=clone_swarm_damage+(result.clone_swarm_damage or 0)
+        clone_swarm_hits=clone_swarm_hits+(result.clone_swarm_hits or 0)
         acid_triggers=acid_triggers+result.synergy_triggers.acid_bite
         enzyme_triggers=enzyme_triggers+result.synergy_triggers.enzyme_target
         shell_triggers=shell_triggers+result.synergy_triggers.shared_shell
@@ -782,9 +899,10 @@ local function run_batch(marker,scenario,seeds)
         collectgarbage("collect")
     end
     local summary=marker:gsub(" RUN$"," SUMMARY")
-    print(string.format("%s form=%s scenario=%s maps=%d mean_seconds=%.1f mean_stage=%.2f mean_level=%.2f mean_kills=%.2f mean_absorbed=%.2f mean_damage_dealt=%.1f mean_damage_taken=%.1f mean_contact_damage=%.1f mean_contact_hits=%.1f mean_boss_damage=%.1f mean_boss_contact=%.1f mean_miniboss_contact=%.1f mean_damage_blocked=%.1f mean_healed=%.1f survivors=%d attack_uses=%d defense_uses=%d mean_synergy_triggers=acid:%.2f,enzyme:%.2f,shell:%.2f",
+    print(string.format("%s form=%s scenario=%s maps=%d mean_seconds=%.1f mean_stage=%.2f mean_level=%.2f mean_kills=%.2f mean_absorbed=%.2f mean_damage_dealt=%.1f mean_damage_taken=%.1f mean_contact_damage=%.1f mean_contact_hits=%.1f mean_clone_damage=%.1f mean_clone_hits=%.1f mean_swarm_damage=%.1f mean_swarm_hits=%.1f mean_boss_damage=%.1f mean_boss_contact=%.1f mean_miniboss_contact=%.1f mean_damage_blocked=%.1f mean_healed=%.1f survivors=%d attack_uses=%d defense_uses=%d mean_synergy_triggers=acid:%.2f,enzyme:%.2f,shell:%.2f",
         summary,scenario.form,scenario.name or "base",#seeds,seconds/#seeds,stages/#seeds,
         levels/#seeds,kills/#seeds,absorbed/#seeds,dealt/#seeds,damage/#seeds,contact_damage/#seeds,contact_hits/#seeds,
+        clone_damage/#seeds,clone_hits/#seeds,clone_swarm_damage/#seeds,clone_swarm_hits/#seeds,
         boss_damage/#seeds,boss_contact_damage/#seeds,miniboss_contact_damage/#seeds,blocked/#seeds,healed/#seeds,
         survivors,attack_uses,defense_uses,acid_triggers/#seeds,enzyme_triggers/#seeds,shell_triggers/#seeds))
     return results
@@ -1771,6 +1889,7 @@ local function validate_stage_progression()
 end
 
 function M.run()
+    validate_colony_combat_pilot()
     validate_stage_progression()
     validate_progression_pilot()
     validate_objective_combat_range()
