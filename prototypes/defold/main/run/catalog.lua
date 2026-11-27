@@ -17,7 +17,7 @@ M.ORGANS = {
     barrier = { name = "Сократительный щит", branch = "colony", desc = "Периодически поглощает часть входящего удара.", color = "b6bdec" },
     devour = { name = "Хищная пасть", branch = "predator", desc = "Разрывает ткань спереди: укус, более ранний захват и быстрое переваривание через пасть. Боковое поглощение слабее.", color = "ffbd88" },
     chemoreceptor_ridge = { name = "Хеморецепторный гребень", branch = "predator", desc = "Отмечает одну уязвимую цель каждые 4 с, усиливает пасть. Доступен гибридам после открытия; нужна пасть для бонуса урона.", color = "b58cff", signature = true, form = "predator", icon = "magnet" },
-    osmotic_vacuole = { name = "Осмотическая вакуоль", branch = "toxic", desc = "Накапливает заряды от урона ядом. Усиливает Разгерметизацию; без этой способности заряды пока не расходуются.", color = "a8e86f", signature = true, form = "toxic", icon = "acid", research_unlock = "toxic" },
+    osmotic_vacuole = { name = "Осмотическая вакуоль", branch = "toxic", desc = "Накапливает заряды от урона ядом. Усиливает Токсический катаклизм после высшей эволюции.", color = "a8e86f", signature = true, form = "toxic", icon = "acid", research_unlock = "toxic" },
     synaptic_node = { name = "Синаптический узел", branch = "colony", desc = "Светящиеся связи копий усиливают согласованные удары. Работает в гибриде с делением, не увеличивая число копий.", color = "c5a0f5", signature = true, form = "colony", icon = "electric", research_unlock = "colony" },
 }
 
@@ -58,9 +58,15 @@ M.FORM_SPECIALIZATIONS = {
     predator = {
         research = "", branch = "predator", signature_organ = "chemoreceptor_ridge",
         ability = {
-            id = "predator_dash", name = "Рывок-хватка", cooldown = 14, icon = "devour", color = "ffbd88",
-            desc = "Рывок и усиленный укус. Поглощение цели ускоряет восстановление.", distance = 64, duration = 0.24, refund_window = 3,
-            damage_multiplier = 1.25, absorb_refund = 2, minimum_cooldown = 10,
+            id = "predator_primordial_rage", name = "Первобытная ярость", cooldown = 55, icon = "devour", color = "ffbd88",
+            desc = "Рывок с тройным усиленным укусом; затем урон пасти повышается на 60% на 5 секунд.",
+            distance = 64, duration = 0.24, refund_window = 0, damage_multiplier = 3,
+            frenzy_multiplier = 1.60, frenzy_duration = 5,
+        },
+        defense = {
+            id = "predator_instinct", name = "Инстинкт выживания", cooldown = 75, icon = "barrier", color = "ff9b82",
+            desc = "Восстанавливает 30% максимального здоровья и ускоряет движение на 45% на 6 секунд.",
+            heal_fraction = 0.30, speed_multiplier = 1.45, duration = 6,
         },
         passive = {
             id = "feast", name = "Пиршество", desc = "Поглощение: +3% макс. HP (до 4), раз в 5 с.", heal_fraction = 0.03,
@@ -69,16 +75,21 @@ M.FORM_SPECIALIZATIONS = {
         evolution = {
             id = "apex_predator", name = "Вершинный хищник",
             organ = "chemoreceptor_ridge", organ_rank = 6, passive = "magnet", passive_rank = 3,
-            ability_cooldown = 14, marked_bite_bonus = 0.12,
+            marked_bite_bonus = 0.12,
         },
     },
     toxic = {
         research = "toxic", branch = "toxic", signature_organ = "osmotic_vacuole",
         ability = {
-            id = "toxic_rupture", name = "Разгерметизация", cooldown = 16, icon = "acid", color = "b2dd75",
-            desc = "Кислотное поле на 3 с, замедляющее врагов.", radius_multiplier = 1.35,
-            duration = 3, damage_multiplier = 0.60, slow = 0.15, slow_duration = 1.5,
+            id = "toxic_cataclysm", name = "Токсический катаклизм", cooldown = 60, icon = "acid", color = "b2dd75",
+            desc = "Создаёт большое кислотное поле на 8 секунд с усиленным уроном и замедлением врагов на 40%.",
+            radius_multiplier = 2.0, duration = 8, damage_multiplier = 1.35, slow = 0.40, slow_duration = 1.5,
             fields_do_not_stack = true,
+        },
+        defense = {
+            id = "toxic_osmotic_cocoon", name = "Осмотический кокон", cooldown = 75, icon = "acid", color = "b2dd75",
+            desc = "На 6 секунд снижает входящий урон на 75% и уничтожает опасные ядовитые облака рядом.",
+            duration = 6, damage_reduction = 0.75, clear_radius_multiplier = 2.5,
         },
         passive = {
             id = "toxic_regulation", name = "Токсикорегуляция", desc = "Контактный урон от отравленных врагов −8%, от боссов −4%.",
@@ -87,15 +98,20 @@ M.FORM_SPECIALIZATIONS = {
         evolution = {
             id = "living_reactor", name = "Живой реактор",
             organ = "osmotic_vacuole", organ_rank = 6, passive = "catalysis", passive_rank = 3,
-            duration_bonus = 1, slow = 0.20,
+            slow = 0.40,
         },
     },
     colony = {
         research = "colony", branch = "colony", signature_organ = "synaptic_node",
         ability = {
-            id = "colony_rally", name = "Сбор колонии", cooldown = 15, icon = "division", color = "e7a7f5",
-            desc = "Копии сходятся к цели и наносят согласованный удар.", approach_time = 0.30, return_time = 0.30,
-            radius = 260, clone_damage_multiplier = 0.40, maximum_clone_hit_equivalents = 2,
+            id = "colony_great_swarm", name = "Великий рой", cooldown = 65, icon = "division", color = "e7a7f5",
+            desc = "На 10 секунд появляются две дополнительные боевые копии, а урон всех копий повышается на 60%.",
+            duration = 10, extra_clones = 2, clone_damage_multiplier = 1.60,
+        },
+        defense = {
+            id = "colony_living_bastion", name = "Живой бастион", cooldown = 80, icon = "barrier", color = "c5a0f5",
+            desc = "Копии окружают организм и поглощают до 85% входящего урона, пока хватает прочности оболочки.",
+            duration = 8, damage_absorption = 0.85, capacity_fraction = 0.45,
         },
         passive = {
             id = "shared_membrane", name = "Общая мембрана", desc = "Защита +1,2% за копию, до 6%; с бронёй до 60%.",
@@ -104,8 +120,7 @@ M.FORM_SPECIALIZATIONS = {
         evolution = {
             id = "collective_mind", name = "Коллективный разум",
             organ = "synaptic_node", organ_rank = 6, passive = "armor", passive_rank = 3,
-            second_wave_delay = 1, second_wave_multiplier = 0.35,
-            ability_cooldown = 15, maximum_reduction = 0.075,
+            maximum_reduction = 0.075,
         },
     },
 }
