@@ -1881,10 +1881,11 @@ function init(self)
         local sim=app.sim
         local old_hp=sim.hp
         sim.hp=sim.max_hp*.5
+        local damaged_hp=sim.hp
         assert(sim:activate_defensive_ability("defense"))
         assert((sim.cooldowns.defense_active or 0)==5 and (sim.cooldowns.defense_cooldown or 0)==70)
         assert(sim:activate_defensive_ability("emergency_regen"))
-        assert(sim.hp>old_hp and sim.hp<=sim.max_hp and (sim.cooldowns.emergency_regen_cooldown or 0)==65)
+        assert(sim.hp>damaged_hp and sim.hp<=sim.max_hp and (sim.cooldowns.emergency_regen_cooldown or 0)==65)
         assert((sim.cooldowns.defense_cooldown or 0)==70,"Defensive cooldowns must be independent")
         sim.cooldowns.defense_active,sim.cooldowns.defense_cooldown,sim.cooldowns.emergency_regen_cooldown=nil,nil,nil
         sim.hp=old_hp
