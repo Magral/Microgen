@@ -246,6 +246,8 @@ jobs:
                 test "$(grep -c "MICROGEN SPECIALIZATION RUN" "$log")" -eq 24
                 test "$(grep -c "MICROGEN SPECIALIZATION SUMMARY" "$log")" -eq 12
                 test "$(grep -c "MICROGEN OBJECTIVE RESULT" "$log")" -eq 12
+                grep -Fq "MICROGEN OBJECTIVE RESULT form=colony seed=147" "$log"
+                grep -Fq "boss_healing=" "$log"
                 test "$(grep -c "MICROGEN OBJECTIVE RUN" "$log")" -eq 12
                 test "$(grep -c "MICROGEN OBJECTIVE SUMMARY" "$log")" -eq 6
                 test "$(grep -c "MICROGEN FORM ABILITY COUNTERS form=" "$log")" -eq 3
