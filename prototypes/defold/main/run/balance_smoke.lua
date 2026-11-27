@@ -201,6 +201,19 @@ local function direction(sim, tick)
     return best_x, best_y
 end
 
+-- Катаклизм применяется на входе врагов в фактический радиус поля,
+-- а не после того, как они подошли вплотную к организму.
+local function ability_trigger_radius(sim)
+    local ability=sim:form_ability()
+    if ability.id~="toxic_cataclysm" then return 115 end
+    local rank=sim.build:rank("acid")
+    local radius=(75+rank*9)*sim.build:specialization_value("acid","radius_mult")*sim:ability_scale()
+    local charges=sim:vacuole_charge_count()
+    local cfg=Catalog.SIGNATURE_ORGANS.osmotic_vacuole
+    local field_radius=radius*(ability.radius_multiplier or 1)*(1+charges*(cfg.radius_per_charge or 0))
+    return field_radius*sim.build:specialization_value("osmotic_vacuole","field_radius_mult",1)
+end
+
 local function run(seed, scenario, horizon_seconds)
     horizon_seconds = horizon_seconds or HORIZON_SECONDS
     local branch, starter = scenario.form, scenario.starter
@@ -281,11 +294,15 @@ local function run(seed, scenario, horizon_seconds)
     local max_enemies, max_fields, max_remains = 0, 0, 0
     local steps, first_hit = 0, nil
     local toxin_sources = {}
+    local contact_damage, contact_hits = 0, 0
     local original_hurt = sim.hurt_player
     sim.hurt_player = function(self, amount, source)
         local health_before = self.hp
         original_hurt(self, amount, source)
         local dealt = health_before - self.hp
+        if dealt > 0 and source and source.kind == "collision" then
+            contact_damage, contact_hits = contact_damage + dealt, contact_hits + 1
+        end
         if dealt > 0 and source and source.kind == "toxin" then
             local id = tostring(source.id or 0)
             local entry = toxin_sources[id]
@@ -310,7 +327,7 @@ local function run(seed, scenario, horizon_seconds)
                 local target=sim:_nearest(110,function(e) return not e.captured and sim:_can_be_absorbed(e) end)
                 if target then sim:activate_form_ability(target.pos.x-sim.player.x,target.pos.y-sim.player.y) end
             elseif branch=="toxic" then
-                if sim:_nearest(115) then sim:activate_form_ability() end
+                if sim:_nearest(ability_trigger_radius(sim)) then sim:activate_form_ability() end
             else sim:activate_form_ability() end
         end
         -- Защита применяется отдельно от атаки, только после реального урона.
@@ -379,15 +396,16 @@ local function run(seed, scenario, horizon_seconds)
     assert(scenario.use_defense~=false or defense_uses==0,"Defense-disabled control activated a defense")
     local marker=scenario.run_marker or "MICROGEN BALANCE RUN"
     print(string.format(
-        "%s seed=%d branch=%s starter=%s signature=%s signature_rank=%d scenario=%s pilot=kite seconds=%.1f stage=%d level=%d kills=%d absorbed=%d hp=%.1f damage_dealt=%.1f damage_taken=%.1f damage_blocked=%.1f healed=%.1f attack_uses=%d defense_uses=%d first_hit=%s last_hit=%s damage_sources=%s toxin_sources=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d synergy_triggers=acid:%d,enzyme:%d,shell:%d",
+        "%s seed=%d branch=%s starter=%s signature=%s signature_rank=%d scenario=%s pilot=kite seconds=%.1f stage=%d level=%d kills=%d absorbed=%d hp=%.1f damage_dealt=%.1f damage_taken=%.1f contact_damage=%.1f contact_hits=%d damage_blocked=%.1f healed=%.1f attack_uses=%d defense_uses=%d first_hit=%s last_hit=%s damage_sources=%s toxin_sources=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d synergy_triggers=acid:%d,enzyme:%d,shell:%d",
         marker,seed,branch,starter,signature,sim.build:rank(signature),scenario.name or "base",sim.elapsed,sim.stage_index,sim.level,sim.kills,
-        sim.absorbed or 0,sim.hp,sim.combat_stats.damage_dealt,sim.combat_stats.damage_taken,
+        sim.absorbed or 0,sim.hp,sim.combat_stats.damage_dealt,sim.combat_stats.damage_taken,contact_damage,contact_hits,
         sim.combat_stats.blocked,sim.combat_stats.healed,attack_uses,defense_uses,first_hit or "none",cause,source_summary,toxin_source_summary,
         sim.outcome=="" and "alive" or sim.outcome,steps,max_enemies,max_fields,max_remains,
         synergy_triggers.acid_bite,synergy_triggers.enzyme_target,synergy_triggers.shared_shell))
     return {alive=sim.outcome=="",seconds=sim.elapsed,hp=sim.hp,level=sim.level,kills=sim.kills,
         absorbed=sim.absorbed or 0,stage=sim.stage_index,damage_dealt=sim.combat_stats.damage_dealt,
-        damage_taken=sim.combat_stats.damage_taken,blocked=sim.combat_stats.blocked,healed=sim.combat_stats.healed,
+        damage_taken=sim.combat_stats.damage_taken,contact_damage=contact_damage,contact_hits=contact_hits,
+        blocked=sim.combat_stats.blocked,healed=sim.combat_stats.healed,
         attack_uses=attack_uses,defense_uses=defense_uses,synergy_triggers=synergy_triggers}
 end
 
@@ -395,6 +413,7 @@ local function run_batch(marker,scenario,seeds)
     local seconds,levels,kills,absorbed,dealt,damage,blocked,healed,stages,survivors=0,0,0,0,0,0,0,0,0,0
     local acid_triggers,enzyme_triggers,shell_triggers=0,0,0
     local attack_uses,defense_uses=0,0
+    local contact_damage,contact_hits=0,0
     local results={}
     for _,seed in ipairs(seeds) do
         local config=Util.copy(scenario)
@@ -406,6 +425,8 @@ local function run_batch(marker,scenario,seeds)
             damage+result.damage_taken,blocked+result.blocked,healed+result.healed,stages+result.stage
         attack_uses=attack_uses+result.attack_uses
         defense_uses=defense_uses+result.defense_uses
+        contact_damage=contact_damage+result.contact_damage
+        contact_hits=contact_hits+result.contact_hits
         acid_triggers=acid_triggers+result.synergy_triggers.acid_bite
         enzyme_triggers=enzyme_triggers+result.synergy_triggers.enzyme_target
         shell_triggers=shell_triggers+result.synergy_triggers.shared_shell
@@ -413,9 +434,9 @@ local function run_batch(marker,scenario,seeds)
         collectgarbage("collect")
     end
     local summary=marker:gsub(" RUN$"," SUMMARY")
-    print(string.format("%s form=%s scenario=%s maps=%d mean_seconds=%.1f mean_stage=%.2f mean_level=%.2f mean_kills=%.2f mean_absorbed=%.2f mean_damage_dealt=%.1f mean_damage_taken=%.1f mean_damage_blocked=%.1f mean_healed=%.1f survivors=%d attack_uses=%d defense_uses=%d mean_synergy_triggers=acid:%.2f,enzyme:%.2f,shell:%.2f",
+    print(string.format("%s form=%s scenario=%s maps=%d mean_seconds=%.1f mean_stage=%.2f mean_level=%.2f mean_kills=%.2f mean_absorbed=%.2f mean_damage_dealt=%.1f mean_damage_taken=%.1f mean_contact_damage=%.1f mean_contact_hits=%.1f mean_damage_blocked=%.1f mean_healed=%.1f survivors=%d attack_uses=%d defense_uses=%d mean_synergy_triggers=acid:%.2f,enzyme:%.2f,shell:%.2f",
         summary,scenario.form,scenario.name or "base",#seeds,seconds/#seeds,stages/#seeds,
-        levels/#seeds,kills/#seeds,absorbed/#seeds,dealt/#seeds,damage/#seeds,blocked/#seeds,healed/#seeds,survivors,attack_uses,defense_uses,
+        levels/#seeds,kills/#seeds,absorbed/#seeds,dealt/#seeds,damage/#seeds,contact_damage/#seeds,contact_hits/#seeds,blocked/#seeds,healed/#seeds,survivors,attack_uses,defense_uses,
         acid_triggers/#seeds,enzyme_triggers/#seeds,shell_triggers/#seeds))
     return results
 end
@@ -1452,6 +1473,15 @@ function M.run()
         defense_control.use_defense=false
         local attack_only=run_batch("MICROGEN SPECIALIZATION RUN",defense_control,SPECIALIZATION_SEEDS)
         print_pair_comparison("защита_"..scenario.name,combined,attack_only,SPECIALIZATION_SEEDS)
+
+        local ability=Catalog.form_specialization(scenario.form)
+        local attack_count,defense_count=0,0
+        for _,seed in ipairs(SPECIALIZATION_SEEDS) do
+            attack_count=attack_count+(combined[seed].attack_uses or 0)+(attack_only[seed].attack_uses or 0)
+            defense_count=defense_count+(combined[seed].defense_uses or 0)+(defense_only[seed].defense_uses or 0)
+        end
+        print(string.format("MICROGEN FORM ABILITY COUNTERS form=%s attack_id=%s attack_uses=%d defense_id=%s defense_uses=%d",
+            scenario.form,ability.ability.id,attack_count,ability.defense.id,defense_count))
 
         -- Контроль с той же высшей эволюцией, но без обеих активных кнопок:
         -- отделяет эффект способностей от постоянных бонусов эволюции.
