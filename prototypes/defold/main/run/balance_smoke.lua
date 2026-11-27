@@ -2188,7 +2188,7 @@ local function validate_form_evolutions_and_synergies()
     local cap_target=target(colony)
     cap_target.tissue_budget=1
     local swarm_actual=colony:hit_enemy(cap_target,100,"division")
-    near(swarm_actual,1,"Great swarm still respects the enemy tissue damage budget")
+    near(swarm_actual,1.8,"Great swarm respects the colony form-specific tissue damage budget")
 
     pred.build.organs.enzymes=1
     local marked=target(pred)

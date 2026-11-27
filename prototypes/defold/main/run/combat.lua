@@ -103,9 +103,6 @@ function Combat:hit_enemy(enemy, amount, source, maximum_damage)
     -- Так усиление работает и при высокой частоте попаданий, не меняя лимит
     -- для атак других форм и источников.
     local budget_multiplier = source == "division" and form_attack_multiplier or 1
-    if source == "division" and (self.cooldowns.colony_swarm_active or 0) > 0 then
-        budget_multiplier = budget_multiplier * (Catalog.FORM_SPECIALIZATIONS.colony.ability.clone_damage_multiplier or 1)
-    end
     local damage_budget = budget * budget_multiplier
     local damage_cap = maximum_damage and max(0, maximum_damage) or math.huge
     local dealt = min(enemy.hp, raw, damage_budget, damage_cap)
