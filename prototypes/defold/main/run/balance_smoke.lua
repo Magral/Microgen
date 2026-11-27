@@ -526,7 +526,7 @@ local function validate_colony_combat_pilot()
     local sim=Simulation.new(147,nil,nil,"colony",{form="colony",branch="colony",seed=147})
     local radius=sim:body_radius()
     local target={id=9901,kind="hostile",r=radius*1.25,pos={x=sim.player.x+500,y=sim.player.y},hp=100,max_hp=100}
-    local giant={id=9902,kind="hostile",r=radius*1.8,pos={x=sim.player.x+180,y=sim.player.y},hp=100,max_hp=100}
+    local giant={id=9902,kind="hostile",r=radius*1.8,pos={x=sim.player.x+900,y=sim.player.y},hp=100,max_hp=100}
     sim.enemies={target,giant}
     assert(colony_attack_target(sim)==target,"Colony pilot must select a target that clones can damage")
     local range=colony_attack_range(sim,target)
