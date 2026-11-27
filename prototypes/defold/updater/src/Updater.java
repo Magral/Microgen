@@ -16,6 +16,8 @@ import java.net.URL;
 import javax.net.ssl.HttpsURLConnection;
 import java.security.MessageDigest;
 import java.util.Arrays;
+import java.net.SocketTimeoutException;
+import javax.net.ssl.SSLException;
 
 public final class Updater {
     private static volatile int state;
@@ -59,8 +61,11 @@ public final class Updater {
                 state = 2;
             } catch (Exception failure) {
                 source.delete();
-                state = failure instanceof UpdateFailure ? ((UpdateFailure) failure).code : -1;
-                Log.w("MicrogenUpdater", "Update failed, code " + state + ": " + failure.getClass().getSimpleName());
+                state = failure instanceof UpdateFailure ? ((UpdateFailure) failure).code
+                    : failure instanceof SocketTimeoutException ? -7
+                    : failure instanceof SSLException ? -8 : -1;
+                Log.w("MicrogenUpdater", "Update failed, code " + state + ": "
+                    + failure.getClass().getSimpleName() + ": " + failure.getMessage(), failure);
             }
         }, "microgen-verify-update").start();
     }
@@ -69,9 +74,14 @@ public final class Updater {
         URL url = new URL(address);
         if (!"github.com".equals(url.getHost())
                 || !url.getPath().startsWith("/Magral/Microgen/releases/download/defold-")) throw new IOException();
-        for (int attempt = 0; attempt < 5; attempt++) {
-            if (!"https".equals(url.getProtocol())) throw new IOException();
-            String host = url.getHost();
+        IOException lastFailure = null;
+        for (int retry = 0; retry < 3; retry++) {
+            digest.reset();
+            source.delete();
+            try {
+              for (int redirect = 0; redirect < 8; redirect++) {
+                if (!"https".equals(url.getProtocol())) throw new IOException("HTTPS redirect required");
+                String host = url.getHost();
             if (!"github.com".equals(host) && !"release-assets.githubusercontent.com".equals(host)
                     && !"objects.githubusercontent.com".equals(host)
                     && !"github-releases.githubusercontent.com".equals(host)) throw new IOException();
@@ -85,11 +95,19 @@ public final class Updater {
                 int code = connection.getResponseCode();
                 if (code >= 300 && code < 400) {
                     String location = connection.getHeaderField("Location");
-                    if (location == null) throw new IOException();
-                    url = new URL(url, location);
+                    if (location == null) throw new IOException("Redirect without Location");
+                    URL redirected = new URL(url, location);
+                    String nextHost = redirected.getHost();
+                    if (!"https".equals(redirected.getProtocol())
+                        || !("github.com".equals(nextHost)
+                            || "release-assets.githubusercontent.com".equals(nextHost)
+                            || "objects.githubusercontent.com".equals(nextHost)
+                            || "github-releases.githubusercontent.com".equals(nextHost)))
+                        throw new IOException("Untrusted redirect host: " + nextHost);
+                    url = redirected;
                     continue;
                 }
-                if (code != 200) throw new UpdateFailure(-6, "HTTP " + code);
+                if (code != 200) throw new UpdateFailure(-6, "HTTP " + code + " from " + host);
                 try (InputStream input = connection.getInputStream(); FileOutputStream output = new FileOutputStream(source)) {
                     byte[] buffer = new byte[65536];
                     int total = 0;
@@ -103,11 +121,24 @@ public final class Updater {
                     if (total != size) throw new UpdateFailure(-2, "APK size mismatch");
                 }
                 return;
-            } finally {
+              } finally {
                 connection.disconnect();
+              }
+              throw new IOException("Too many redirects");
+            } catch (UpdateFailure rejected) {
+                throw rejected;
+            } catch (IOException transientFailure) {
+                lastFailure = transientFailure;
+                source.delete();
+                if (retry == 2) throw transientFailure;
+                try { Thread.sleep(700L * (retry + 1)); }
+                catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("Download retry interrupted", interrupted);
+                }
             }
         }
-        throw new IOException();
+        throw lastFailure == null ? new IOException("Download failed") : lastFailure;
     }
 
     private static boolean sameSignatures(Signature[] a, Signature[] b) {
