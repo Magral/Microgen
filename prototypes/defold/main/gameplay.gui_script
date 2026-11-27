@@ -2168,9 +2168,9 @@ function init(self)
             for _,node in ipairs(app.modal.nodes) do
                 if gui.get_type(node)==gui.TYPE_TEXT then
                     local value=gui.get_text(node)
-                    if value:find("Три формы получили",1,true)
-                        or value:find("Сигнатурные органы",1,true)
-                        or value:find("В цистах и при повышении",1,true) then
+                    if value:find("1.5.14",1,true)
+                        or value:find("1.5.13",1,true)
+                        or value:find("1.5.12",1,true) then
                         patch_notes=patch_notes+1
                     end
                 end
