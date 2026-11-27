@@ -64,6 +64,7 @@ function Updater:check()
     if self.state == "checking" or self.state == "downloading" or self.state == "verifying" or self.state == "ready" then return end
     self.timer = 5 * 60
     self.asset, self.needs_permission, self.offered = nil, false, false
+    self.failure_code = nil
     self:set("checking")
     local headers = {
         Accept="application/vnd.github+json",
@@ -127,6 +128,7 @@ function Updater:step(dt, safe)
         local status = self.native.status()
         if status < 0 then
             self.timer = 5 * 60
+            self.failure_code = status
             self:set(self.state == "ready" and "install_error" or "download_error")
         elseif status == 2 and self.state == "downloading" then
             self.offered = false
