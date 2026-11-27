@@ -2151,6 +2151,25 @@ function init(self)
                     and gui.get_position(buttons[3].node).y>gui.get_position(buttons[4].node).y,
                     "Update screen should keep the browser fallback separate from Android permission")
             end
+            if fixture.state=="download_error" then
+                local retry=false
+                for _,button in ipairs(buttons) do
+                    if gui.get_text(button.text)=="Повторить загрузку" then retry=true end
+                end
+                assert(retry,"Download failure must offer a clear retry action")
+            end
+            local patch_notes=0
+            for _,node in ipairs(app.modal.nodes) do
+                if gui.get_type(node)==gui.TYPE_TEXT then
+                    local value=gui.get_text(node)
+                    if value:find("Три формы получили",1,true)
+                        or value:find("Сигнатурные органы",1,true)
+                        or value:find("В цистах и при повышении",1,true) then
+                        patch_notes=patch_notes+1
+                    end
+                end
+            end
+            assert(patch_notes==3,"Update screen must show three player-facing patch notes")
         end
         app.updater=original_updater
         print("MICROGEN UPDATE PATH READY")
