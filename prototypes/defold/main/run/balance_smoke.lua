@@ -760,9 +760,13 @@ local function run(seed, scenario, horizon_seconds)
     for id,rank in pairs(scenario.seed_organs or {}) do sim.build.organs[id]=rank end
     for id,rank in pairs(scenario.seed_adaptations or {}) do sim.build.adaptations[id]=rank end
     if scenario.seed_marked_target then
-        -- Гарантируем интеграционному сценарию уязвимую цель в радиусе
-        -- хеморецептора: тест проверяет реальное продление ферментов меткой,
-        -- а не случайность появления подходящего противника на карте.
+        -- Изолируем сценарий от случайного выбора другой цели: все исходные
+        -- противники остаются в симуляции, но находятся за радиусом поиска.
+        -- Единственная доступная цель раннего ферментативного удара — раненная
+        -- добыча в радиусе хеморецептора; сама атака и продление идут штатно.
+        for index,enemy in ipairs(sim.enemies) do
+            enemy.pos={x=sim.player.x+700+index*40,y=sim.player.y+700}
+        end
         local target=assert(sim:spawn_enemy({x=sim.player.x+90,y=sim.player.y},"hunter"))
         target.hp=target.max_hp*.5
     end
