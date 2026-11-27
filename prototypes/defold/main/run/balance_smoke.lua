@@ -404,6 +404,13 @@ local function run(seed, scenario, horizon_seconds)
     local toxin_source_summary = #toxin_summary > 0 and table.concat(toxin_summary, ";") or "none"
     assert(scenario.use_ability~=false or attack_uses==0,"Attack-disabled control activated an attack")
     assert(scenario.use_defense~=false or defense_uses==0,"Defense-disabled control activated a defense")
+    for _,id in ipairs(scenario.expected_synergies or {}) do
+        assert(synergy_triggers[id]>0,"Expected synergy produced no real combat trigger: "..id)
+    end
+    if scenario.disabled_synergy then
+        assert(synergy_triggers[scenario.disabled_synergy]==0,
+            "Disabled synergy unexpectedly affected combat: "..scenario.disabled_synergy)
+    end
     local marker=scenario.run_marker or "MICROGEN BALANCE RUN"
     print(string.format(
         "%s seed=%d branch=%s starter=%s signature=%s signature_rank=%d scenario=%s pilot=kite seconds=%.1f stage=%d level=%d kills=%d absorbed=%d hp=%.1f damage_dealt=%.1f damage_taken=%.1f contact_damage=%.1f contact_hits=%d damage_blocked=%.1f healed=%.1f attack_uses=%d defense_uses=%d first_hit=%s last_hit=%s damage_sources=%s toxin_sources=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d synergy_triggers=acid:%d,enzyme:%d,shell:%d",
