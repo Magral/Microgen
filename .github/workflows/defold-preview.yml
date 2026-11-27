@@ -248,6 +248,9 @@ jobs:
                 test "$(grep -c "MICROGEN OBJECTIVE RESULT" "$log")" -eq 12
                 test "$(grep -c "MICROGEN OBJECTIVE RUN" "$log")" -eq 12
                 test "$(grep -c "MICROGEN OBJECTIVE SUMMARY" "$log")" -eq 6
+                test "$(grep -c "MICROGEN FORM ABILITY COUNTERS form=" "$log")" -eq 3
+                grep -Fq "MICROGEN FORM ABILITY COUNTERS READY" "$log"
+                grep -Fq "MICROGEN COLONY BALANCE READY" "$log"
                 grep -Fq "MICROGEN OBJECTIVE PILOT READY" "$log"
                 grep -Fq "MICROGEN OBJECTIVE MATRIX READY" "$log"
                 test "$(grep -c "MICROGEN PAIRED RESULT" "$log")" -eq 45
