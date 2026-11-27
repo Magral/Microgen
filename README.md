@@ -75,11 +75,11 @@
 
 ## Сборка и документация
 
-Откройте [`prototypes/defold/game.project`](prototypes/defold/game.project) в Defold Editor. Параметры Android: пакет `org.magral.microgen.defold`, минимальный API 26, стабильная версия — 1.5.13, код версии 163.
+Откройте [`prototypes/defold/game.project`](prototypes/defold/game.project) в Defold Editor. Параметры Android: пакет `org.magral.microgen.defold`, минимальный API 26, стабильная версия — 1.5.14, код версии 164.
 
 - [ROADMAP.md](ROADMAP.md) — этапы, критерии и незакрытые проверки.
 - [RELEASE_AUTOMATION.md](RELEASE_AUTOMATION.md) — порядок запуска стабильного релиза.
-- [RELEASE_NOTES.md](RELEASE_NOTES.md) — заметки к стабильному выпуску 1.5.13.
+- [RELEASE_NOTES.md](RELEASE_NOTES.md) — заметки к стабильному выпуску 1.5.14.
 - [CHANGELOG.md](CHANGELOG.md) — история стабильных релизов.
-- [`prototypes/defold/RELEASE_NOTES.md`](prototypes/defold/RELEASE_NOTES.md) — заметки к стабильному выпуску 1.5.13.
+- [`prototypes/defold/RELEASE_NOTES.md`](prototypes/defold/RELEASE_NOTES.md) — заметки к стабильному выпуску 1.5.14.
 - [Технический аудит адаптации интерфейса](docs/development/ui-adaptation.md).

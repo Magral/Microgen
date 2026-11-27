@@ -439,8 +439,9 @@ function App:updates()
         install_error = "Не удалось открыть установщик Android. Повтори проверку.",
         desktop = "Для Android доступна версия " .. label .. ".",
     }
-    ui:text(left+33,828,"Установлена версия "..updater.installed,1)
-    ui:text(left+33,754,captions[updater.state],.96,ui.colors.dim)
+    local width = ui.panel_width - 66
+    ui:fit_text(left+33,828,"Установлена версия "..updater.installed,1,ui.colors.pale,width,56)
+    ui:fit_text(left+33,754,captions[updater.state],.96,ui.colors.dim,width,76)
     if updater.state == "ready" then
         ui:button(1230,646,1479,84,"Открыть установщик",function() updater:install() end,true)
         if updater.needs_permission then
@@ -449,12 +450,12 @@ function App:updates()
     elseif updater.state ~= "checking" and updater.state ~= "downloading" then
         ui:button(1230,646,1479,84,"Проверить обновления",function() updater:check() end,true)
     end
-    if not updater.needs_permission then
-        ui:button(1230,545,1479,84,updater.asset and "Скачать APK через браузер" or "Открыть выпуски на GitHub",function()
+    if not updater.needs_permission or updater.asset then
+        ui:button(1230,updater.needs_permission and 447 or 545,1479,84,updater.asset and "Скачать APK через браузер" or "Открыть выпуски на GitHub",function()
             sys.open_url(updater.asset and updater.asset.url or "https://github.com/Magral/Microgen/releases")
         end)
     end
-    ui:button(1230,447,1479,84,"Назад",back)
+    ui:button(1230,349,1479,84,"Назад",back)
 end
 
 local function part_caption(part)
@@ -2045,17 +2046,17 @@ function init(self)
             }}}
         end
         local update=Updater.select({
-            update_fixture("1.5.12",false),
-            update_fixture("1.5.13",false),
-            update_fixture("1.5.14",true),
-        },"1.5.12")
-        assert(update and update.label=="1.5.13" and update.size==4096
+            update_fixture("1.5.14",false),
+            update_fixture("1.5.15",false),
+            update_fixture("1.5.16",true),
+        },"1.5.14")
+        assert(update and update.label=="1.5.15" and update.size==4096
             and update.sha==string.rep("a",64)
-            and update.url=="https://github.com/Magral/Microgen/releases/download/defold-1.5.13/Microgen-Defold-1.5.13.apk",
-            "Auto-update must select the verified stable APK newer than 1.5.12")
-        local current=update_fixture("1.5.12",false)
-        local next_release=update_fixture("1.5.13",false)
-        local checked=Updater.new("1.5.12",nil,false,function() end)
+            and update.url=="https://github.com/Magral/Microgen/releases/download/defold-1.5.15/Microgen-Defold-1.5.15.apk",
+            "Auto-update must select the verified stable APK newer than 1.5.14")
+        local current=update_fixture("1.5.14",false)
+        local next_release=update_fixture("1.5.15",false)
+        local checked=Updater.new("1.5.14",nil,false,function() end)
         local requests=0
         checked.request=function(url, method, callback)
             requests=requests+1
@@ -2068,7 +2069,7 @@ function init(self)
             end
         end
         checked:check()
-        assert(requests==2 and checked.state=="desktop" and checked.asset.label=="1.5.13",
+        assert(requests==2 and checked.state=="desktop" and checked.asset.label=="1.5.15",
             "A stale latest response must fall back to the release list")
         next_release.assets[1].digest=nil
         requests=0
@@ -2076,9 +2077,9 @@ function init(self)
         assert(checked.state=="incomplete","A newer release without a verified APK must not report current")
         assert(checked.asset==nil and not checked.needs_permission,
             "Incomplete check must clear stale verified metadata")
-        local malformed=update_fixture("1.5.14",false)
+        local malformed=update_fixture("1.5.16",false)
         table.insert(malformed.assets,1,false)
-        assert(Updater.select({malformed},"1.5.13").label=="1.5.14",
+        assert(Updater.select({malformed},"1.5.15").label=="1.5.16",
             "Malformed asset entries must not block valid assets")
         local installs,downloads,status=0,0,1
         local native={
@@ -2090,9 +2091,9 @@ function init(self)
             status=function() return status end,
             install=function() installs=installs+1; return 3 end,
         }
-        local lifecycle=Updater.new("1.5.12",native,false,function() end)
+        local lifecycle=Updater.new("1.5.14",native,false,function() end)
         lifecycle.request=function(_,_,callback)
-            callback(nil,nil,{status=200,response=json.encode(update_fixture("1.5.13",false))})
+            callback(nil,nil,{status=200,response=json.encode(update_fixture("1.5.15",false))})
         end
         lifecycle:install()
         assert(installs==0,"Unverified APK must not open the installer")
@@ -2118,6 +2119,23 @@ function init(self)
         status=1
         lifecycle:check()
         assert(lifecycle.failure_code==nil,"Clear stale failure on retry")
+        local original_updater=app.updater
+        for _, fixture in ipairs({
+            {state="ready",needs_permission=true,asset=update},
+            {state="download_error",failure_code=-5,asset=update},
+            {state="current"},
+        }) do
+            fixture.installed="1.5.14"
+            app.updater=fixture
+            app:updates();check_window()
+            local buttons=app.modal.buttons
+            if fixture.needs_permission then
+                assert(gui.get_text(buttons[4].text)=="Скачать APK через браузер"
+                    and gui.get_position(buttons[3].node).y>gui.get_position(buttons[4].node).y,
+                    "Update screen should keep the browser fallback separate from Android permission")
+            end
+        end
+        app.updater=original_updater
         print("MICROGEN UPDATE PATH READY")
         sim.build.organs.enzymes=previous_organs.enzymes
         sim.build.organs.devour=previous_organs.devour

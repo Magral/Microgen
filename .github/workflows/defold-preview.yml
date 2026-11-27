@@ -97,6 +97,37 @@ jobs:
           sha256sum "$apk" > SHA256SUMS.txt
           printf '%s\n' "$GITHUB_SHA" > SOURCE_COMMIT.txt
 
+      - name: Compare Android upgrade with stable 1.5.14
+        working-directory: ${{ runner.temp }}/defold-preview
+        run: |
+          sdk_tools=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f -printf '%h\n' | sort -V | tail -n 1)
+          stable="$RUNNER_TEMP/Microgen-Defold-1.5.14.apk"
+          curl --fail --silent --show-error --location --retry 3 \
+            https://github.com/Magral/Microgen/releases/download/defold-1.5.14/Microgen-Defold-1.5.14.apk \
+            --output "$stable"
+          printf '%s  %s\n' '0523f23719e93b998a64a93db43e110e34c7092709022d78b4f3477310278b8c' "$stable" | sha256sum --check
+          "$sdk_tools/apksigner" verify --verbose --print-certs "$stable" > "$RUNNER_TEMP/stable-signature.txt"
+          for signature in "$RUNNER_TEMP/stable-signature.txt" APK_SIGNATURE.txt; do
+            grep -Fxq 'Verified using v2 scheme (APK Signature Scheme v2): true' "$signature"
+            grep -Fxq 'Verified using v3 scheme (APK Signature Scheme v3): true' "$signature"
+          done
+          diff -u <(grep 'certificate SHA-256 digest:' "$RUNNER_TEMP/stable-signature.txt") \
+            <(grep 'certificate SHA-256 digest:' APK_SIGNATURE.txt)
+          stable_package=$("$sdk_tools/aapt" dump badging "$stable" | sed -n '/^package:/p')
+          candidate_package=$("$sdk_tools/aapt" dump badging Microgen-Defold-Preview.apk | sed -n '/^package:/p')
+          [[ "$stable_package" == "package: name='org.magral.microgen.defold' versionCode='164' versionName='1.5.14'"* ]]
+          [[ "$candidate_package" == "package: name='org.magral.microgen.defold' "* ]]
+          candidate_code=$(sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" <<< "$candidate_package")
+          candidate_version=$(sed -n "s/.*versionName='\([^']*\)'.*/\1/p" <<< "$candidate_package")
+          test "$candidate_version" = "$(sed -n 's/^version = //p' "$GITHUB_WORKSPACE/prototypes/defold/game.project")"
+          test "$candidate_code" = "$(sed -n 's/^version_code = //p' "$GITHUB_WORKSPACE/prototypes/defold/game.project")"
+          if [[ "$GITHUB_REF" == refs/heads/preview/defold && "$candidate_version" == 1.5.14 ]]; then
+            test "$candidate_code" -eq 164
+          else
+            test "$candidate_code" -gt 164
+          fi
+          printf 'Stable 1.5.14 (164) -> candidate %s (%s); matching package and signer.\n' "$candidate_version" "$candidate_code"
+
       - name: Upload verified Android release candidate
         if: >-
           startsWith(github.ref, 'refs/tags/defold-') ||

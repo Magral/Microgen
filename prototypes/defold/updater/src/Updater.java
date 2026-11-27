@@ -9,7 +9,6 @@ import android.net.Uri;
 import android.provider.Settings;
 import android.util.Log;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.FileOutputStream;
 import java.io.InputStream;
@@ -33,17 +32,11 @@ public final class Updater {
         state = 1;
         verified = null;
         new Thread(() -> {
-            File source = new File(activity.getCacheDir(), "microgen-update.part");
+            File source = new File(activity.getCacheDir(), "microgen-update-pending.apk");
             try {
                 if (!sha.matches("[0-9a-f]{64}") || size <= 0 || size > 150 * 1024 * 1024) throw new IOException();
-                fetch(url, source, size);
-                String path = source.getAbsolutePath();
                 MessageDigest digest = MessageDigest.getInstance("SHA-256");
-                try (FileInputStream input = new FileInputStream(source)) {
-                    byte[] buffer = new byte[65536];
-                    int count;
-                    while ((count = input.read(buffer)) != -1) digest.update(buffer, 0, count);
-                }
+                fetch(url, source, size, digest);
                 StringBuilder hex = new StringBuilder(64);
                 for (byte b : digest.digest()) {
                     hex.append(Character.forDigit((b >>> 4) & 15, 16));
@@ -53,7 +46,7 @@ public final class Updater {
                 PackageManager manager = activity.getPackageManager();
                 String name = activity.getPackageName();
                 PackageInfo old = manager.getPackageInfo(name, PackageManager.GET_SIGNATURES);
-                PackageInfo next = manager.getPackageArchiveInfo(path, PackageManager.GET_SIGNATURES);
+                PackageInfo next = manager.getPackageArchiveInfo(source.getAbsolutePath(), PackageManager.GET_SIGNATURES);
                 if (next == null || !name.equals(next.packageName) || next.versionCode <= old.versionCode)
                     throw new UpdateFailure(-4, "APK package or version mismatch");
                 if (!sameSignatures(old.signatures, next.signatures))
@@ -72,7 +65,7 @@ public final class Updater {
         }, "microgen-verify-update").start();
     }
 
-    private static void fetch(String address, File source, int size) throws IOException {
+    private static void fetch(String address, File source, int size, MessageDigest digest) throws IOException {
         URL url = new URL(address);
         if (!"github.com".equals(url.getHost())
                 || !url.getPath().startsWith("/Magral/Microgen/releases/download/defold-")) throw new IOException();
@@ -105,6 +98,7 @@ public final class Updater {
                         total += count;
                         if (total > size) throw new UpdateFailure(-2, "APK exceeds expected size");
                         output.write(buffer, 0, count);
+                        digest.update(buffer, 0, count);
                     }
                     if (total != size) throw new UpdateFailure(-2, "APK size mismatch");
                 }
