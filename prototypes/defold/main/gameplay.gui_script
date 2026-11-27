@@ -451,14 +451,18 @@ function App:updates()
     local width = ui.panel_width - 66
     ui:fit_text(left+33,828,"Установлена версия "..updater.installed,1,ui.colors.pale,width,56)
     ui:fit_text(left+33,754,captions[updater.state],.91,ui.colors.dim,width,78)
-    ui:fit_text(left+33,665,"Что нового в игре",.94,ui.colors.mint,width,42)
+    ui:fit_text(left+33,665,"Последние обновления",.94,ui.colors.mint,width,42)
     local notes = {
-        "• Три формы получили собственные боевые специализации и мощные активные приёмы.",
-        "• Сигнатурные органы и гибридные сочетания открывают новые способы вести бой.",
-        "• В цистах и при повышении уровня появились понятные подсказки, что лучше выбрать."
+        {version="1.5.14", y=608, title="Больше ясности при развитии",
+            body="При повышении уровня и открытии цист проще понять, какие органы и улучшения подходят твоей форме. Карточки цист понятнее показывают награду и позволяют заменить орган."},
+        {version="1.5.13", y=470, title="Новые боевые стили трёх форм",
+            body="Хищник, железистая и колониальная формы получили собственные активные приёмы. Сигнатурные органы, высшие эволюции и сочетания органов открывают новые тактики боя."},
+        {version="1.5.12", y=332, title="Справедливее столкновения с амёбами",
+            body="Крупные обычные амёбы наносят меньше контактного урона. Перекрывающиеся ядовитые облака одного противника больше не складывают свой урон друг на друга."}
     }
-    for i,note in ipairs(notes) do
-        ui:fit_text(left+42,610-(i-1)*58,note,.76,ui.colors.pale,width-18,48)
+    for _,note in ipairs(notes) do
+        ui:fit_text(left+33,note.y,note.version.." · "..note.title,.82,ui.colors.mint,width,36)
+        ui:fit_text(left+42,note.y-47,note.body,.72,ui.colors.pale,width-18,78)
     end
     if updater.state == "ready" then
         ui:button(1230,414,1479,76,"Открыть установщик",function() updater:install() end,true)
