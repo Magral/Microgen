@@ -1261,8 +1261,9 @@ function Simulation.restore(saved)
         and math.abs(action.dx*action.dx+action.dy*action.dy-1)<.001 and action.age<ability.duration
     if not valid then self.form_action={} end
     local bastion_hp=self.colony_bastion_hp
-    if not finite(bastion_hp) or bastion_hp<0 or (self.cooldowns.colony_bastion_active or 0)<=0 then
+    if not finite(bastion_hp) or bastion_hp<=0 or (self.cooldowns.colony_bastion_active or 0)<=0 then
         self.colony_bastion_hp=0
+        self.cooldowns.colony_bastion_active=0
     else
         self.colony_bastion_hp=min(bastion_hp,self.max_hp*Catalog.FORM_SPECIALIZATIONS.colony.defense.capacity_fraction)
     end
