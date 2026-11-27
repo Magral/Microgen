@@ -930,6 +930,15 @@ local function validate_form_abilities()
     predator.effects={}
     assert(predator.cooldowns.predator_escape_active==6 and predator.cooldowns.special_defense==75,
         "Predator defense duration and long cooldown")
+    local fast,normal=fresh("predator"),fresh("predator")
+    fast.enemies,fast.residents,fast.fields={}, {}, {}
+    normal.enemies,normal.residents,normal.fields={}, {}, {}
+    fast.cooldowns.predator_escape_active=6
+    local fast_start,normal_start=fast.player.x,normal.player.x
+    fast:step(.1,1,0)
+    normal:step(.1,1,0)
+    near((fast.player.x-fast_start)/(normal.player.x-normal_start),1.45,
+        "Survival instinct increases actual movement speed by 45%")
     assert(predator:activate_form_ability(1,0) and not predator:activate_form_ability(1,0),
         "Predator ultimate attack starts once")
     assert(predator.form_action.kind=="dash" and predator.cooldowns.special_attack==55
@@ -976,6 +985,10 @@ local function validate_form_abilities()
         "Primordial rage dash bite is exactly triple power; the follow-up frenzy does not multiply it again")
     assert(not predator.form_action.kind and predator.player.x>origin.x,
         "Primordial rage performs a collision-checked dash bite")
+    prey.hp,prey.tissue_budget=100,100
+    local followup_damage=predator:hit_enemy(prey,Catalog.scaled_damage(12,1),"devour")
+    near(followup_damage,Catalog.scaled_damage(12,1)*1.60,
+        "Primordial rage increases subsequent ordinary bites by 60%")
 
     local toxic=fresh("toxic")
     toxic.fields={
@@ -1017,6 +1030,17 @@ local function validate_form_abilities()
     assert(colony.cooldowns.colony_swarm_active==10 and colony.cooldowns.special_attack==65
         and #colony:clone_positions()==base_clones+2,
         "Great swarm creates two additional visible combat copies")
+    local colony_base,colony_swarm=fresh("colony"),fresh("colony")
+    colony_base.build.organs.division=4
+    colony_swarm.build.organs.division=4
+    colony_swarm.cooldowns.colony_swarm_active=10
+    local base_target=assert(colony_base:spawn_enemy(Util.copy(colony_base.player),"prey"))
+    local swarm_target=assert(colony_swarm:spawn_enemy(Util.copy(colony_swarm.player),"prey"))
+    base_target.r,base_target.hp,base_target.max_hp,base_target.tissue_budget=12,1000,1000,1000
+    swarm_target.r,swarm_target.hp,swarm_target.max_hp,swarm_target.tissue_budget=12,1000,1000,1000
+    local base_clone_damage=colony_base:hit_enemy(base_target,10,"division")
+    local swarm_clone_damage=colony_swarm:hit_enemy(swarm_target,10,"division")
+    near(swarm_clone_damage,base_clone_damage*1.60,"Great swarm increases real clone damage by 60%")
     local restored_colony=assert(Simulation.restore(colony:snapshot()))
     near(restored_colony.colony_bastion_hp,colony.max_hp*.45,"Living bastion durability survives checkpoint")
     assert(restored_colony.cooldowns.colony_bastion_active==8 and restored_colony.cooldowns.colony_swarm_active==10
