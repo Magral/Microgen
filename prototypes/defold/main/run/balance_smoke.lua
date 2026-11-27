@@ -1408,7 +1408,7 @@ local function validate_form_abilities()
     colony.build.organs.division=4
     local base_clones=#colony:clone_positions()
     assert(colony:activate_form_defense(),"Living bastion activates")
-    assert(colony.cooldowns.colony_bastion_active==8 and colony.colony_bastion_hp==colony.max_hp*.45
+    assert(colony.cooldowns.colony_bastion_active==8 and colony.colony_bastion_hp==colony.max_hp*.55
         and colony.cooldowns.special_defense==80,"Living bastion has limited durability and long cooldown")
     assert(colony:activate_form_ability(),"Great swarm activates")
     assert(colony.cooldowns.colony_swarm_active==10 and colony.cooldowns.special_attack==65
@@ -1426,7 +1426,7 @@ local function validate_form_abilities()
     local swarm_clone_damage=colony_swarm:hit_enemy(swarm_target,10,"division")
     near(swarm_clone_damage,base_clone_damage*1.60,"Great swarm increases real clone damage by 60%")
     local restored_colony=assert(Simulation.restore(colony:snapshot()))
-    near(restored_colony.colony_bastion_hp,colony.max_hp*.45,"Living bastion durability survives checkpoint")
+    near(restored_colony.colony_bastion_hp,colony.max_hp*.55,"Living bastion durability survives checkpoint")
     assert(restored_colony.cooldowns.colony_bastion_active==8 and restored_colony.cooldowns.colony_swarm_active==10
         and restored_colony.cooldowns.special_attack==65 and restored_colony.cooldowns.special_defense==80
         and #restored_colony:clone_positions()==base_clones+2,
@@ -1434,7 +1434,7 @@ local function validate_form_abilities()
     restored_colony.stage_transition=true
     restored_colony.pending_stage_seed=restored_colony.world.seed_value+100
     assert(restored_colony:enter_next_stage(),"Colony can enter next stage")
-    near(restored_colony.colony_bastion_hp,colony.max_hp*.45,"Living bastion durability survives stage transition")
+    near(restored_colony.colony_bastion_hp,colony.max_hp*.55,"Living bastion durability survives stage transition")
     assert(restored_colony.cooldowns.colony_bastion_active==8 and restored_colony.cooldowns.colony_swarm_active==10
         and restored_colony.cooldowns.special_attack==65 and restored_colony.cooldowns.special_defense==80,
         "Colony shield, swarm and both cooldowns survive stage transition")
@@ -1447,7 +1447,7 @@ local function validate_form_abilities()
     local expected1,absorbed1=expected_bastion_damage(20)
     colony:hurt_player(20,{kind="projectile",name="Проверка бастиона"})
     near(colony.hp,hp_before-expected1,"Living bastion absorbs 85% of first hit")
-    near(colony.colony_bastion_hp,colony.max_hp*.45-absorbed1,"Living bastion spends limited durability")
+    near(colony.colony_bastion_hp,colony.max_hp*.55-absorbed1,"Living bastion spends limited durability")
     local hp_before_second=colony.hp
     local expected2=expected_bastion_damage(1000)
     colony:hurt_player(1000,{kind="projectile",name="Проверка бастиона"})
@@ -1468,7 +1468,12 @@ local function validate_form_abilities()
     assert(hollow_colony:form_defense().id=="colony_living_bastion"
         and not hollow_colony:form_defense_ready() and not hollow_colony:activate_form_defense(),
         "Living bastion remains unlocked but cannot activate without living copies")
+    assert(Catalog.FORM_SPECIALIZATIONS.colony.defense.capacity_fraction==.55,
+        "Colony bastion capacity is raised to 55 percent after balance review")
+    assert(Catalog.FORM_SPECIALIZATIONS.colony.evolution.maximum_reduction==.09,
+        "Collective mind membrane reduction cap is raised to nine percent")
     print("MICROGEN FORM ULTIMATE ABILITIES READY")
+    print("MICROGEN COLONY BALANCE READY")
 end
 
 local function validate_signature_organs()
@@ -1640,7 +1645,7 @@ local function validate_form_evolutions_and_synergies()
     evolve(colony,"synaptic_node","armor")
     colony.build.organs.division=4
     near(colony:form_ability().cooldown,65,"Great swarm cooldown")
-    near(colony:damage_reduction({kind="projectile"}),colony.build:passive("armor")+.075,"Collective defense")
+    near(colony:damage_reduction({kind="projectile"}),colony.build:passive("armor")+.09,"Collective defense")
     colony.build.adaptations.armor=6
     near(colony:damage_reduction({kind="projectile"}),.60,"Armor cap")
     equipment_roundtrip(colony,"synaptic_node","armor","colony")
