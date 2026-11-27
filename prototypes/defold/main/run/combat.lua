@@ -273,7 +273,8 @@ function Combat:damage_reduction(source)
     if self.build:rank("synaptic_node")>0 and self:active_clone_count()>0 then
         bonus=bonus+self.build:specialization_bonus("synaptic_node","passive_protection_bonus")
     end
-    return min(0.60, self.build:passive("armor") + bonus)
+    local passive_reduction = min(0.60, self.build:passive("armor") + bonus)
+    return (self.cooldowns.defense_active or 0) > 0 and max(0.78, passive_reduction) or passive_reduction
 end
 
 function Combat:defensive_ability_ready(id)
