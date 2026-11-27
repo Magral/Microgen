@@ -257,6 +257,7 @@ end
 function Combat:damage_reduction(source)
     local passive = self:form_passive()
     local bonus = 0
+    if (self.cooldowns.defense_active or 0) > 0 then bonus = max(bonus, 0.78) end
     if passive.id == "toxic_regulation" and source.kind == "collision" and self:_player_poisoned(source.enemy) then
         local kind = source.enemy.kind
         bonus = (kind == "boss" or kind == "miniboss") and passive.boss_contact_reduction or passive.enemy_contact_reduction
@@ -273,6 +274,33 @@ function Combat:damage_reduction(source)
         bonus=bonus+self.build:specialization_bonus("synaptic_node","passive_protection_bonus")
     end
     return min(0.60, self.build:passive("armor") + bonus)
+end
+
+function Combat:defensive_ability_ready(id)
+    if self.hp <= 0 or self.paused or self.stage_transition or self.outcome ~= "" then return false end
+    if (self.cooldowns[id .. "_cooldown"] or 0) > 0 then return false end
+    if id == "emergency_regen" then return self.hp < self.max_hp * 0.92 end
+    return id == "defense" and (self.cooldowns.defense_active or 0) <= 0
+end
+
+function Combat:activate_defensive_ability(id)
+    if not self:defensive_ability_ready(id) then return false end
+    if id == "defense" then
+        self.cooldowns.defense_active = 5
+        self.cooldowns.defense_cooldown = 70
+        self:_effect("barrier_block", self.player, self:body_radius() * 2.1, 0.8)
+        self:_feedback("synergy", self.player)
+    elseif id == "emergency_regen" then
+        local restored = min(self.max_hp - self.hp, self.max_hp * 0.35)
+        if restored <= 0 then return false end
+        self.hp = min(self.max_hp, self.hp + restored)
+        self.cooldowns.emergency_regen_cooldown = 65
+        self:_effect("heal", self.player, self:body_radius() * 1.8, 0.8)
+        self:_feedback("heal", self.player, restored)
+    else
+        return false
+    end
+    return true
 end
 
 function Combat:hurt_player(amount, source)
