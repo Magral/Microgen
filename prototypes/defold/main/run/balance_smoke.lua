@@ -1794,6 +1794,29 @@ local function validate_form_abilities()
         return sim
     end
 
+    local function probe_form_attack(form,source)
+        local sim=fresh(form)
+        local target=assert(sim:spawn_enemy(Util.copy(sim.player),"prey"))
+        target.r,target.hp,target.max_hp,target.tissue_budget=12,1000,1000,1000
+        return sim:hit_enemy(target,10,source)
+    end
+    near(probe_form_attack("predator","devour"),11,
+        "Predator form increases its signature bite damage by 10%")
+    near(probe_form_attack("predator","acid"),10,
+        "Predator bonus does not leak into unrelated acid damage")
+    near(probe_form_attack("toxic","acid"),11.5,
+        "Toxic form increases direct acid damage by 15%")
+    near(probe_form_attack("toxic","trail"),11.5,
+        "Toxic form increases poison field damage by 15%")
+    near(probe_form_attack("toxic","infection"),11.5,
+        "Toxic form increases spore infection damage by 15%")
+    near(probe_form_attack("toxic","division"),10,
+        "Toxic bonus does not leak into colony clone damage")
+    near(probe_form_attack("colony","division"),12,
+        "Colony form increases coordinated clone damage by 20%")
+    near(probe_form_attack("colony","devour"),10,
+        "Colony bonus does not leak into unrelated predator bites")
+
     local predator=fresh("predator")
     local origin=Util.copy(predator.player)
     predator._move_player_against_bodies=function(self,x,y) return {x=self.player.x+x,y=self.player.y+y} end
