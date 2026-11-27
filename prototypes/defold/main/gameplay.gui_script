@@ -21,6 +21,7 @@ local Minimap = require "main.run.minimap"
 local MapView = require "main.run.map_view"
 local StageRewards = require "main.run.stage_rewards"
 local Rewards = require "main.run.rewards"
+local Recommendations = require "main.run.recommendations"
 local Copy = require("main.run.meta_util").copy
 local Panels = require "main.run.panels"
 local Save = require "main.run.save_store"
@@ -1334,27 +1335,7 @@ draw_offer_preview = function(ui,sim,item,x,y,radius)
 end
 
 local function recommend_choices(sim, choices)
-    local best, score = nil, 0
-    local form = sim.run_loadout.form
-    local signature = Catalog.signature_organ(form)
-    for _, item in ipairs(choices) do
-        local id = item.id
-        local organ = Catalog.ORGANS[id]
-        local value = 0
-        if item.kind == "evolution" and id == signature then value = 100
-        elseif organ and organ.branch == form then
-            value = id == signature and 90 or 60
-            if sim.build:rank(id)>0 then value=value+5 end
-        elseif id=="armor" or id=="regen" then value=30
-        end
-        if value>score then best,score=item,value end
-    end
-    if best then
-        best.recommended=true
-        local reason=best.id==signature and "Орган твоей формы"
-            or (Catalog.ORGANS[best.id] and "Подходит твоей форме" or "Повышает выживаемость")
-        best.extra=reason..(best.extra and ("\n"..best.extra) or "")
-    end
+    Recommendations.mark(sim.build,sim.run_loadout.form,choices)
 end
 
 function App:level_up()
@@ -1835,6 +1816,17 @@ function init(self)
         require("main.run.balance_smoke").run()
     end
     if smoke and sys.get_config_string("microgen.smoke_cards","0")=="1" then
+        local test_build=Build.new()
+        test_build.organs={devour=1}
+        test_build.organ_capacity=20
+        local options={{id="acid"},{id="enzymes"},{id="regen"}}
+        assert(Recommendations.mark(test_build,"predator",options)==options[2],"Recommend unlocked synergy")
+        test_build.organ_capacity=test_build:used_organ_cells()
+        options={{id="chemoreceptor_ridge"},{id="devour"}}
+        assert(Recommendations.mark(test_build,"predator",options)==options[2],"Recommend upgrade without replacing organ")
+        options={{id="chemoreceptor_ridge"}}
+        assert(not Recommendations.mark(test_build,"predator",options),"Do not recommend forced replacement")
+        print("MICROGEN RECOMMENDATIONS READY")
         local sim=app.sim
         local breath_peak=Scene.breathing_scale(math.pi/(2*2.1),1,.014)
         local breath_trough=Scene.breathing_scale(3*math.pi/(2*2.1),1,.014)
@@ -2112,6 +2104,13 @@ function init(self)
         status=-1
         lifecycle:step(0,true)
         assert(lifecycle.state=="install_error","Native installation failure must be visible")
+        status=-3
+        lifecycle:check()
+        lifecycle:step(0,false)
+        assert(lifecycle.state=="download_error" and lifecycle.failure_code==-3,"Preserve checksum error")
+        status=1
+        lifecycle:check()
+        assert(lifecycle.failure_code==nil,"Clear stale failure on retry")
         print("MICROGEN UPDATE PATH READY")
         sim.build.organs.enzymes=previous_organs.enzymes
         sim.build.organs.devour=previous_organs.devour
