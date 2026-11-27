@@ -546,8 +546,9 @@ local function validate_contact_balance()
         assert(math.abs(evolved:contact_impact(rules, true) - rules.impact * 1.2) < .00001,
             "Elite contact remains unchanged: "..form)
         local small_rules = Size.profile(100, 120, 1, 0, 0, false)
-        assert(evolved:contact_impact(small_rules, false) == small_rules.impact,
-            "Small contact remains unchanged: "..form)
+        local small_multiplier = form == "predator" and 1 or .85
+        assert(math.abs(evolved:contact_impact(small_rules, false) - small_rules.impact * small_multiplier) < .00001,
+            "Evolved glandular and colony forms must protect against large-label contact: "..form)
     end
     for _, kind in ipairs({"hunter", "spitter", "prey", "miniboss", "boss"}) do
         local enemy = {kind=kind, rupture_slow=1.5, rupture_strength=.40}
