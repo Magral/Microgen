@@ -933,6 +933,8 @@ local function validate_form_abilities()
     local fast,normal=fresh("predator"),fresh("predator")
     fast.enemies,fast.residents,fast.fields={}, {}, {}
     normal.enemies,normal.residents,normal.fields={}, {}, {}
+    local function free_move(self,dx,dy) return {x=self.player.x+dx,y=self.player.y+dy} end
+    fast._move_player_against_bodies,normal._move_player_against_bodies=free_move,free_move
     fast.cooldowns.predator_escape_active=6
     local fast_start,normal_start=fast.player.x,normal.player.x
     fast:step(.1,1,0)
