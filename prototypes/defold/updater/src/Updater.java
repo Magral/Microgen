@@ -126,6 +126,7 @@ public final class Updater {
               } finally {
                 connection.disconnect();
               }
+              }
               throw new IOException("Too many redirects");
             } catch (UpdateFailure rejected) {
                 throw rejected;
