@@ -222,15 +222,17 @@ function Interface:cards(items,row_y,callback,set_color,preview)
         self:box(x-width/2+3,row_y,5,height-30,shade)
         self:box(x+width/2-3,row_y,2,height-30,vmath.vector4(shade.x,shade.y,shade.z,.45))
         local has_icon=item.icon or item.image_frame
-        local art_y=row_y+184
+        local art_y=row_y+(item.recommended and 126 or 184)
         if has_icon then
-            local halo=self:image("cells","surge",x,art_y,380,380)
+            local halo_size=item.recommended and 230 or 380
+            local halo=self:image("cells","surge",x,art_y,halo_size,halo_size)
             gui.set_color(halo,vmath.vector4(shade.x,shade.y,shade.z,.34))
             local has_preview=item.icon and preview and preview(item,x,art_y,106)
             if not has_preview then
                 local atlas=item.image_atlas or "icons"
                 local frame=item.image_frame or ("icon_"..item.icon)
-                local emblem=self:image(atlas,frame,x,art_y,176,176)
+                local emblem_size=item.recommended and 144 or 176
+                local emblem=self:image(atlas,frame,x,art_y,emblem_size,emblem_size)
                 gui.set_color(emblem,vmath.vector4(1,1,1,1))
             end
         end
