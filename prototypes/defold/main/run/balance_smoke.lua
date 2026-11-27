@@ -922,6 +922,12 @@ local function validate_form_abilities()
     predator.hp=predator.max_hp*.5
     assert(predator:activate_form_defense(),"Predator survival instinct activates")
     near(predator.hp,predator.max_hp*.8,"Predator instantly restores 30% maximum health")
+    local hp_before_repeat=predator.hp
+    predator.effects={{type="heal",life=1}}
+    predator:heal_player(1)
+    near(predator.hp,hp_before_repeat+1,"Healing can safely reuse a visual effect without an amount")
+    assert(predator.effects[1].amount==1,"Repeated healing initializes a missing effect amount")
+    predator.effects={}
     assert(predator.cooldowns.predator_escape_active==6 and predator.cooldowns.special_defense==75,
         "Predator defense duration and long cooldown")
     assert(predator:activate_form_ability(1,0) and not predator:activate_form_ability(1,0),
