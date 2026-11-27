@@ -292,8 +292,71 @@ end
 
 colony_direction=function(sim,tick)
     local target=colony_attack_target(sim)
-    if not target then return nil end
     local player,radius=sim.player,sim:body_radius()
+    if not target then
+        -- Если все противники слишком велики для копий, не отдаём управление
+        -- общему автопилоту: тот мог выбирать сближение с добычей прямо под телами врагов.
+        local health=sim.hp/math.max(1,sim.max_hp)
+        local supply
+        local best_supply_distance=math.huge
+        for _,item in ipairs(sim.pickups) do
+            if not item.captured and item.pos and
+                ((health<.82 and item.type=="heal") or (sim.level<6 and item.type=="dna")) then
+                local d=distance(player,item.pos)
+                if d<best_supply_distance then supply,best_supply_distance=item,d end
+            end
+        end
+        local dx,dy=0,0
+        if supply then
+            dx,dy=supply.pos.x-player.x,supply.pos.y-player.y
+        else
+            for _,enemy in ipairs(sim.enemies) do
+                if enemy.hp>0 and not enemy.captured and enemy.kind~="prey" then
+                    local ex,ey=player.x-enemy.pos.x,player.y-enemy.pos.y
+                    local d=math.max(40,math.sqrt(ex*ex+ey*ey))
+                    local weight=1/(d*d)
+                    dx,dy=dx+ex*weight,dy+ey*weight
+                end
+            end
+            for _,resident in ipairs(sim.residents) do
+                if not resident.dead and not resident.active then
+                    local ex,ey=player.x-resident.pos.x,player.y-resident.pos.y
+                    local d=math.max(40,math.sqrt(ex*ex+ey*ey))
+                    local weight=1/(d*d)
+                    dx,dy=dx+ex*weight,dy+ey*weight
+                end
+            end
+            if dx*dx+dy*dy<.000001 then
+                local roam=DIRECTIONS[math.floor(sim.elapsed/8)%#DIRECTIONS+1]
+                dx,dy=roam[1],roam[2]
+            end
+        end
+        local length=math.max(.001,math.sqrt(dx*dx+dy*dy))
+        dx,dy=dx/length,dy/length
+        local best_x,best_y,best_score=0,0,-math.huge
+        local step_distance=math.max(16,85*STEP*2)
+        for _,candidate in ipairs(DIRECTIONS) do
+            local nx,ny=player.x+candidate[1]*step_distance,player.y+candidate[2]*step_distance
+            local score=candidate[1]*dx+candidate[2]*dy
+            if not sim.world:walkable(nx,ny,math.min(26,radius*.65)) then score=score-100 end
+            for _,enemy in ipairs(sim.enemies) do
+                if enemy.hp>0 and not enemy.captured and enemy.kind~="prey" then
+                    local current=distance(player,enemy.pos)
+                    local next_d=distance({x=nx,y=ny},enemy.pos)
+                    local safe=enemy.r+radius*.75+150
+                    score=score+(next_d-current)*.12-math.max(0,safe-next_d)*.09
+                end
+            end
+            for _,field in ipairs(sim.fields) do
+                if field.hostile then
+                    local next_d=distance({x=nx,y=ny},field.pos)
+                    score=score-math.max(0,field.r+radius*.65+100-next_d)*.06
+                end
+            end
+            if score>best_score then best_x,best_y,best_score=candidate[1],candidate[2],score end
+        end
+        return best_x,best_y
+    end
     local d=math.max(.001,distance(player,target.pos))
     local range=colony_attack_range(sim,target)
     local ux,uy=(target.pos.x-player.x)/d,(target.pos.y-player.y)/d
