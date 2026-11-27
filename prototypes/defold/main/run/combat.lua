@@ -734,7 +734,7 @@ function Combat:_advance_dash(dt)
                     local bio = contains(self.build:active_synergies(), "enzyme_bite")
                     self:hit_enemy(target, damage(rank, 7, 5) * (bio and 1.25 or 1) * ability.damage_multiplier, "devour")
                     if bio then self:_apply_enzymes(target,3) end
-                    if target.kind ~= "boss" and target.hp > 0 then
+                    if target.kind ~= "boss" and target.hp > 0 and (ability.refund_window or 0)>0 then
                         target.form_dash_until = self.elapsed + ability.refund_window
                     end
                     self.bite_flash = 1
@@ -1177,7 +1177,7 @@ function Combat:_update_fields(dt)
                         player_hits[enemy] = { amount = amount, effective = effective, source = field.source }
                     end
                     if field.kind == "rupture" then
-                        local strength=min(.20,max(0,field.rupture_strength or .15))
+                        local strength=min(.40,max(0,field.rupture_strength or .15))
                         enemy.rupture_strength=max((enemy.rupture_slow or 0)>0 and (enemy.rupture_strength or .15) or 0,strength)
                         enemy.rupture_slow=max(enemy.rupture_slow or 0,Catalog.FORM_SPECIALIZATIONS.toxic.ability.slow_duration)
                     end
