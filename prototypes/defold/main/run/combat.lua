@@ -30,7 +30,20 @@ end
 -- Урон мини-боссов и боссов сохраняет исходный множитель.
 function Combat:contact_impact(rules, elite)
     if elite then return rules.impact * 1.2 end
-    return rules.impact * (1 - 0.25 * Size.smoothstep(1.25, 2.4, rules.ratio))
+    local reduction = 0.25
+    local evolution = self:form_evolution()
+    -- Высшие железистая и колониальная формы получают запас времени для выхода из контакта.
+    if evolution and (evolution.id == "living_reactor" or evolution.id == "collective_mind") then
+        reduction = 0.45
+    end
+    return rules.impact * (1 - reduction * Size.smoothstep(1.25, 2.4, rules.ratio))
+end
+
+-- Обычные враги получают полное замедление катаклизма, элитные сохраняют сопротивление.
+function Combat:rupture_speed_multiplier(enemy)
+    if (enemy.rupture_slow or 0) <= 0 then return 1 end
+    local elite = enemy.kind == "boss" or enemy.kind == "miniboss"
+    return 1 - min(elite and .20 or .40, max(0, enemy.rupture_strength or .15))
 end
 
 function Combat:_enemy_label(enemy)
@@ -572,7 +585,7 @@ function Combat:_update_enemy(i, dt, radius, safe)
     end
     if enemy.kind == "spitter" and distance < 300 then dx, dy = -dx * 0.3, -dy * 0.3 end
     if safe and enemy.kind ~= "prey" then dx, dy = -dx, -dy end
-    local speed = enemy.speed * rules.speed * min(enemy.slow > 0 and 0.35 or 1, (enemy.rupture_slow or 0) > 0 and (1-min(.20,max(0,enemy.rupture_strength or .15))) or 1) * (contains(enemy.traits, "swift") and 1.2 or 1)
+    local speed = enemy.speed * rules.speed * min(enemy.slow > 0 and 0.35 or 1, self:rupture_speed_multiplier(enemy)) * (contains(enemy.traits, "swift") and 1.2 or 1)
     dx, dy = dx * speed, dy * speed
     local pull_range = self:attraction_radius()
     if enemy.grasp > 0 then
