@@ -71,11 +71,13 @@ public final class Updater {
     }
 
     private static void fetch(String address, File source, int size, MessageDigest digest) throws IOException {
-        URL url = new URL(address);
+        URL initial = new URL(address);
+        URL url = initial;
         if (!"github.com".equals(url.getHost())
                 || !url.getPath().startsWith("/Magral/Microgen/releases/download/defold-")) throw new IOException();
         IOException lastFailure = null;
         for (int retry = 0; retry < 3; retry++) {
+            url = initial;
             digest.reset();
             source.delete();
             try {
