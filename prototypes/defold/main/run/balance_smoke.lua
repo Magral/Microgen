@@ -1241,6 +1241,9 @@ local function validate_stage_progression()
 end
 
 local function validate_defensive_abilities()
+    local function near(actual,expected,label)
+        assert(math.abs(actual-expected)<.0001,label..": "..tostring(actual))
+    end
     for _,scenario in ipairs(BRANCHES) do
         local sim=Simulation.new(147,nil,nil,scenario.form,{form=scenario.form,branch=scenario.form,seed=147})
         local before=sim.hp
