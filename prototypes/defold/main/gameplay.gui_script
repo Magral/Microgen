@@ -1909,6 +1909,13 @@ function init(self)
                     "Button outside window: "..app.screen.." / "..gui.get_text(button.text))
             end
         end
+        local saved_queue,saved_options=app.sim.reward_queue,app.sim.reward_options
+        app.sim.reward_queue={{token="smoke-cyst-geometry",tier=2}}
+        app.sim.reward_options={{kind="mutation",id="devour",quality=2},{kind="biomass",id="biomass",quality=2,amount=60},{kind="mutation",id="armor",quality=2}}
+        app:reward(true);check_window()
+        assert(app.screen=="reward" and #app.modal.buttons>=4,"Cyst choices must render")
+        app.sim.reward_queue,app.sim.reward_options=saved_queue,saved_options
+        print("MICROGEN CYST CARDS READY")
         app:show_families();check_window()
         app:show_home();check_window()
         app.sim=sim
