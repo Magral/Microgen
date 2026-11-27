@@ -57,6 +57,7 @@ M.SIGNATURE_ORGANS = {
 M.FORM_SPECIALIZATIONS = {
     predator = {
         research = "", branch = "predator", signature_organ = "chemoreceptor_ridge",
+        attack = { sources = { devour = true }, damage_multiplier = 1.10 },
         ability = {
             id = "predator_primordial_rage", name = "Первобытная ярость", cooldown = 55, icon = "devour", color = "ffbd88",
             desc = "Рывок с тройным усиленным укусом; затем урон пасти повышается на 60% на 5 секунд.",
@@ -69,7 +70,7 @@ M.FORM_SPECIALIZATIONS = {
             heal_fraction = 0.30, speed_multiplier = 1.45, duration = 6, active_key = "predator_escape_active",
         },
         passive = {
-            id = "feast", name = "Пиршество", desc = "Поглощение: +3% макс. HP (до 4), раз в 5 с.", heal_fraction = 0.03,
+            id = "feast", name = "Пиршество", desc = "Укус +10%; поглощение: +3% макс. HP (до 4), раз в 5 с.", heal_fraction = 0.03,
             heal_cap = 4, cooldown = 5,
         },
         evolution = {
@@ -80,6 +81,7 @@ M.FORM_SPECIALIZATIONS = {
     },
     toxic = {
         research = "toxic", branch = "toxic", signature_organ = "osmotic_vacuole",
+        attack = { sources = { acid = true, trail = true, infection = true }, damage_multiplier = 1.15 },
         ability = {
             id = "toxic_cataclysm", name = "Токсический катаклизм", cooldown = 60, icon = "acid", color = "b2dd75",
             desc = "Создаёт большое кислотное поле на 8 секунд с усиленным уроном и замедлением врагов на 40%.",
@@ -92,7 +94,7 @@ M.FORM_SPECIALIZATIONS = {
             duration = 6, damage_reduction = 0.75, clear_radius_multiplier = 2.5, active_key = "toxic_cocoon_active",
         },
         passive = {
-            id = "toxic_regulation", name = "Токсикорегуляция", desc = "Контактный урон обычных врагов −6%, от отравленных −18%; от боссов −3% и −9%.",
+            id = "toxic_regulation", name = "Токсикорегуляция", desc = "Кислота, яд и заражение +15%; контактный урон обычных врагов −6%, от отравленных −18%.",
             base_enemy_contact_reduction = 0.06, base_boss_contact_reduction = 0.03,
             enemy_contact_reduction = 0.12, boss_contact_reduction = 0.06,
         },
@@ -104,6 +106,7 @@ M.FORM_SPECIALIZATIONS = {
     },
     colony = {
         research = "colony", branch = "colony", signature_organ = "synaptic_node",
+        attack = { sources = { division = true }, damage_multiplier = 1.20 },
         ability = {
             id = "colony_great_swarm", name = "Великий рой", cooldown = 65, icon = "division", color = "e7a7f5",
             desc = "На 10 секунд появляются две дополнительные боевые копии, а урон всех копий повышается на 60%.",
@@ -115,7 +118,7 @@ M.FORM_SPECIALIZATIONS = {
             duration = 8, damage_absorption = 0.85, capacity_fraction = 0.70, active_key = "colony_bastion_active",
         },
         passive = {
-            id = "shared_membrane", name = "Общая мембрана", desc = "Защита +1,5% за копию, до 7,5%; высшая эволюция повышает предел до 12%.",
+            id = "shared_membrane", name = "Общая мембрана", desc = "Урон копий +20%; защита +1,5% за копию, до 7,5%, а после эволюции — до 12%.",
             reduction_per_clone = 0.015, maximum_clones = 5, maximum_reduction = 0.075,
         },
         evolution = {
