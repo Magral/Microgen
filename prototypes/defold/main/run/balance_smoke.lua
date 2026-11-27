@@ -943,11 +943,19 @@ local function validate_form_abilities()
     legacy_checkpoint.cooldowns.defense_active=3
     legacy_checkpoint.cooldowns.defense_cooldown=21
     legacy_checkpoint.cooldowns.emergency_regen_cooldown=14
+    legacy_checkpoint.cooldowns.toxic_cocoon_active=3
+    legacy_checkpoint.cooldowns.colony_swarm_active=3
+    legacy_checkpoint.cooldowns.colony_bastion_active=3
+    legacy_checkpoint.colony_bastion_hp=20
     local migrated=assert(Simulation.restore(legacy_checkpoint))
     assert(migrated.cooldowns.special_attack==12 and migrated.cooldowns.special_defense==nil
         and migrated.cooldowns.form_ability==nil and migrated.cooldowns.defense_active==nil
         and migrated.cooldowns.defense_cooldown==nil and migrated.cooldowns.emergency_regen_cooldown==nil,
         "Legacy checkpoints migrate attack cooldown and remove universal defensive timers")
+    assert(migrated.cooldowns.predator_escape_active==6 and migrated.cooldowns.predator_frenzy_active==5
+        and migrated.cooldowns.toxic_cocoon_active==nil and migrated.cooldowns.colony_swarm_active==nil
+        and migrated.cooldowns.colony_bastion_active==nil and migrated.colony_bastion_hp==0,
+        "Checkpoint restore rejects active effects belonging to other forms")
     restored_predator.stage_transition=true
     restored_predator.pending_stage_seed=restored_predator.world.seed_value+100
     assert(restored_predator:enter_next_stage(),"Predator can enter next stage")
