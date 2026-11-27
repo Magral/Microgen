@@ -130,8 +130,10 @@ local function direction(sim, tick)
     end
     local player, radius = sim.player, sim:body_radius()
     local colony_pilot=sim.run_loadout.form=="colony"
-    local threat_radius=colony_pilot and 500 or 380
-    local danger_radius=colony_pilot and 650 or 520
+    local toxic_pilot=sim.run_loadout.form=="toxic"
+    local cautious_pilot=colony_pilot or toxic_pilot
+    local threat_radius=colony_pilot and 500 or (toxic_pilot and 480 or 380)
+    local danger_radius=colony_pilot and 650 or (toxic_pilot and 620 or 520)
     local away_x, away_y, nearest_target, target_score = 0, 0, nil, math.huge
     for _, enemy in ipairs(sim.enemies) do
         if enemy.hp > 0 and not enemy.captured then
@@ -168,7 +170,20 @@ local function direction(sim, tick)
     elseif nearest_target then
         local dx, dy = nearest_target.pos.x - player.x, nearest_target.pos.y - player.y
         local distance = math.max(0.0001, math.sqrt(dx * dx + dy * dy))
-        desired_x, desired_y = dx / distance, dy / distance
+        if toxic_pilot and nearest_target.kind ~= "prey" then
+            -- Токсичная форма наносит урон кислотной аурой: держим безопасный
+            -- радиус вместо бесполезного сближения до столкновения.
+            local acid_reach=(75+sim.build:rank("acid")*9)
+                *sim.build:specialization_value("acid","radius_mult")*sim:ability_scale()
+            local safe=nearest_target.r+radius*.75+28
+            local desired_range=math.max(safe,acid_reach*.78)
+            local radial=math.max(-1,math.min(1,(distance-desired_range)/36))
+            local tangent=math.abs(distance-desired_range)<24 and .32 or 0
+            local ux,uy=dx/distance,dy/distance
+            desired_x,desired_y=ux*radial-uy*tangent,uy*radial+ux*tangent
+        else
+            desired_x, desired_y = dx / distance, dy / distance
+        end
     else
         local roam = DIRECTIONS[math.floor(sim.elapsed / 12) % #DIRECTIONS + 1]
         desired_x, desired_y = roam[1], roam[2]
@@ -189,9 +204,9 @@ local function direction(sim, tick)
                 local current_distance = math.sqrt(current_x * current_x + current_y * current_y)
                 local next_distance = math.sqrt(next_x * next_x + next_y * next_y)
                 if current_distance < danger_radius or next_distance < danger_radius then
-                    local clearance = enemy.r + radius * 0.75 + (colony_pilot and 115 or 65)
-                    local separation_weight=colony_pilot and 0.045 or 0.025
-                    local collision_weight=colony_pilot and 0.055 or 0.03
+                    local clearance = enemy.r + radius * 0.75 + (colony_pilot and 115 or (toxic_pilot and 90 or 65))
+                    local separation_weight=colony_pilot and 0.045 or (toxic_pilot and 0.035 or 0.025)
+                    local collision_weight=colony_pilot and 0.055 or (toxic_pilot and 0.045 or 0.03)
                     score = score + (next_distance - current_distance) * separation_weight
                         - math.max(0, clearance - next_distance) * collision_weight
                 end
@@ -292,6 +307,19 @@ end
 
 colony_direction=function(sim,tick)
     local target=colony_attack_target(sim)
+    local health=sim.hp/math.max(1,sim.max_hp)
+    if health<.68 then
+        local heal,best_distance
+        for _,item in ipairs(sim.pickups) do
+            if item.type=="heal" and not item.captured and item.pos then
+                local d=distance(sim.player,item.pos)
+                if not heal or d<best_distance then heal,best_distance=item,d end
+            end
+        end
+        -- При критическом здоровье колония сначала восстанавливается,
+        -- даже если рядом остаётся доступная для копий цель.
+        if heal then target=nil end
+    end
     local player,radius=sim.player,sim:body_radius()
     if not target then
         -- Если все противники слишком велики для копий, не отдаём управление
