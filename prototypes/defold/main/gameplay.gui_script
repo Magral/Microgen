@@ -434,7 +434,7 @@ function App:updates()
         current = "У тебя актуальная стабильная версия Defold.",
         error = "Не удалось получить список релизов GitHub. Повтори проверку.",
         incomplete = "Новая версия найдена. Проверенный APK пока недоступен.",
-        download_error = "Не удалось загрузить или проверить APK. Повтори проверку.",
+        download_error = ({[-1]="Ошибка сети или записи APK.",[-2]="Размер APK не совпадает.",[-3]="Контрольная сумма APK не совпадает.",[-4]="Неверный пакет или версия APK.",[-5]="Подпись APK отличается от установленной.",[-6]="Сервер отклонил загрузку APK."})[updater.failure_code or 0] or "Не удалось начать загрузку APK.",
         install_error = "Не удалось открыть установщик Android. Повтори проверку.",
         desktop = "Для Android доступна версия " .. label .. ".",
     }
@@ -449,8 +449,8 @@ function App:updates()
         ui:button(1230,646,1479,84,"Проверить обновления",function() updater:check() end,true)
     end
     if not updater.needs_permission then
-        ui:button(1230,545,1479,84,"Открыть выпуски на GitHub",function()
-            sys.open_url("https://github.com/Magral/Microgen/releases")
+        ui:button(1230,545,1479,84,updater.asset and "Скачать APK через браузер" or "Открыть выпуски на GitHub",function()
+            sys.open_url(updater.asset and updater.asset.url or "https://github.com/Magral/Microgen/releases")
         end)
     end
     ui:button(1230,447,1479,84,"Назад",back)
