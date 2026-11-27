@@ -212,7 +212,12 @@ function Interface:cards(items,row_y,callback,set_color,preview)
         self:surface(x,row_y,width+8,height+8,"panel")
         local card=self:surface(x,row_y,width,height,"card")
         gui.set_color(card,vmath.vector4(.72,.91,.91,.74))
-        self:box(x,row_y+height/2-12,width-54,4,shade)
+        self:box(x,row_y+height/2-12,width-54,4,item.recommended and MINT or shade)
+        if item.recommended then
+            local marker=self:surface(x,row_y+height/2-46,width-80,44,"button")
+            gui.set_color(marker,vmath.vector4(.15,.55,.43,.95))
+            self:fit_text(x,row_y+height/2-46,"РЕКОМЕНДУЕМ",.85,PALE,width-98,40,true)
+        end
         self:box(x-width/2+3,row_y,5,height-30,shade)
         self:box(x+width/2-3,row_y,2,height-30,vmath.vector4(shade.x,shade.y,shade.z,.45))
         local has_icon=item.icon or item.image_frame
