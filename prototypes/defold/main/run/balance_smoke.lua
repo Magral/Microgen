@@ -511,6 +511,31 @@ local function validate_contact_balance()
     assert(math.abs(large - original_large * 0.75) < 0.00001 and large > medium,
         "Largest ordinary amoebas must deal 25 percent less contact damage")
     assert(math.abs(elite - original_elite * 1.2) < 0.00001, "Elite contact damage must remain unchanged")
+    -- Проверяем отдельную защиту высших форм, не меняя обычные формы и элиту.
+    for _, form in ipairs({"predator", "toxic", "colony"}) do
+        local evolved = Simulation.new(147, nil, nil, form, {form=form, branch=form, seed=147})
+        local cfg = Catalog.FORM_SPECIALIZATIONS[form].evolution
+        evolved.build.organs[cfg.organ] = cfg.organ_rank
+        evolved.build.adaptations[cfg.passive] = cfg.passive_rank
+        assert(evolved.build:evolve(cfg.organ), "Contact fixture must unlock form evolution")
+        local rules = Size.profile(100, 240, 1, 0, 0, false)
+        local multiplier = form == "predator" and .75 or .55
+        assert(math.abs(evolved:contact_impact(rules, false) - rules.impact * multiplier) < .00001,
+            "Large ordinary contact protection must match evolved form: "..form)
+        assert(math.abs(evolved:contact_impact(rules, true) - rules.impact * 1.2) < .00001,
+            "Elite contact remains unchanged: "..form)
+        local small_rules = Size.profile(100, 120, 1, 0, 0, false)
+        assert(evolved:contact_impact(small_rules, false) == small_rules.impact,
+            "Small contact remains unchanged: "..form)
+    end
+    for _, kind in ipairs({"hunter", "spitter", "prey", "miniboss", "boss"}) do
+        local enemy = {kind=kind, rupture_slow=1.5, rupture_strength=.40}
+        local expected = (kind == "boss" or kind == "miniboss") and .80 or .60
+        assert(math.abs(sim:rupture_speed_multiplier(enemy)-expected)<.00001,
+            "Cataclysm movement multiplier: "..kind)
+        enemy.rupture_slow=0
+        assert(sim:rupture_speed_multiplier(enemy)==1, "Expired cataclysm does not slow: "..kind)
+    end
     print("MICROGEN CONTACT BALANCE READY")
 end
 
