@@ -1213,7 +1213,35 @@ local function validate_form_evolutions_and_synergies()
     assert(#Catalog.EVOLUTION_IDS==9 and #Catalog.SYNERGY_IDS==13,"Preserve old recipes and add three each")
     print("MICROGEN FORM EVOLUTIONS SYNERGIES READY")
 end
+-- Изолированная проверка цепочки стадий; не измеряет боевую сложность.
+local function validate_stage_progression()
+    for _, scenario in ipairs(BRANCHES) do
+        local sim=Simulation.new(147,nil,nil,scenario.form,{form=scenario.form,branch=scenario.form,seed=147})
+        for stage=1,2 do
+            sim.enemies={}
+            local target=sim:stage_miniboss_target()
+            assert(#sim.world.nests>=target*2,"Not enough nests for stage progression")
+            for n=1,target do
+                for j=1,n*2 do sim.world.nests[j].used=true end
+                sim:_update_minibosses()
+                assert(sim.minibosses_spawned==n,"Miniboss gate")
+                assert(sim.enemies[#sim.enemies].kind=="miniboss")
+                sim:_die(#sim.enemies,false)
+                assert(sim.minibosses_defeated==n,"Miniboss defeat gate")
+            end
+            local boss=assert(sim:spawn_enemy(sim.world.boss_pos,"boss"))
+            assert(boss.kind=="boss")
+            sim:_die(#sim.enemies,false)
+            assert(sim.stage_transition and sim.boss_reward.organ,"Boss defeat must unlock stage")
+            settle_stage(sim)
+            assert(sim.stage_index==stage+1 and not sim.stage_transition and sim.minibosses_defeated==0,"Stage transition/reset")
+        end
+        print("MICROGEN STAGE PROGRESSION READY form="..scenario.form.." stage="..sim.stage_index)
+    end
+end
+
 function M.run()
+    validate_stage_progression()
     validate_form_specialization_data()
     validate_form_evolutions_and_synergies()
     validate_signature_organs()
