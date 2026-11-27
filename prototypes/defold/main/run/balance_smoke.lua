@@ -1185,8 +1185,8 @@ local function validate_contact_balance()
     local elite, original_elite = impact(2.4, true)
     assert(small == original_small, "Small contact damage must remain unchanged")
     assert(medium < original_medium and medium > small, "Large contact damage must scale smoothly")
-    assert(math.abs(large - original_large * 0.75) < 0.00001 and large > medium,
-        "Largest ordinary amoebas must deal 25 percent less contact damage")
+    assert(math.abs(large - original_large * 0.65) < 0.00001 and large > medium,
+        "Largest ordinary amoebas must deal 35 percent less contact damage to the base colony")
     assert(math.abs(elite - original_elite * 1.2) < 0.00001, "Elite contact damage must remain unchanged")
     local predator = Simulation.new(147, nil, nil, "predator", {form="predator",branch="predator",seed=147})
     local predator_medium = predator:contact_impact(Size.profile(100,180,1,0,0,false),false)
@@ -1205,6 +1205,12 @@ local function validate_contact_balance()
         "Boss contact protection must remain lower than ordinary enemy protection")
     assert(math.abs(toxic:damage_reduction({kind="projectile",enemy=target}))<0.00001,
         "Toxic contact protection must not reduce projectile damage")
+    local toxic_small=toxic:contact_impact(Size.profile(100,105,1,0,0,false),false)
+    local toxic_large,toxic_original=toxic:contact_impact(Size.profile(100,240,1,0,0,false),false),Size.profile(100,240,1,0,0,false).impact
+    assert(math.abs(toxic_small-Size.profile(100,105,1,0,0,false).impact)<0.00001,
+        "Toxic contact protection must not affect small amoebas")
+    assert(math.abs(toxic_large-toxic_original*.70)<0.00001,
+        "Toxic form must reduce largest ordinary amoeba contact damage by 30 percent")
     print("MICROGEN EARLY FORM DEFENSE READY")
     -- Проверяем отдельную защиту высших форм, не меняя обычные формы и элиту.
     for _, form in ipairs({"predator", "toxic", "colony"}) do
