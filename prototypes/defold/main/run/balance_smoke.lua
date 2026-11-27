@@ -1794,7 +1794,7 @@ local function validate_form_abilities()
         return sim
     end
 
-    local function probe_form_attack(form,source)
+    local function probe_form_attack(form,source,budget)
         local sim=fresh(form)
         -- Исключаем отдельную адаптацию катализатора из проверки бонуса формы.
         if form=="toxic" then sim.build.adaptations.catalysis=0 end
