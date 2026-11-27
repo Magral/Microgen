@@ -935,15 +935,44 @@ local function validate_form_abilities()
         and restored_predator.cooldowns.predator_escape_active==6
         and restored_predator.cooldowns.predator_frenzy_active==5,
         "Predator ultimate effects and both cooldowns survive checkpoint")
+    local legacy_checkpoint=predator:snapshot()
+    legacy_checkpoint.cooldowns.special_attack=nil
+    legacy_checkpoint.cooldowns.special_defense=nil
+    legacy_checkpoint.cooldowns.form_ability=12
+    legacy_checkpoint.cooldowns.defense_active=3
+    legacy_checkpoint.cooldowns.defense_cooldown=21
+    legacy_checkpoint.cooldowns.emergency_regen_cooldown=14
+    local migrated=assert(Simulation.restore(legacy_checkpoint))
+    assert(migrated.cooldowns.special_attack==12 and migrated.cooldowns.special_defense==nil
+        and migrated.cooldowns.form_ability==nil and migrated.cooldowns.defense_active==nil
+        and migrated.cooldowns.defense_cooldown==nil and migrated.cooldowns.emergency_regen_cooldown==nil,
+        "Legacy checkpoints migrate attack cooldown and remove universal defensive timers")
+    restored_predator.stage_transition=true
+    restored_predator.pending_stage_seed=restored_predator.world.seed_value+100
+    assert(restored_predator:enter_next_stage(),"Predator can enter next stage")
+    assert(restored_predator.cooldowns.special_attack==55 and restored_predator.cooldowns.special_defense==75
+        and restored_predator.cooldowns.predator_escape_active==6 and restored_predator.cooldowns.predator_frenzy_active==5
+        and not restored_predator.form_action.kind,
+        "Attack/defense cooldowns and active effects survive stage transition")
     predator:_advance_dash(.24)
-    assert(not predator.form_action.kind and predator.player.x>origin.x and prey.hp<100,
-        "Primordial rage performs a collision-checked triple-power dash bite")
+    local rank=predator.build:rank("devour")
+    local expected_dash_damage=Catalog.scaled_damage(7+rank*5,rank)*3
+    near(100-prey.hp,expected_dash_damage,
+        "Primordial rage dash bite is exactly triple power; the follow-up frenzy does not multiply it again")
+    assert(not predator.form_action.kind and predator.player.x>origin.x,
+        "Primordial rage performs a collision-checked dash bite")
 
     local toxic=fresh("toxic")
-    toxic.fields={{pos=Util.copy(toxic.player),r=90,life=4,damage=3,hostile=true,kind="enemy_spore"}}
+    toxic.fields={
+        {pos=Util.copy(toxic.player),r=90,life=4,damage=3,hostile=true,kind="enemy_spore"},
+        {pos=Util.copy(toxic.player),r=70,life=4,damage=3,hostile=true,kind="enemy_toxin"},
+        {pos=Util.copy(toxic.player),r=70,life=4,damage=3,hostile=true,kind="enemy_projectile"},
+        {pos=Util.copy(toxic.player),r=70,life=4,damage=3,hostile=false,kind="poison"},
+    }
     assert(toxic:activate_form_defense(),"Osmotic cocoon activates")
-    assert(#toxic.fields==0 and toxic.cooldowns.toxic_cocoon_active==6
-        and toxic.cooldowns.special_defense==75,"Osmotic cocoon clears nearby hostile poison fields")
+    assert(#toxic.fields==2 and toxic.fields[1].kind=="enemy_projectile" and toxic.fields[2].kind=="poison"
+        and toxic.cooldowns.toxic_cocoon_active==6 and toxic.cooldowns.special_defense==75,
+        "Osmotic cocoon clears only nearby enemy toxin/spore clouds")
     local toxic_hp=toxic.hp
     toxic:hurt_player(100,{kind="projectile",name="Проверка осмотического кокона"})
     near(toxic.hp,toxic_hp-25,"Osmotic cocoon reduces incoming damage by 75%")
@@ -979,6 +1008,13 @@ local function validate_form_abilities()
         and restored_colony.cooldowns.special_attack==65 and restored_colony.cooldowns.special_defense==80
         and #restored_colony:clone_positions()==base_clones+2,
         "Colony ultimate effects and both cooldowns survive checkpoint")
+    restored_colony.stage_transition=true
+    restored_colony.pending_stage_seed=restored_colony.world.seed_value+100
+    assert(restored_colony:enter_next_stage(),"Colony can enter next stage")
+    near(restored_colony.colony_bastion_hp,colony.max_hp*.45,"Living bastion durability survives stage transition")
+    assert(restored_colony.cooldowns.colony_bastion_active==8 and restored_colony.cooldowns.colony_swarm_active==10
+        and restored_colony.cooldowns.special_attack==65 and restored_colony.cooldowns.special_defense==80,
+        "Colony shield, swarm and both cooldowns survive stage transition")
     local hp_before=colony.hp
     local function expected_bastion_damage(amount)
         local residual=amount*(1-colony:damage_reduction({kind="projectile"}))
