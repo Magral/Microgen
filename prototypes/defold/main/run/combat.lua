@@ -72,6 +72,11 @@ function Combat:hit_enemy(enemy, amount, source, maximum_damage)
     local build = self.build
     local acid_bite = source=="devour" and contains(build:active_synergies(),"acid_bite") and self:_player_poisoned(enemy)
     local raw = max(0, amount) * (1 + build:passive("catalysis")) * build:power(source)
+    -- Каждая форма усиливает именно свой базовый атакующий механизм.
+    local form_attack = Catalog.form_specialization(self.run_loadout.form).attack
+    if form_attack and form_attack.sources and form_attack.sources[source] then
+        raw = raw * (form_attack.damage_multiplier or 1)
+    end
     if source == "devour" then
         raw = raw * self:marked_bite_multiplier(enemy)
         if self.form_action.kind~="dash" and (self.cooldowns.predator_frenzy_active or 0)>0 then
