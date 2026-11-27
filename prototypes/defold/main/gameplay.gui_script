@@ -424,38 +424,55 @@ function App:updates()
     self:overlay("updates")
     local ui, updater = self.modal, self.updater
     local function back() self:show_home() end
-    local left = ui:panel("Обновления Микрогена", "Загрузка идёт в фоне. Установку подтверждает Android.", back)
+    local left = ui:panel("Обновления Микрогена", "Новые возможности игры и установка обновлений", back)
     local label = updater.asset and updater.asset.label or ""
     local captions = {
         idle = "Игра проверяет новые версии Defold автоматически.",
         checking = "Проверяем выпуски на GitHub…",
-        downloading = "Загружаем и проверяем версию " .. label .. "…",
+        downloading = "Загружаем и проверяем версию " .. label .. "… Не закрывай игру.",
         ready = updater.needs_permission and "Разреши установку из этого приложения в настройках Android."
-            or "Версия " .. label .. " готова к установке.",
+            or "Версия " .. label .. " загружена и проверена. Можно устанавливать.",
         current = "У тебя актуальная стабильная версия Defold.",
-        error = "Не удалось получить список релизов GitHub. Повтори проверку.",
-        incomplete = "Новая версия найдена. Проверенный APK пока недоступен.",
-        download_error = ({[-1]="Ошибка сети или записи APK.",[-2]="Размер APK не совпадает.",[-3]="Контрольная сумма APK не совпадает.",[-4]="Неверный пакет или версия APK.",[-5]="Подпись APK отличается от установленной.",[-6]="Сервер отклонил загрузку APK."})[updater.failure_code or 0] or "Не удалось начать загрузку APK.",
-        install_error = "Не удалось открыть установщик Android. Повтори проверку.",
+        error = "Не удалось получить список выпусков. Проверь интернет и повтори попытку.",
+        incomplete = "Новая версия найдена, но проверенный APK пока недоступен.",
+        download_error = ({
+            [-1]="Не удалось загрузить файл. Проверь интернет и свободное место, затем попробуй ещё раз.",
+            [-2]="Размер файла не совпал. Удали незавершённую загрузку и повтори попытку.",
+            [-3]="Проверка целостности не пройдена. Этот APK устанавливать нельзя.",
+            [-4]="Файл не является подходящим обновлением Microgen.",
+            [-5]="Подпись отличается от установленной версии. Установка заблокирована.",
+            [-6]="Сервер отклонил загрузку. Попробуй позже или скачай APK через браузер."
+        })[updater.failure_code or 0] or "Загрузка не удалась. Повтори проверку или воспользуйся браузером.",
+        install_error = "Android не открыл установщик. Проверь разрешение на установку приложений.",
         desktop = "Для Android доступна версия " .. label .. ".",
     }
     local width = ui.panel_width - 66
     ui:fit_text(left+33,828,"Установлена версия "..updater.installed,1,ui.colors.pale,width,56)
-    ui:fit_text(left+33,754,captions[updater.state],.96,ui.colors.dim,width,76)
+    ui:fit_text(left+33,754,captions[updater.state],.91,ui.colors.dim,width,78)
+    ui:fit_text(left+33,665,"Что нового в игре",.94,ui.colors.mint,width,42)
+    local notes = {
+        "• Три формы получили собственные боевые специализации и мощные активные приёмы.",
+        "• Сигнатурные органы и гибридные сочетания открывают новые способы вести бой.",
+        "• В цистах и при повышении уровня появились понятные подсказки, что лучше выбрать."
+    }
+    for i,note in ipairs(notes) do
+        ui:fit_text(left+42,610-(i-1)*58,note,.76,ui.colors.pale,width-18,48)
+    end
     if updater.state == "ready" then
-        ui:button(1230,646,1479,84,"Открыть установщик",function() updater:install() end,true)
+        ui:button(1230,414,1479,76,"Открыть установщик",function() updater:install() end,true)
         if updater.needs_permission then
-            ui:button(1230,545,1479,84,"Разрешение Android",function() updater.native.allow() end)
+            ui:button(1230,322,1479,76,"Разрешение Android",function() updater.native.allow() end)
         end
     elseif updater.state ~= "checking" and updater.state ~= "downloading" then
-        ui:button(1230,646,1479,84,"Проверить обновления",function() updater:check() end,true)
+        ui:button(1230,414,1479,76,updater.state=="download_error" and "Повторить загрузку" or "Проверить обновления",function() updater:check() end,true)
     end
     if not updater.needs_permission or updater.asset then
-        ui:button(1230,updater.needs_permission and 447 or 545,1479,84,updater.asset and "Скачать APK через браузер" or "Открыть выпуски на GitHub",function()
-            sys.open_url(updater.asset and updater.asset.url or "https://github.com/Magral/Microgen/releases")
-        end)
+        ui:button(1230,updater.needs_permission and 230 or 322,1479,76,
+            updater.asset and "Скачать APK через браузер" or "Открыть выпуски на GitHub",function()
+                sys.open_url(updater.asset and updater.asset.url or "https://github.com/Magral/Microgen/releases")
+            end)
     end
-    ui:button(1230,349,1479,84,"Назад",back)
+    ui:button(1230,132,1479,76,"Назад",back)
 end
 
 local function part_caption(part)
