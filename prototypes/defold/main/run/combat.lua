@@ -46,7 +46,14 @@ function Combat:hit_enemy(enemy, amount, source, maximum_damage)
     local build = self.build
     local acid_bite = source=="devour" and contains(build:active_synergies(),"acid_bite") and self:_player_poisoned(enemy)
     local raw = max(0, amount) * (1 + build:passive("catalysis")) * build:power(source)
-    if source == "devour" then raw = raw * self:marked_bite_multiplier(enemy) end
+    if source == "devour" then
+        raw = raw * self:marked_bite_multiplier(enemy)
+        if (self.cooldowns.predator_frenzy_active or 0) > 0 then
+            raw = raw * (Catalog.FORM_SPECIALIZATIONS.predator.ability.frenzy_multiplier or 1)
+        end
+    elseif source == "division" and (self.cooldowns.colony_swarm_active or 0) > 0 then
+        raw = raw * (Catalog.FORM_SPECIALIZATIONS.colony.ability.clone_damage_multiplier or 1)
+    end
     local exposed = (enemy.boss_exposed or 0) > 0
     local ratio = enemy.r / self:body_radius()
     local giant = enemy.kind == "boss" or ratio >= 1.6
@@ -241,9 +248,9 @@ end
 
 function Combat:_acid_bite_refund()
     local cfg=Catalog.SYNERGIES.acid_bite
-    local cd=self.cooldowns.form_ability or 0
+    local cd=self.cooldowns.special_attack or 0
     if not self:form_ability().id or cd<=0 or not self:_ready("acid_bite") then return end
-    self.cooldowns.form_ability=max(0,cd-cfg.cooldown_refund)
+    self.cooldowns.special_attack=max(0,cd-cfg.cooldown_refund)
     self.cooldowns.acid_bite=cfg.interval
 end
 
@@ -257,7 +264,6 @@ end
 function Combat:damage_reduction(source)
     local passive = self:form_passive()
     local bonus = 0
-    if (self.cooldowns.defense_active or 0) > 0 then bonus = max(bonus, 0.78) end
     if passive.id == "toxic_regulation" and source.kind == "collision" and self:_player_poisoned(source.enemy) then
         local kind = source.enemy.kind
         bonus = (kind == "boss" or kind == "miniboss") and passive.boss_contact_reduction or passive.enemy_contact_reduction
@@ -274,33 +280,51 @@ function Combat:damage_reduction(source)
         bonus=bonus+self.build:specialization_bonus("synaptic_node","passive_protection_bonus")
     end
     local passive_reduction = min(0.60, self.build:passive("armor") + bonus)
-    return (self.cooldowns.defense_active or 0) > 0 and max(0.78, passive_reduction) or passive_reduction
+    if (self.cooldowns.toxic_cocoon_active or 0) > 0 then
+        return max(passive_reduction, Catalog.FORM_SPECIALIZATIONS.toxic.defense.damage_reduction)
+    end
+    return passive_reduction
 end
 
-function Combat:defensive_ability_ready(id)
-    if self.hp <= 0 or self.paused or self.stage_transition or self.outcome ~= "" then return false end
-    if (self.cooldowns[id .. "_cooldown"] or 0) > 0 then return false end
-    if id == "emergency_regen" then return self.hp < self.max_hp * 0.92 end
-    return id == "defense" and (self.cooldowns.defense_active or 0) <= 0
+function Combat:form_defense()
+    local specialization=Catalog.form_specialization(self.run_loadout.form)
+    if not self:form_evolution() then return {} end
+    return specialization.defense or {}
 end
 
-function Combat:activate_defensive_ability(id)
-    if not self:defensive_ability_ready(id) then return false end
-    if id == "defense" then
-        self.cooldowns.defense_active = 5
-        self.cooldowns.defense_cooldown = 70
-        self:_effect("barrier_block", self.player, self:body_radius() * 2.1, 0.8)
-        self:_feedback("synergy", self.player)
-    elseif id == "emergency_regen" then
-        local restored = min(self.max_hp - self.hp, self.max_hp * 0.35)
-        if restored <= 0 then return false end
-        self.hp = min(self.max_hp, self.hp + restored)
-        self.cooldowns.emergency_regen_cooldown = 65
-        self:_effect("heal", self.player, self:body_radius() * 1.8, 0.8)
-        self:_feedback("heal", self.player, restored)
+function Combat:form_defense_ready()
+    local defense=self:form_defense()
+    if not defense.id or self.hp<=0 or self.paused or self.stage_transition or self.outcome~="" then return false end
+    return (self.cooldowns.special_defense or 0)<=0
+end
+
+function Combat:activate_form_defense()
+    if not self:form_defense_ready() then return false end
+    local defense=self:form_defense()
+    local form=self.run_loadout.form
+    if form=="predator" then
+        self:heal_player(self.max_hp*defense.heal_fraction)
+        self.cooldowns.predator_escape_active=defense.duration
+        self:_effect("heal",self.player,self:body_radius()*2.2,.9)
+    elseif form=="toxic" then
+        self.cooldowns.toxic_cocoon_active=defense.duration
+        local radius=self:body_radius()*defense.clear_radius_multiplier
+        for i=#self.fields,1,-1 do
+            local field=self.fields[i]
+            if field.hostile and distance_squared(field.pos,self.player)<(radius+field.r)^2 then
+                table.remove(self.fields,i)
+            end
+        end
+        self:_effect("barrier_block",self.player,radius,.9)
+    elseif form=="colony" then
+        self.cooldowns.colony_bastion_active=defense.duration
+        self.colony_bastion_hp=self.max_hp*defense.capacity_fraction
+        self:_effect("barrier_block",self.player,self:body_radius()*2.8,.9)
     else
         return false
     end
+    self.cooldowns.special_defense=defense.cooldown
+    self:_feedback("synergy",self.player)
     return true
 end
 
@@ -311,6 +335,13 @@ function Combat:hurt_player(amount, source)
     local label = source.name or "Неизвестный источник"
     local incoming = max(0, amount) * (kind == "collision" and self:has_trait("elastic") and 1.08 or 1)
     local damage = incoming * (1 - self:damage_reduction(source))
+    if damage>0 and (self.cooldowns.colony_bastion_active or 0)>0 and (self.colony_bastion_hp or 0)>0 then
+        local absorbed=min(damage*Catalog.FORM_SPECIALIZATIONS.colony.defense.damage_absorption,self.colony_bastion_hp)
+        damage=damage-absorbed
+        self.colony_bastion_hp=max(0,self.colony_bastion_hp-absorbed)
+        self:_effect("barrier_block",self.player,self:body_radius()*2.6,.35)
+        if self.colony_bastion_hp<=0 then self.cooldowns.colony_bastion_active=0 end
+    end
     if damage > 0 and self.build:rank("barrier") > 0 and self:_ready("barrier") then
         damage = max(0, damage - self:barrier_capacity())
         self.cooldowns.barrier = 8
@@ -628,15 +659,12 @@ function Combat:form_evolution()
 end
 
 function Combat:form_ability()
-    local base=Catalog.form_specialization(self.run_loadout.form).ability or {}
+    local specialization=Catalog.form_specialization(self.run_loadout.form)
     local evo=self:form_evolution()
-    if not evo then return base end
-    local ability=V.copy(base)
-    ability.cooldown=evo.ability_cooldown or base.cooldown
-    if evo.duration_bonus then ability.duration=base.duration+evo.duration_bonus end
-    ability.slow=evo.slow or base.slow
-    ability.second_wave_delay=evo.second_wave_delay
-    ability.second_wave_multiplier=evo.second_wave_multiplier
+    if not evo or not specialization.ability then return {} end
+    local ability=V.copy(specialization.ability)
+    if evo.duration_bonus then ability.duration=ability.duration+evo.duration_bonus end
+    ability.slow=evo.slow or ability.slow
     return ability
 end
 
@@ -647,45 +675,44 @@ function Combat:_rally_target(radius)
 end
 
 function Combat:form_ability_ready()
-    local ability = self:form_ability()
-    if not ability.id or self.hp <= 0 or self.paused or self.stage_transition or self.outcome ~= ""
-        or not self:_ready("form_ability") or self.form_action.kind then return false end
-    if ability.id == "predator_dash" then return self.build:rank("devour") > 0 end
-    if ability.id == "toxic_rupture" then return self.build:rank("acid") > 0 end
-    if ability.id == "colony_rally" then
-        return self:active_clone_count() > 0 and self:_rally_target(ability.radius) ~= nil
-    end
+    local ability=self:form_ability()
+    if not ability.id or self.hp<=0 or self.paused or self.stage_transition or self.outcome~=""
+        or not self:_ready("special_attack") or self.form_action.kind then return false end
+    if ability.id=="predator_primordial_rage" then return self.build:rank("devour")>0 end
+    if ability.id=="toxic_cataclysm" then return self.build:rank("acid")>0 end
+    if ability.id=="colony_great_swarm" then return self:active_clone_count()>0 end
     return false
 end
 
-function Combat:activate_form_ability(x, y)
+function Combat:activate_form_ability(x,y)
     if not self:form_ability_ready() then return false end
-    local ability = self:form_ability()
-    if ability.id == "predator_dash" then
-        local dx, dy, length = V.normal(x or 0, y or 0)
-        if length < .05 then dx, dy = math.cos(self.facing), math.sin(self.facing) end
-        self.facing = V.angle(dx, dy)
-        self.form_action = {kind = "dash", dx = dx, dy = dy, age = 0, hit = false}
-    elseif ability.id == "toxic_rupture" then
-        local rank = self.build:rank("acid")
-        local radius = (75 + rank * 9) * self.build:specialization_value("acid", "radius_mult") * self:ability_scale()
+    local ability=self:form_ability()
+    if ability.id=="predator_primordial_rage" then
+        local dx,dy,length=V.normal(x or 0,y or 0)
+        if length<.05 then dx,dy=math.cos(self.facing),math.sin(self.facing) end
+        self.facing=V.angle(dx,dy)
+        self.form_action={kind="dash",dx=dx,dy=dy,age=0,hit=false}
+        self.cooldowns.predator_frenzy_active=ability.frenzy_duration
+    elseif ability.id=="toxic_cataclysm" then
+        local rank=self.build:rank("acid")
+        local radius=(75+rank*9)*self.build:specialization_value("acid","radius_mult")*self:ability_scale()
         local charges=self:vacuole_charge_count()
         local cfg=Catalog.SIGNATURE_ORGANS.osmotic_vacuole
         local field_radius=radius*ability.radius_multiplier*(1+charges*cfg.radius_per_charge)
-        if self.build:rank("osmotic_vacuole")>0 then
-            field_radius=field_radius*self.build:specialization_value("osmotic_vacuole","field_radius_mult")
-        end
-        self:_field(self.player,field_radius,damage(rank,4,3)*ability.damage_multiplier,
-            ability.duration+charges*cfg.duration_per_charge,"rupture")
+        field_radius=field_radius*self.build:specialization_value("osmotic_vacuole","field_radius_mult",1)
+        local duration=ability.duration+charges*cfg.duration_per_charge
+        self:_field(self.player,field_radius,damage(rank,4,3)*ability.damage_multiplier,duration,"rupture")
         self.fields[#self.fields].rupture_strength=ability.slow
         self.vacuole_charges={}
-        self:_effect("pulse",self.player,field_radius,.65)
-    elseif ability.id == "colony_rally" then
-        local target = self:_rally_target(ability.radius)
-        if not target then return false end
-        self.form_action = {kind = "rally", target_id = target.id, pos = V.copy(target.pos), age = 0, hit = false}
-    else return false end
-    self.cooldowns.form_ability = ability.cooldown
+        self:_effect("pulse",self.player,field_radius,.9)
+    elseif ability.id=="colony_great_swarm" then
+        self.cooldowns.colony_swarm_active=ability.duration
+        self:_effect("pulse",self.player,self:body_radius()*3.2,1.1)
+        self:_feedback("synergy",self.player)
+    else
+        return false
+    end
+    self.cooldowns.special_attack=ability.cooldown
     return true
 end
 
@@ -728,8 +755,8 @@ end
 function Combat:_refund_dash(enemy)
     local ability = self:form_ability()
     if ability.id ~= "predator_dash" or enemy.kind == "boss" or not enemy.form_dash_until or enemy.form_dash_until < self.elapsed then return end
-    local cd = self.cooldowns.form_ability or 0
-    self.cooldowns.form_ability = cd - min(ability.absorb_refund, max(0, cd - ability.minimum_cooldown))
+    local cd = self.cooldowns.special_attack or 0
+    self.cooldowns.special_attack = cd - min(ability.absorb_refund or 0, max(0, cd - (ability.minimum_cooldown or 0)))
     enemy.form_dash_until = nil
 end
 
@@ -924,6 +951,9 @@ end
 function Combat:clone_positions()
     local result = {}
     local count = self:active_clone_count()
+    if (self.cooldowns.colony_swarm_active or 0)>0 then
+        count=min(8,count+(Catalog.FORM_SPECIALIZATIONS.colony.ability.extra_clones or 0))
+    end
     local action = self.form_action
     for i = 0, count - 1 do
         local angle = self.elapsed * 1.6 + i * TAU / count
