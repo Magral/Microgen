@@ -1181,7 +1181,7 @@ local function validate_contact_balance()
     assert(medium < predator_medium,
         "Base colony must reduce medium-large contact damage before its evolution")
     local toxic = Simulation.new(147,nil,nil,"toxic",{form="toxic",branch="toxic",seed=147})
-    local target = {kind="hunter",hp=100,max_hp=100,captured=false,infect=0,
+    local target = {kind="hunter",r=20,hp=100,max_hp=100,captured=false,infect=0,
         pos={x=toxic.player.x+10000,y=toxic.player.y}}
     assert(math.abs(toxic:damage_reduction({kind="collision",enemy=target})-0.06)<0.00001,
         "Toxic form must reduce ordinary contact damage even before poisoning")
