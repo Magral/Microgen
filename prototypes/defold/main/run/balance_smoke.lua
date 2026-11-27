@@ -1240,7 +1240,32 @@ local function validate_stage_progression()
     end
 end
 
+local function validate_defensive_abilities()
+    for _,scenario in ipairs(BRANCHES) do
+        local sim=Simulation.new(147,nil,nil,scenario.form,{form=scenario.form,branch=scenario.form,seed=147})
+        local before=sim.hp
+        assert(sim:activate_defensive_ability("defense"),"Defensive impulse must be available for "..scenario.form)
+        assert(sim.cooldowns.defense_active==5 and sim.cooldowns.defense_cooldown==70,
+            "Defensive impulse duration/cooldown")
+        sim.hp=sim.max_hp
+        local health_before=sim.hp
+        sim:hurt_player(100,{kind="projectile",name="Проверка защитного импульса"})
+        near(sim.hp,health_before-22,"Defensive impulse must reduce damage by 78%")
+        sim.cooldowns.defense_active=nil
+        sim.hp=sim.max_hp*.5
+        local damaged=sim.hp
+        assert(sim:activate_defensive_ability("emergency_regen"),"Emergency regeneration must be available")
+        near(sim.hp,damaged+sim.max_hp*.35,"Emergency regeneration restores 35% maximum health")
+        assert(sim.hp<=sim.max_hp and sim.cooldowns.emergency_regen_cooldown==65,
+            "Regeneration must respect health cap and independent cooldown")
+        assert(sim.cooldowns.defense_cooldown==70,"Regeneration must not reset defensive impulse cooldown")
+        assert(not sim:activate_defensive_ability("emergency_regen"),"Regeneration must not be spammed")
+        print("MICROGEN DEFENSIVE ABILITIES READY form="..scenario.form)
+    end
+end
+
 function M.run()
+    validate_defensive_abilities()
     validate_stage_progression()
     validate_form_specialization_data()
     validate_form_evolutions_and_synergies()
