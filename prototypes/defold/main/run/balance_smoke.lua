@@ -1887,15 +1887,15 @@ local function validate_form_abilities()
         "Attack/defense cooldowns and active effects survive stage transition")
     predator:_advance_dash(.24)
     local rank=predator.build:rank("devour")
-    local expected_dash_damage=Catalog.scaled_damage(7+rank*5,rank)*3
+    local expected_dash_damage=Catalog.scaled_damage(7+rank*5,rank)*3*1.10
     near(100-prey.hp,expected_dash_damage,
-        "Primordial rage dash bite is exactly triple power; the follow-up frenzy does not multiply it again")
+        "Primordial rage dash bite includes the predator's 10% signature damage bonus and triple ability multiplier")
     assert(not predator.form_action.kind and predator.player.x>origin.x,
         "Primordial rage performs a collision-checked dash bite")
     prey.hp,prey.tissue_budget=100,100
     local followup_damage=predator:hit_enemy(prey,Catalog.scaled_damage(12,1),"devour")
-    near(followup_damage,Catalog.scaled_damage(12,1)*1.60,
-        "Primordial rage increases subsequent ordinary bites by 60%")
+    near(followup_damage,Catalog.scaled_damage(12,1)*1.10*1.60,
+        "Primordial rage multiplies the predator's 10% signature bite bonus by the 60% frenzy bonus")
 
     local toxic=fresh("toxic")
     toxic.fields={
