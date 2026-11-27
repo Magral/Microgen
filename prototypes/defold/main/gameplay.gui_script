@@ -88,7 +88,8 @@ function App:notice(message)
 end
 
 function App:clear_pointer()
-    self.touch_id,self.stick,self.press_action,self.ability_touch = nil,nil,nil,nil
+    self.touch_id,self.stick,self.press_action = nil,nil,nil
+    self.ability_touches = {}
     self.keys={}
     gui.set_enabled(self.stick_base,false)
     gui.set_enabled(self.stick_tip,false)
@@ -874,17 +875,32 @@ end
 
 -- Отдельный палец способности не захватывает и не сбрасывает палец движения.
 function App:ability_pointer(id,x,y,pressed,released)
-    if self.ability_touch == id then
-        if released then self.ability_touch=nil end
+    self.ability_touches=self.ability_touches or {}
+    if self.ability_touches[id] then
+        if released then self.ability_touches[id]=nil end
         return true
     end
-    if self.screen=="run" and self.ability_button and pressed and self.ability_touch==nil
-        and id~=self.touch_id and gui.pick_node(self.ability_button.node,x,y) then
-        self.ability_touch=id
-        self:use_form_ability()
-        return true
+    if self.screen~="run" or not pressed or id==self.touch_id then return false end
+    local targets={
+        {button=self.defense_button, action=function() self:use_defensive_ability("defense") end},
+        {button=self.regen_button, action=function() self:use_defensive_ability("emergency_regen") end},
+        {button=self.ability_button, action=function() self:use_form_ability() end},
+    }
+    for _,target in ipairs(targets) do
+        if target.button and gui.pick_node(target.button.node,x,y) then
+            self.ability_touches[id]=true
+            target.action()
+            return true
+        end
     end
     return false
+end
+
+function App:use_defensive_ability(id)
+    if self.screen~="run" then return false end
+    local used=self.sim:activate_defensive_ability(id)
+    if used then self:draw_hud() end
+    return used
 end
 
 function App:show_run()
@@ -923,7 +939,27 @@ function App:show_run()
         self:body(true)
     end)
     ui:button(control_x,bottom+47,288,75,"Ⅱ  Пауза",function() self:pause() end)
-    self.ability_button=nil
+    self.ability_button,self.defense_button,self.regen_button=nil,nil,nil
+    local defensive_x,defensive_y,dw,dh=ScreenLayout.defensive_slot(safe_left,right,top,bottom)
+    if defensive_x then
+        self.defense_button=ui:button(defensive_x,defensive_y,dw,dh,"",function() self:use_defensive_ability("defense") end)
+        self.defense_icon=ui:image("icons","icon_shield",defensive_x-86,defensive_y,64,64)
+        self.defense_ring=ui:remember(gui.new_pie_node(vmath.vector3(defensive_x-86,defensive_y,0),vmath.vector3(92,92,0)))
+        gui.set_color(self.defense_ring,color("64b9ef"))
+        gui.set_inner_radius(self.defense_ring,39)
+        gui.set_perimeter_vertices(self.defense_ring,48)
+        self.defense_name=ui:fit_text(defensive_x-35,defensive_y+22,"Защита",.74,color("64b9ef"),167,42)
+        self.defense_status=ui:fit_text(defensive_x-35,defensive_y-22,"Готово",.68,ui.colors.pale,167,44)
+        local regen_y=defensive_y+142
+        self.regen_button=ui:button(defensive_x,regen_y,dw,dh,"",function() self:use_defensive_ability("emergency_regen") end)
+        self.regen_icon=ui:image("icons","icon_heal",defensive_x-86,regen_y,64,64)
+        self.regen_ring=ui:remember(gui.new_pie_node(vmath.vector3(defensive_x-86,regen_y,0),vmath.vector3(92,92,0)))
+        gui.set_color(self.regen_ring,color("78d9bd"))
+        gui.set_inner_radius(self.regen_ring,39)
+        gui.set_perimeter_vertices(self.regen_ring,48)
+        self.regen_name=ui:fit_text(defensive_x-35,regen_y+22,"Регенерация",.70,color("78d9bd"),167,42)
+        self.regen_status=ui:fit_text(defensive_x-35,regen_y-22,"При ранении",.68,ui.colors.pale,167,44)
+    end
     local ability=self.sim:form_ability()
     local ax,ay,aw,ah=ScreenLayout.ability_slot(safe_left,right,top,bottom)
     if ax and ability.id then
@@ -986,6 +1022,21 @@ function App:draw_hud()
         gui.set_text(self.shield_metric,cooldown<=0 and ("Щит готов · до %.0f урона"):format(sim:barrier_capacity())
             or ("Щит · восстановление %.1f с"):format(cooldown))
         gui.set_size(self.shield,vmath.vector3(math.max(.01,720*(1-math.min(1,cooldown/8))),10,0))
+    end
+    local defense_cd=math.max(0,sim.cooldowns.defense_cooldown or 0)
+    local defense_active=math.max(0,sim.cooldowns.defense_active or 0)
+    if self.defense_button then
+        local ready=sim:defensive_ability_ready("defense")
+        gui.set_fill_angle(self.defense_ring,math.max(.01,360*(1-math.min(1,defense_cd/70))))
+        gui.set_color(self.defense_icon,ready and vmath.vector4(1,1,1,1) or vmath.vector4(.55,.55,.55,.8))
+        gui.set_text(self.defense_status,defense_active>0 and ("%.1f с"):format(defense_active)
+            or defense_cd>0 and ("%.0f с"):format(defense_cd) or "Готово")
+        local regen_cd=math.max(0,sim.cooldowns.emergency_regen_cooldown or 0)
+        local regen_ready=sim:defensive_ability_ready("emergency_regen")
+        gui.set_fill_angle(self.regen_ring,math.max(.01,360*(1-math.min(1,regen_cd/65))))
+        gui.set_color(self.regen_icon,regen_ready and vmath.vector4(1,1,1,1) or vmath.vector4(.55,.55,.55,.8))
+        gui.set_text(self.regen_status,regen_cd>0 and ("%.0f с"):format(regen_cd)
+            or regen_ready and "Готово" or "Здоровье полное")
     end
     if self.ability_button then
         local ability=sim:form_ability()
