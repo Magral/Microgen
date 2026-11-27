@@ -59,7 +59,7 @@ M.FORM_SPECIALIZATIONS = {
         research = "", branch = "predator", signature_organ = "chemoreceptor_ridge",
         ability = {
             id = "predator_dash", name = "Рывок-хватка", cooldown = 14, icon = "devour", color = "ffbd88",
-            desc = "Рывок и усиленный укус. Поглощение цели ускоряет восстановление.", distance = 96, duration = 0.24, refund_window = 3,
+            desc = "Рывок и усиленный укус. Поглощение цели ускоряет восстановление.", distance = 64, duration = 0.24, refund_window = 3,
             damage_multiplier = 1.25, absorb_refund = 2, minimum_cooldown = 10,
         },
         passive = {
@@ -87,7 +87,7 @@ M.FORM_SPECIALIZATIONS = {
         evolution = {
             id = "living_reactor", name = "Живой реактор",
             organ = "osmotic_vacuole", organ_rank = 6, passive = "catalysis", passive_rank = 3,
-            duration_bonus = 1, slow = 0.20,
+            duration_bonus = 0.5, slow = 0.20,
         },
     },
     colony = {
@@ -105,7 +105,7 @@ M.FORM_SPECIALIZATIONS = {
             id = "collective_mind", name = "Коллективный разум",
             organ = "synaptic_node", organ_rank = 6, passive = "armor", passive_rank = 3,
             second_wave_delay = 1, second_wave_multiplier = 0.35,
-            ability_cooldown = 18, maximum_reduction = 0.075,
+            ability_cooldown = 15, maximum_reduction = 0.075,
         },
     },
 }
