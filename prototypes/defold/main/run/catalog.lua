@@ -66,7 +66,7 @@ M.FORM_SPECIALIZATIONS = {
         defense = {
             id = "predator_instinct", name = "Инстинкт выживания", cooldown = 75, icon = "barrier", color = "ff9b82",
             desc = "Восстанавливает 30% максимального здоровья и ускоряет движение на 45% на 6 секунд.",
-            heal_fraction = 0.30, speed_multiplier = 1.45, duration = 6,
+            heal_fraction = 0.30, speed_multiplier = 1.45, duration = 6, active_key = "predator_escape_active",
         },
         passive = {
             id = "feast", name = "Пиршество", desc = "Поглощение: +3% макс. HP (до 4), раз в 5 с.", heal_fraction = 0.03,
@@ -89,7 +89,7 @@ M.FORM_SPECIALIZATIONS = {
         defense = {
             id = "toxic_osmotic_cocoon", name = "Осмотический кокон", cooldown = 75, icon = "acid", color = "b2dd75",
             desc = "На 6 секунд снижает входящий урон на 75% и уничтожает опасные ядовитые облака рядом.",
-            duration = 6, damage_reduction = 0.75, clear_radius_multiplier = 2.5,
+            duration = 6, damage_reduction = 0.75, clear_radius_multiplier = 2.5, active_key = "toxic_cocoon_active",
         },
         passive = {
             id = "toxic_regulation", name = "Токсикорегуляция", desc = "Контактный урон от отравленных врагов −8%, от боссов −4%.",
@@ -111,7 +111,7 @@ M.FORM_SPECIALIZATIONS = {
         defense = {
             id = "colony_living_bastion", name = "Живой бастион", cooldown = 80, icon = "barrier", color = "c5a0f5",
             desc = "Копии окружают организм и поглощают до 85% входящего урона, пока хватает прочности оболочки.",
-            duration = 8, damage_absorption = 0.85, capacity_fraction = 0.45,
+            duration = 8, damage_absorption = 0.85, capacity_fraction = 0.45, active_key = "colony_bastion_active",
         },
         passive = {
             id = "shared_membrane", name = "Общая мембрана", desc = "Защита +1,2% за копию, до 6%; с бронёй до 60%.",
