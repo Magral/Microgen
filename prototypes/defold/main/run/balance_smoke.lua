@@ -22,7 +22,9 @@ local HYBRID_SEEDS = {147, 247, 347}
 local SPECIALIZATION_SEEDS = {147, 347}
 local HYBRID_SCENARIOS = {
     {form="predator",starter="devour",name="acid_bite",
-        seed_organs={osmotic_vacuole=2,acid=2},expected_synergies={"acid_bite"}},
+        seed_organs={chemoreceptor_ridge=6,devour=3,tentacle=2,osmotic_vacuole=2,acid=2},
+        seed_adaptations={magnet=3,armor=2,regen=2},evolve=true,
+        expected_synergies={"acid_bite"}},
     {form="toxic",starter="acid",name="enzyme_target",
         seed_organs={chemoreceptor_ridge=2,enzymes=2,devour=2},expected_synergies={"enzyme_target"}},
     {form="toxic",starter="acid",name="shared_shell",
