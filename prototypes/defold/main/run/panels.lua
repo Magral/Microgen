@@ -399,7 +399,7 @@ function Panels.offer_cards(ui,choices,y,choose,preview)
             items[#items+1] = {id=id,grade=choice.grade or choice.quality or 0,
                 title=choice.title or display, icon=icon,image_atlas=image_atlas,image_frame=image_frame,
                 rank=choice.rank, detail=detail, meta=choice.meta, rarity=not choice.service and (choice.rarity or Rewards.quality_name(choice.grade or choice.quality or 0)), service=choice.service,
-                extra=choice.extra, extra_color=choice.extra_color, action=choice.action, sold=choice.sold, data=choice}
+                recommended=choice.recommended, extra=choice.extra, extra_color=choice.extra_color, action=choice.action, sold=choice.sold, data=choice}
         end
     end
     ui:cards(items,y,choose,quality_color,preview)
