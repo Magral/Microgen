@@ -19,6 +19,7 @@ local BRANCHES = {
     {form = "colony", starter = "division"},
 }
 local HYBRID_SEEDS = {147, 247, 347}
+local SPECIALIZATION_SEEDS = {147, 247, 347}
 local HYBRID_SCENARIOS = {
     {form="predator",starter="devour",name="acid_bite",
         seed_organs={osmotic_vacuole=2,acid=2},expected_synergies={"acid_bite"}},
@@ -299,6 +300,12 @@ local function run(seed, scenario, horizon_seconds)
                 if sim:_nearest(115) then sim:activate_form_ability() end
             else sim:activate_form_ability() end
         end
+        -- Защита применяется отдельно от атаки, только после реального урона.
+        -- Один порог используется для всех форм, чтобы сравнение оставалось парным.
+        if scenario.use_defense ~= false and sim:form_defense_ready()
+            and sim.hp<=sim.max_hp*.90 and tick%30==0 then
+            sim:activate_form_defense()
+        end
         sim:step(STEP, move_x, move_y)
         if not first_hit and sim.hp < health_before then
             local hit = sim.last_damage
@@ -356,18 +363,20 @@ local function run(seed, scenario, horizon_seconds)
     local toxin_source_summary = #toxin_summary > 0 and table.concat(toxin_summary, ";") or "none"
     local marker=scenario.run_marker or "MICROGEN BALANCE RUN"
     print(string.format(
-        "%s seed=%d branch=%s starter=%s signature=%s signature_rank=%d scenario=%s pilot=kite seconds=%.1f stage=%d level=%d kills=%d absorbed=%d hp=%.1f damage_dealt=%.1f damage_taken=%.1f first_hit=%s last_hit=%s damage_sources=%s toxin_sources=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d synergy_triggers=acid:%d,enzyme:%d,shell:%d",
+        "%s seed=%d branch=%s starter=%s signature=%s signature_rank=%d scenario=%s pilot=kite seconds=%.1f stage=%d level=%d kills=%d absorbed=%d hp=%.1f damage_dealt=%.1f damage_taken=%.1f damage_blocked=%.1f healed=%.1f first_hit=%s last_hit=%s damage_sources=%s toxin_sources=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d synergy_triggers=acid:%d,enzyme:%d,shell:%d",
         marker,seed,branch,starter,signature,sim.build:rank(signature),scenario.name or "base",sim.elapsed,sim.stage_index,sim.level,sim.kills,
-        sim.absorbed or 0,sim.hp,sim.combat_stats.damage_dealt,sim.combat_stats.damage_taken,first_hit or "none",cause,source_summary,toxin_source_summary,
+        sim.absorbed or 0,sim.hp,sim.combat_stats.damage_dealt,sim.combat_stats.damage_taken,
+        sim.combat_stats.blocked,sim.combat_stats.healed,first_hit or "none",cause,source_summary,toxin_source_summary,
         sim.outcome=="" and "alive" or sim.outcome,steps,max_enemies,max_fields,max_remains,
         synergy_triggers.acid_bite,synergy_triggers.enzyme_target,synergy_triggers.shared_shell))
     return {alive=sim.outcome=="",seconds=sim.elapsed,hp=sim.hp,level=sim.level,kills=sim.kills,
         absorbed=sim.absorbed or 0,stage=sim.stage_index,damage_dealt=sim.combat_stats.damage_dealt,
-        damage_taken=sim.combat_stats.damage_taken,synergy_triggers=synergy_triggers}
+        damage_taken=sim.combat_stats.damage_taken,blocked=sim.combat_stats.blocked,healed=sim.combat_stats.healed,
+        synergy_triggers=synergy_triggers}
 end
 
 local function run_batch(marker,scenario,seeds)
-    local seconds,levels,kills,absorbed,dealt,damage,stages,survivors=0,0,0,0,0,0,0,0
+    local seconds,levels,kills,absorbed,dealt,damage,blocked,healed,stages,survivors=0,0,0,0,0,0,0,0,0,0
     local acid_triggers,enzyme_triggers,shell_triggers=0,0,0
     local results={}
     for _,seed in ipairs(seeds) do
@@ -375,9 +384,9 @@ local function run_batch(marker,scenario,seeds)
         config.run_marker=marker
         local result=run(seed,config)
         results[seed]=result
-        seconds,levels,kills,absorbed,dealt,damage,stages=seconds+result.seconds,levels+result.level,
+        seconds,levels,kills,absorbed,dealt,damage,blocked,healed,stages=seconds+result.seconds,levels+result.level,
             kills+result.kills,absorbed+result.absorbed,dealt+result.damage_dealt,
-            damage+result.damage_taken,stages+result.stage
+            damage+result.damage_taken,blocked+result.blocked,healed+result.healed,stages+result.stage
         acid_triggers=acid_triggers+result.synergy_triggers.acid_bite
         enzyme_triggers=enzyme_triggers+result.synergy_triggers.enzyme_target
         shell_triggers=shell_triggers+result.synergy_triggers.shared_shell
@@ -385,15 +394,15 @@ local function run_batch(marker,scenario,seeds)
         collectgarbage("collect")
     end
     local summary=marker:gsub(" RUN$"," SUMMARY")
-    print(string.format("%s form=%s scenario=%s maps=%d mean_seconds=%.1f mean_stage=%.2f mean_level=%.2f mean_kills=%.2f mean_absorbed=%.2f mean_damage_dealt=%.1f mean_damage_taken=%.1f survivors=%d mean_synergy_triggers=acid:%.2f,enzyme:%.2f,shell:%.2f",
+    print(string.format("%s form=%s scenario=%s maps=%d mean_seconds=%.1f mean_stage=%.2f mean_level=%.2f mean_kills=%.2f mean_absorbed=%.2f mean_damage_dealt=%.1f mean_damage_taken=%.1f mean_damage_blocked=%.1f mean_healed=%.1f survivors=%d mean_synergy_triggers=acid:%.2f,enzyme:%.2f,shell:%.2f",
         summary,scenario.form,scenario.name or "base",#seeds,seconds/#seeds,stages/#seeds,
-        levels/#seeds,kills/#seeds,absorbed/#seeds,dealt/#seeds,damage/#seeds,survivors,
+        levels/#seeds,kills/#seeds,absorbed/#seeds,dealt/#seeds,damage/#seeds,blocked/#seeds,healed/#seeds,survivors,
         acid_triggers/#seeds,enzyme_triggers/#seeds,shell_triggers/#seeds))
     return results
 end
 
 local function print_pair_comparison(label,with_effect,without_effect,seeds)
-    local totals={seconds=0,stage=0,level=0,kills=0,absorbed=0,damage_dealt=0,damage_taken=0,hp=0}
+    local totals={seconds=0,stage=0,level=0,kills=0,absorbed=0,damage_dealt=0,damage_taken=0,blocked=0,healed=0,hp=0}
     local wins=0
     for _,seed in ipairs(seeds) do
         local a,b=assert(with_effect[seed],"Missing paired run with effect"),assert(without_effect[seed],"Missing paired control run")
@@ -403,14 +412,14 @@ local function print_pair_comparison(label,with_effect,without_effect,seeds)
             totals[key]=totals[key]+delta[key]
         end
         if a.alive and not b.alive then wins=wins+1 elseif b.alive and not a.alive then wins=wins-1 end
-        print(string.format("MICROGEN PAIRED RESULT comparison=%s seed=%d delta_seconds=%.1f delta_stage=%.2f delta_level=%.2f delta_kills=%.2f delta_absorbed=%.2f delta_damage_dealt=%.1f delta_damage_taken=%.1f delta_hp=%.1f outcome_with=%s outcome_without=%s",
+        print(string.format("MICROGEN PAIRED RESULT comparison=%s seed=%d delta_seconds=%.1f delta_stage=%.2f delta_level=%.2f delta_kills=%.2f delta_absorbed=%.2f delta_damage_dealt=%.1f delta_damage_taken=%.1f delta_damage_blocked=%.1f delta_healed=%.1f delta_hp=%.1f outcome_with=%s outcome_without=%s",
             label,seed,delta.seconds,delta.stage,delta.level,delta.kills,delta.absorbed,delta.damage_dealt,
-            delta.damage_taken,delta.hp,a.alive and "alive" or "death",b.alive and "alive" or "death"))
+            delta.damage_taken,delta.blocked,delta.healed,delta.hp,a.alive and "alive" or "death",b.alive and "alive" or "death"))
     end
     local n=#seeds
-    print(string.format("MICROGEN PAIRED SUMMARY comparison=%s pairs=%d mean_delta_seconds=%.1f mean_delta_stage=%.2f mean_delta_level=%.2f mean_delta_kills=%.2f mean_delta_absorbed=%.2f mean_delta_damage_dealt=%.1f mean_delta_damage_taken=%.1f mean_delta_hp=%.1f survival_pair_wins=%d",
+    print(string.format("MICROGEN PAIRED SUMMARY comparison=%s pairs=%d mean_delta_seconds=%.1f mean_delta_stage=%.2f mean_delta_level=%.2f mean_delta_kills=%.2f mean_delta_absorbed=%.2f mean_delta_damage_dealt=%.1f mean_delta_damage_taken=%.1f mean_delta_damage_blocked=%.1f mean_delta_healed=%.1f mean_delta_hp=%.1f survival_pair_wins=%d",
         label,n,totals.seconds/n,totals.stage/n,totals.level/n,totals.kills/n,totals.absorbed/n,
-        totals.damage_dealt/n,totals.damage_taken/n,totals.hp/n,wins))
+        totals.damage_dealt/n,totals.damage_taken/n,totals.blocked/n,totals.healed/n,totals.hp/n,wins))
 end
 
 local function validate_resident_start_safety()
@@ -1280,13 +1289,7 @@ function M.run()
             scenario.form,#SEEDS,seconds/#SEEDS,stages/#SEEDS,levels/#SEEDS,kills/#SEEDS,
             absorbed/#SEEDS,dealt/#SEEDS,damage/#SEEDS,survivors))
     end
-    for _,scenario in ipairs(BRANCHES) do
-        local control=Util.copy(scenario)
-        control.name="без активной способности"
-        control.use_ability=false
-        local controls=run_batch("MICROGEN BALANCE CONTROL RUN",control,SEEDS)
-        print_pair_comparison("способность_"..scenario.form,active_form_results[scenario.form],controls,SEEDS)
-    end
+    -- BRANCHES — контрольные базовые забеги без высшей эволюции; обе способности закрыты.
     for _,scenario in ipairs(HYBRID_SCENARIOS) do
         local active=run_batch("MICROGEN HYBRID BALANCE RUN",scenario,HYBRID_SEEDS)
         local control=Util.copy(scenario)
@@ -1306,6 +1309,22 @@ function M.run()
         evolved.evolve=true
         local active=run_batch("MICROGEN EVOLUTION BALANCE RUN",evolved,SEEDS)
         print_pair_comparison("высшая_эволюция_"..scenario.name,active,controls,SEEDS)
+
+        local specialization=Util.copy(evolved)
+        specialization.name="атака + защита"
+        local combined=run_batch("MICROGEN SPECIALIZATION RUN",specialization,SPECIALIZATION_SEEDS)
+
+        local attack_control=Util.copy(specialization)
+        attack_control.name="только защита"
+        attack_control.use_ability=false
+        local defense_only=run_batch("MICROGEN SPECIALIZATION RUN",attack_control,SPECIALIZATION_SEEDS)
+        print_pair_comparison("атака_"..scenario.name,combined,defense_only,SPECIALIZATION_SEEDS)
+
+        local defense_control=Util.copy(specialization)
+        defense_control.name="только атака"
+        defense_control.use_defense=false
+        local attack_only=run_batch("MICROGEN SPECIALIZATION RUN",defense_control,SPECIALIZATION_SEEDS)
+        print_pair_comparison("защита_"..scenario.name,combined,attack_only,SPECIALIZATION_SEEDS)
     end
     print("MICROGEN STAGE SIX BALANCE READY")
     print("MICROGEN BALANCE SMOKE READY")
