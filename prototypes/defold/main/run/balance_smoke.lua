@@ -1050,9 +1050,6 @@ local function validate_form_abilities()
         and not hybrid:form_defense().id,
         "A foreign signature organ never unlocks another form's ultimate buttons")
     local hollow_colony=fresh("colony")
-    hollow_colony.build.organs.synaptic_node=6
-    hollow_colony.build.adaptations.armor=3
-    assert(hollow_colony.build:evolve("synaptic_node"),"Colony evolution fixture")
     hollow_colony.build.organs.division=0
     assert(hollow_colony:form_defense().id=="colony_living_bastion"
         and not hollow_colony:form_defense_ready() and not hollow_colony:activate_form_defense(),
