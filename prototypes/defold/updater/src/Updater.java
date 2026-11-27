@@ -7,6 +7,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.Signature;
 import android.net.Uri;
 import android.provider.Settings;
+import android.util.Log;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -22,7 +23,13 @@ public final class Updater {
     private static volatile File verified;
     static final String APK = "microgen-verified-update.apk";
 
-    public static void download(Activity activity, String url, String sha, int size) {
+    private static final class UpdateFailure extends IOException {
+        final int code;
+        UpdateFailure(int code, String message) { super(message); this.code = code; }
+    }
+
+    public static synchronized void download(Activity activity, String url, String sha, int size) {
+        if (state == 1) return;
         state = 1;
         verified = null;
         new Thread(() -> {
@@ -42,13 +49,15 @@ public final class Updater {
                     hex.append(Character.forDigit((b >>> 4) & 15, 16));
                     hex.append(Character.forDigit(b & 15, 16));
                 }
-                if (!sha.contentEquals(hex)) throw new IOException();
+                if (!sha.contentEquals(hex)) throw new UpdateFailure(-3, "SHA-256 mismatch");
                 PackageManager manager = activity.getPackageManager();
                 String name = activity.getPackageName();
                 PackageInfo old = manager.getPackageInfo(name, PackageManager.GET_SIGNATURES);
                 PackageInfo next = manager.getPackageArchiveInfo(path, PackageManager.GET_SIGNATURES);
-                if (next == null || !name.equals(next.packageName) || next.versionCode <= old.versionCode
-                        || !sameSignatures(old.signatures, next.signatures)) throw new IOException();
+                if (next == null || !name.equals(next.packageName) || next.versionCode <= old.versionCode)
+                    throw new UpdateFailure(-4, "APK package or version mismatch");
+                if (!sameSignatures(old.signatures, next.signatures))
+                    throw new UpdateFailure(-5, "APK signing certificate mismatch");
                 File target = new File(activity.getCacheDir(), APK);
                 if (!source.renameTo(target)) {
                     java.nio.file.Files.move(source.toPath(), target.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
@@ -57,7 +66,8 @@ public final class Updater {
                 state = 2;
             } catch (Exception failure) {
                 source.delete();
-                state = -1;
+                state = failure instanceof UpdateFailure ? ((UpdateFailure) failure).code : -1;
+                Log.w("MicrogenUpdater", "Update failed, code " + state + ": " + failure.getClass().getSimpleName());
             }
         }, "microgen-verify-update").start();
     }
@@ -70,9 +80,12 @@ public final class Updater {
             if (!"https".equals(url.getProtocol())) throw new IOException();
             String host = url.getHost();
             if (!"github.com".equals(host) && !"release-assets.githubusercontent.com".equals(host)
-                    && !"objects.githubusercontent.com".equals(host)) throw new IOException();
+                    && !"objects.githubusercontent.com".equals(host)
+                    && !"github-releases.githubusercontent.com".equals(host)) throw new IOException();
             HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
             connection.setInstanceFollowRedirects(false);
+            connection.setRequestProperty("Accept-Encoding", "identity");
+            connection.setRequestProperty("User-Agent", "Microgen-Android-Updater");
             connection.setConnectTimeout(15000);
             connection.setReadTimeout(30000);
             try {
@@ -83,17 +96,17 @@ public final class Updater {
                     url = new URL(url, location);
                     continue;
                 }
-                if (code != 200) throw new IOException();
+                if (code != 200) throw new UpdateFailure(-6, "HTTP " + code);
                 try (InputStream input = connection.getInputStream(); FileOutputStream output = new FileOutputStream(source)) {
                     byte[] buffer = new byte[65536];
                     int total = 0;
                     int count;
                     while ((count = input.read(buffer)) != -1) {
                         total += count;
-                        if (total > size) throw new IOException();
+                        if (total > size) throw new UpdateFailure(-2, "APK exceeds expected size");
                         output.write(buffer, 0, count);
                     }
-                    if (total != size) throw new IOException();
+                    if (total != size) throw new UpdateFailure(-2, "APK size mismatch");
                 }
                 return;
             } finally {
