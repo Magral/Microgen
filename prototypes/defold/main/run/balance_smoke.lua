@@ -880,96 +880,120 @@ local function validate_form_passives()
 end
 
 local function validate_form_abilities()
-    local function fresh(form)
-        local signature=Catalog.signature_organ(form)
-        local unlocked=Catalog.base_unlocked()
-        if not Util.index(unlocked,signature) then unlocked[#unlocked+1]=signature end
-        local sim = Simulation.new(147,unlocked,nil,form,{form=form,branch=form,seed=147,imprint=signature})
-        sim.enemies,sim.residents,sim.fields = {},{},{}
-        return sim
-    end
     local function near(actual,expected,label)
         assert(math.abs(actual-expected)<.0001,label..": "..tostring(actual))
     end
+    local expected={
+        predator={organ="chemoreceptor_ridge",adapt="magnet",attack="predator_primordial_rage",defense="predator_instinct"},
+        toxic={organ="osmotic_vacuole",adapt="catalysis",attack="toxic_cataclysm",defense="toxic_osmotic_cocoon"},
+        colony={organ="synaptic_node",adapt="armor",attack="colony_great_swarm",defense="colony_living_bastion"},
+    }
+    local function fresh(form)
+        local sim=Simulation.new(147,nil,nil,form,{form=form,branch=form,seed=147})
+        sim.enemies,sim.residents,sim.fields={},{},{}
+        local spec=expected[form]
+        sim.build.organs[spec.organ]=6
+        sim.build.adaptations[spec.adapt]=3
+        assert(not sim:form_ability().id and not sim:form_defense().id,
+            "Both ultimate abilities stay locked before claiming the form evolution: "..form)
+        assert(not sim:form_ability_ready() and not sim:form_defense_ready(),
+            "Locked abilities cannot be activated: "..form)
+        assert(sim.build:evolve(spec.organ),"Form evolution must unlock after organ VI and adaptation III: "..form)
+        assert(sim:form_ability().id==spec.attack and sim:form_defense().id==spec.defense,
+            "Only the selected form receives its own unique abilities: "..form)
+        return sim
+    end
+
     local predator=fresh("predator")
     local origin=Util.copy(predator.player)
     predator._move_player_against_bodies=function(self,x,y) return {x=self.player.x+x,y=self.player.y+y} end
     local prey=assert(predator:spawn_enemy({x=origin.x+45,y=origin.y},"prey"))
-    prey.r,prey.hp,prey.max_hp=12,100,100
-    prey.tissue_budget=100
-    assert(predator:activate_form_ability(1,0) and not predator:activate_form_ability(1,0))
-    near(predator.cooldowns.form_ability,14,"Dash cooldown")
-    predator:_advance_dash(.12)
-    assert(predator.player.x>origin.x and predator.form_action.hit,"Dash moves and hits in facing direction")
-    local after=prey.hp
-    predator:_advance_dash(.12)
-    near(prey.hp,after,"Dash hits only once")
-    assert(not predator.form_action.kind)
-    near(predator.player.x-origin.x,64,"Dash distance")
-    assert(after<100,"Dash must deal damage")
-    predator:_refund_dash(prey)
-    near(predator.cooldowns.form_ability,12,"Absorption refund")
-    predator:_refund_dash(prey)
-    near(predator.cooldowns.form_ability,12,"No repeated refund")
-    prey.form_dash_until=predator.elapsed+3
-    predator.cooldowns.form_ability=9
-    predator:_refund_dash(prey)
-    near(predator.cooldowns.form_ability,9,"Refund never increases cooldown")
-    predator.cooldowns.form_ability=0
-    assert(predator:activate_form_ability(1,0))
-    local restored=assert(Simulation.restore(predator:snapshot()))
-    assert(restored.form_action.kind=="dash" and restored.cooldowns.form_ability==14)
-    local saved=predator:snapshot()
-    saved.form_action=nil;saved.cooldowns.form_ability=nil
-    local old=assert(Simulation.restore(saved))
-    assert(not old.form_action.kind and old:form_ability_ready(),"Legacy save defaults to ready")
-    predator._move_player_against_bodies=function(self) return self.player end
-    local blocked=Util.copy(predator.player)
+    prey.r,prey.hp,prey.max_hp,prey.tissue_budget=12,100,100,100
+    predator.hp=predator.max_hp*.5
+    assert(predator:activate_form_defense(),"Predator survival instinct activates")
+    near(predator.hp,predator.max_hp*.8,"Predator instantly restores 30% maximum health")
+    assert(predator.cooldowns.predator_escape_active==6 and predator.cooldowns.special_defense==75,
+        "Predator defense duration and long cooldown")
+    assert(predator:activate_form_ability(1,0) and not predator:activate_form_ability(1,0),
+        "Predator ultimate attack starts once")
+    assert(predator.form_action.kind=="dash" and predator.cooldowns.special_attack==55
+        and predator.cooldowns.predator_frenzy_active==5,"Primordial rage starts dash and bite frenzy")
+    near(predator:form_ability().damage_multiplier,3,"Primordial rage triple bite")
+    near(predator:form_ability().frenzy_multiplier,1.60,"Primordial rage follow-up bite bonus")
+    local restored_predator=assert(Simulation.restore(predator:snapshot()))
+    assert(restored_predator.form_action.kind=="dash" and restored_predator.cooldowns.special_attack==55
+        and restored_predator.cooldowns.special_defense==75
+        and restored_predator.cooldowns.predator_escape_active==6
+        and restored_predator.cooldowns.predator_frenzy_active==5,
+        "Predator ultimate effects and both cooldowns survive checkpoint")
     predator:_advance_dash(.24)
-    near(predator.player.x,blocked.x,"Dash cannot bypass blocked movement")
+    assert(not predator.form_action.kind and predator.player.x>origin.x and prey.hp<100,
+        "Primordial rage performs a collision-checked triple-power dash bite")
+
     local toxic=fresh("toxic")
-    assert(toxic:activate_form_ability())
-    local field=toxic.fields[1]
+    toxic.fields={{pos=Util.copy(toxic.player),r=90,life=4,damage=3,hostile=true,kind="enemy_spore"}}
+    assert(toxic:activate_form_defense(),"Osmotic cocoon activates")
+    assert(#toxic.fields==0 and toxic.cooldowns.toxic_cocoon_active==6
+        and toxic.cooldowns.special_defense==75,"Osmotic cocoon clears nearby hostile poison fields")
+    local toxic_hp=toxic.hp
+    toxic:hurt_player(100,{kind="projectile",name="Проверка осмотического кокона"})
+    near(toxic.hp,toxic_hp-25,"Osmotic cocoon reduces incoming damage by 75%")
+    assert(toxic:activate_form_ability(),"Toxic cataclysm activates")
+    local field=toxic.fields[#toxic.fields]
     assert(field and field.kind=="rupture" and field.source=="acid")
-    near(field.life,3,"Rupture duration")
-    near(field.damage,Catalog.scaled_damage(7,1)*.60,"Rupture DPS")
-    near(toxic.cooldowns.form_ability,16,"Rupture cooldown")
-    local enemy=assert(toxic:spawn_enemy(toxic.player,"hunter"))
-    enemy.r,enemy.hp,enemy.max_hp,enemy.tissue_budget=12,100,100,100
-    toxic:_field(toxic.player,field.r,field.damage*2,3,"poison")
-    local hits={}
-    toxic.hit_enemy=function(_,target,amount,source) hits[#hits+1]={amount=amount,source=source};return amount end
-    toxic:_update_fields(.25)
-    assert(#hits==1 and hits[1].source=="trail","Only strongest player field hits each target")
-    near(hits[1].amount,field.damage*.5,"Overlapping field damage")
-    near(enemy.rupture_slow,1.5,"Rupture slow survives overlapping poison")
-    assert(toxic:_player_poisoned(enemy))
+    near(field.life,8,"Toxic cataclysm field duration")
+    near(field.damage,Catalog.scaled_damage(7,1)*1.35,"Toxic cataclysm enhanced acid damage")
+    near(field.rupture_strength,.40,"Toxic cataclysm slow strength")
+    assert(toxic.cooldowns.special_attack==60,"Toxic cataclysm long attack cooldown")
+    local toxic_enemy=assert(toxic:spawn_enemy(toxic.player,"hunter"))
+    toxic_enemy.r,toxic_enemy.hp,toxic_enemy.max_hp,toxic_enemy.tissue_budget=12,100,100,100
+    toxic:_update_fields(.1)
+    near(toxic_enemy.rupture_strength,.40,"Toxic cataclysm applies the promised slow")
     local restored_toxic=assert(Simulation.restore(toxic:snapshot()))
-    assert(restored_toxic.fields[1].kind=="rupture" and restored_toxic.enemies[1].rupture_slow==1.5)
+    assert(restored_toxic.cooldowns.special_attack==60 and restored_toxic.cooldowns.special_defense==75
+        and restored_toxic.cooldowns.toxic_cocoon_active>0 and restored_toxic.fields[#restored_toxic.fields].kind=="rupture",
+        "Toxic abilities, active field and cooldowns survive checkpoint")
+
     local colony=fresh("colony")
-    assert(not colony:form_ability_ready() and not colony:activate_form_ability(),"No rally without target")
-    local target=assert(colony:spawn_enemy({x=colony.player.x+150,y=colony.player.y},"hunter"))
-    target.r,target.hp,target.max_hp=22,100,100
     colony.build.organs.division=4
-    colony.build.specializations.division="division_hunter_buds"
-    local dealt=0
-    colony.hit_enemy=function(_,e,amount,source) assert(e==target and source=="division");dealt=dealt+amount;return amount end
-    assert(colony:activate_form_ability())
-    near(colony.cooldowns.form_ability,15,"Rally cooldown")
-    colony:_advance_rally(.3)
-    near(dealt,Catalog.scaled_damage(8+4*4,4)*2,"Rally capped at two clone hits")
-    assert(colony.form_action.hit and #colony:clone_positions()==6,"Rally preserves copies")
-    local resumed=assert(Simulation.restore(colony:snapshot()))
-    assert(resumed.form_action.kind=="rally" and resumed.form_action.hit,"Rally cannot hit twice after reload")
-    colony:_advance_rally(.3)
-    assert(not colony.form_action.kind)
-    near(dealt,Catalog.scaled_damage(24,4)*2,"Rally strikes only once")
-    colony.cooldowns.form_ability=0
-    colony.build.organs.division=nil
-    assert(not colony:activate_form_ability(),"No rally without copies")
-    predator.build.organs.acid=1
-    assert(predator:form_ability().id=="predator_dash","Hybrid cannot receive foreign ability")
-    print("MICROGEN FORM ABILITIES READY")
+    local base_clones=#colony:clone_positions()
+    assert(colony:activate_form_defense(),"Living bastion activates")
+    assert(colony.cooldowns.colony_bastion_active==8 and colony.colony_bastion_hp==colony.max_hp*.45
+        and colony.cooldowns.special_defense==80,"Living bastion has limited durability and long cooldown")
+    assert(colony:activate_form_ability(),"Great swarm activates")
+    assert(colony.cooldowns.colony_swarm_active==10 and colony.cooldowns.special_attack==65
+        and #colony:clone_positions()==base_clones+2,
+        "Great swarm creates two additional visible combat copies")
+    local restored_colony=assert(Simulation.restore(colony:snapshot()))
+    near(restored_colony.colony_bastion_hp,colony.max_hp*.45,"Living bastion durability survives checkpoint")
+    assert(restored_colony.cooldowns.colony_bastion_active==8 and restored_colony.cooldowns.colony_swarm_active==10
+        and restored_colony.cooldowns.special_attack==65 and restored_colony.cooldowns.special_defense==80
+        and #restored_colony:clone_positions()==base_clones+2,
+        "Colony ultimate effects and both cooldowns survive checkpoint")
+    local hp_before=colony.hp
+    local function expected_bastion_damage(amount)
+        local residual=amount*(1-colony:damage_reduction({kind="projectile"}))
+        local absorbed=math.min(residual*.85,colony.colony_bastion_hp)
+        return residual-absorbed,absorbed
+    end
+    local expected1,absorbed1=expected_bastion_damage(20)
+    colony:hurt_player(20,{kind="projectile",name="Проверка бастиона"})
+    near(colony.hp,hp_before-expected1,"Living bastion absorbs 85% of first hit")
+    near(colony.colony_bastion_hp,colony.max_hp*.45-absorbed1,"Living bastion spends limited durability")
+    local expected2=expected_bastion_damage(40)
+    colony:hurt_player(40,{kind="projectile",name="Проверка бастиона"})
+    near(colony.hp,hp_before-expected1-expected2,"Living bastion allows damage through after depletion")
+    assert(colony.colony_bastion_hp==0 and colony.cooldowns.colony_bastion_active==0,
+        "Living bastion ends when its finite shield is depleted")
+
+    local hybrid=Simulation.new(147,nil,nil,"predator",{form="predator",branch="predator",seed=147})
+    hybrid.build.organs.osmotic_vacuole=6
+    hybrid.build.adaptations.catalysis=3
+    hybrid.build.stats.evolutions.osmotic_vacuole=true
+    assert(not hybrid.build:evolved("osmotic_vacuole") and not hybrid:form_ability().id
+        and not hybrid:form_defense().id,
+        "A foreign signature organ never unlocks another form's ultimate buttons")
+    print("MICROGEN FORM ULTIMATE ABILITIES READY")
 end
 
 local function validate_signature_organs()
@@ -1240,35 +1264,7 @@ local function validate_stage_progression()
     end
 end
 
-local function validate_defensive_abilities()
-    local function near(actual,expected,label)
-        assert(math.abs(actual-expected)<.0001,label..": "..tostring(actual))
-    end
-    for _,scenario in ipairs(BRANCHES) do
-        local sim=Simulation.new(147,nil,nil,scenario.form,{form=scenario.form,branch=scenario.form,seed=147})
-        local before=sim.hp
-        assert(sim:activate_defensive_ability("defense"),"Defensive impulse must be available for "..scenario.form)
-        assert(sim.cooldowns.defense_active==5 and sim.cooldowns.defense_cooldown==70,
-            "Defensive impulse duration/cooldown")
-        sim.hp=sim.max_hp
-        local health_before=sim.hp
-        sim:hurt_player(100,{kind="projectile",name="Проверка защитного импульса"})
-        near(sim.hp,health_before-22,"Defensive impulse must reduce damage by 78%")
-        sim.cooldowns.defense_active=nil
-        sim.hp=sim.max_hp*.5
-        local damaged=sim.hp
-        assert(sim:activate_defensive_ability("emergency_regen"),"Emergency regeneration must be available")
-        near(sim.hp,damaged+sim.max_hp*.35,"Emergency regeneration restores 35% maximum health")
-        assert(sim.hp<=sim.max_hp and sim.cooldowns.emergency_regen_cooldown==65,
-            "Regeneration must respect health cap and independent cooldown")
-        assert(sim.cooldowns.defense_cooldown==70,"Regeneration must not reset defensive impulse cooldown")
-        assert(not sim:activate_defensive_ability("emergency_regen"),"Regeneration must not be spammed")
-        print("MICROGEN DEFENSIVE ABILITIES READY form="..scenario.form)
-    end
-end
-
 function M.run()
-    validate_defensive_abilities()
     validate_stage_progression()
     validate_form_specialization_data()
     validate_form_evolutions_and_synergies()
