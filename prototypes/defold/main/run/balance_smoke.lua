@@ -630,7 +630,29 @@ local function validate_colony_combat_pilot()
     local flee_x,flee_y=colony_direction(sim,1)
     assert(flee_x and flee_x<0 and flee_x*flee_x+flee_y*flee_y>.5,
         "Colony pilot must evade a giant when no clone-attack target exists")
+    sim.hp=sim.max_hp*.5
+    sim.enemies={target}
+    sim.pickups={{type="heal",captured=false,pos={x=sim.player.x-120,y=sim.player.y}}}
+    local heal_x,heal_y=colony_direction(sim,2)
+    assert(heal_x<0 and heal_x*heal_x+heal_y*heal_y>.5,
+        "Colony pilot must prioritize nearby healing at critical health over combat")
     print("MICROGEN COLONY COMBAT PILOT READY")
+end
+
+local function validate_toxic_combat_pilot()
+    local sim=Simulation.new(147,nil,nil,"toxic",{form="toxic",branch="toxic",seed=147})
+    local radius=sim:body_radius()
+    local target={id=9911,kind="hostile",r=math.min(20,radius*1.1),
+        pos={x=sim.player.x+40,y=sim.player.y},hp=100,max_hp=100}
+    sim.enemies={target}
+    local x,y=direction(sim,1)
+    assert(x<0 and x*x+y*y>.5,
+        "Toxic pilot must retreat when a target enters the acid aura's safe orbit")
+    target.pos={x=sim.player.x+220,y=sim.player.y}
+    x,y=direction(sim,2)
+    assert(x>0 and x*x+y*y>.5,
+        "Toxic pilot must approach a distant target while preserving acid range")
+    print("MICROGEN TOXIC COMBAT PILOT READY")
 end
 
 local function validate_progression_pilot()
@@ -2061,6 +2083,7 @@ end
 
 function M.run()
     validate_colony_combat_pilot()
+    validate_toxic_combat_pilot()
     validate_stage_progression()
     validate_progression_pilot()
     validate_objective_combat_range()
