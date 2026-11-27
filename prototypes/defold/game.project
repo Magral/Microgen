@@ -1,6 +1,6 @@
 [project]
 title = Microgen Defold
-version = 1.5.13
+version = 1.5.14
 
 [bootstrap]
 main_collection = /main/gameplay.collectionc
@@ -21,7 +21,7 @@ game_binding = /main/arena.input_bindingc
 [android]
 immersive_mode = 1
 package = org.magral.microgen.defold
-version_code = 163
+version_code = 164
 app_icon_36x36 = /assets/app_icons/microgen_36.png
 app_icon_48x48 = /assets/app_icons/microgen_48.png
 app_icon_72x72 = /assets/app_icons/microgen_72.png
