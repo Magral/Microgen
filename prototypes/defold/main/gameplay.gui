@@ -27,4 +27,4 @@ layers { name: "hud" }
 layers { name: "overlay" }
 layers { name: "feedback" }
 material: "/builtins/materials/gui.material"
-max_nodes: 2304
+max_nodes: 4608
