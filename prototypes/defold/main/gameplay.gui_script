@@ -469,20 +469,20 @@ function App:updates()
         self.update_note_nodes[#self.update_note_nodes+1]=version_node
     end
     if updater.state == "ready" then
-        ui:button(1230,270,1479,62,"Открыть установщик",function() updater:install() end,true)
+        ui:button(1230,245,1479,62,"Открыть установщик",function() updater:install() end,true)
         if updater.needs_permission then
-            ui:button(1230,195,1479,62,"Разрешение Android",function() updater.native.allow() end)
+            ui:button(1230,175,1479,62,"Разрешение Android",function() updater.native.allow() end)
         end
     elseif updater.state ~= "checking" and updater.state ~= "downloading" then
-        ui:button(1230,270,1479,62,updater.state=="download_error" and "Повторить загрузку" or "Проверить обновления",function() updater:check() end,true)
+        ui:button(1230,245,1479,62,updater.state=="download_error" and "Повторить загрузку" or "Проверить обновления",function() updater:check() end,true)
     end
     if not updater.needs_permission or updater.asset then
-        ui:button(1230,updater.needs_permission and 120 or 195,1479,62,
+        ui:button(1230,105,1479,62,
             updater.asset and "Скачать APK через браузер" or "Открыть выпуски на GitHub",function()
                 sys.open_url(updater.asset and updater.asset.url or "https://github.com/Magral/Microgen/releases")
             end)
     end
-    ui:button(1230,45,1479,62,"Назад",back)
+    ui:button(1230,35,1479,62,"Назад",back)
 end
 
 local function part_caption(part)
