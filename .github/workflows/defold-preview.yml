@@ -185,6 +185,8 @@ jobs:
               grep -Fq "MICROGEN RUN READY" "$log"
               grep -Fq "MICROGEN FORM ABILITY HUD READY" "$log"
               grep -Fq "MICROGEN MUTATION CARDS READY" "$log"
+              grep -Fq "MICROGEN CYST CARDS READY" "$log"
+              grep -Fq "MICROGEN RECOMMENDATIONS READY" "$log"
               grep -Fq "MICROGEN SYNERGY EFFECT CARDS READY" "$log"
               grep -Fq "MICROGEN SPITTER TELEGRAPH READY" "$log"
               grep -Fq "MICROGEN UPDATE PATH READY" "$log"
