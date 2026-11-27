@@ -26,7 +26,8 @@ local HYBRID_SCENARIOS = {
         seed_adaptations={magnet=3,armor=2,regen=2},evolve=true,
         expected_synergies={"acid_bite"}},
     {form="toxic",starter="acid",name="enzyme_target",
-        seed_organs={chemoreceptor_ridge=2,enzymes=2,devour=2},expected_synergies={"enzyme_target"}},
+        seed_organs={chemoreceptor_ridge=2,enzymes=2,devour=2},
+        seed_marked_target=true,expected_synergies={"enzyme_target"}},
     {form="toxic",starter="acid",name="shared_shell",
         seed_organs={synaptic_node=2,division=3,barrier=2},expected_synergies={"shared_shell"}},
 }
@@ -758,6 +759,13 @@ local function run(seed, scenario, horizon_seconds)
     assert(sim.build:rank(signature) > 0, "Balance run must equip its form signature organ")
     for id,rank in pairs(scenario.seed_organs or {}) do sim.build.organs[id]=rank end
     for id,rank in pairs(scenario.seed_adaptations or {}) do sim.build.adaptations[id]=rank end
+    if scenario.seed_marked_target then
+        -- Гарантируем интеграционному сценарию уязвимую цель в радиусе
+        -- хеморецептора: тест проверяет реальное продление ферментов меткой,
+        -- а не случайность появления подходящего противника на карте.
+        local target=assert(sim:spawn_enemy({x=sim.player.x+90,y=sim.player.y},"hunter"))
+        target.hp=target.max_hp*.5
+    end
     sim.build._synergy_signature=nil
     if scenario.evolve then assert(sim.build:evolve(signature),"Advanced evolution fixture must meet its requirements") end
     if scenario.block_evolution then sim.build.evolution_candidates=function() return {} end end
