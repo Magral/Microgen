@@ -253,7 +253,7 @@ jobs:
                 grep -Fq "MICROGEN COLONY BALANCE READY" "$log"
                 grep -Fq "MICROGEN OBJECTIVE PILOT READY" "$log"
                 grep -Fq "MICROGEN COLONY COMBAT PILOT READY" "$log"
-                test "$(grep -cE "MICROGEN SPECIALIZATION SUMMARY form=colony .*mean_clone_hits=[1-9]" "$log")" -ge 1
+                grep -Eq "MICROGEN SPECIALIZATION SUMMARY form=colony .*mean_clone_hits=([1-9][0-9]*(\\.[0-9]+)?|0\\.[1-9][0-9]*)" "$log"
                 grep -Fq "MICROGEN OBJECTIVE COMBAT RANGE READY" "$log"
                 grep -Fq "MICROGEN OBJECTIVE MATRIX READY" "$log"
                 test "$(grep -c "MICROGEN PAIRED RESULT" "$log")" -eq 45
