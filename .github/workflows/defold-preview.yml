@@ -21,7 +21,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 35
     env:
       BOB_VERSION: '1.14.1'
       BOB_SHA256: f47e0d21fee84c3c1f56adfe5feb1c328f83df9e4fe26f2616a5392b9b710b45
@@ -158,7 +158,7 @@ jobs:
           retention-days: 14
 
       - name: Build and run native Linux smoke test
-        timeout-minutes: 14
+        timeout-minutes: 22
         working-directory: prototypes/defold
         run: |
           if ! command -v xvfb-run >/dev/null || ! ldconfig -p | grep "libGLU.so.1" >/dev/null; then
@@ -204,7 +204,7 @@ jobs:
                 kill -0 "$pid"
                 sleep 0.2
               done
-              for attempt in {1..2400}; do
+              for attempt in {1..4200}; do
                 ready=1
                 grep -Fq "MICROGEN MEMBRANE HIT RESPONSE READY" "$log" || ready=0
                 if [[ "$profile" == standard ]] && ! grep -Fq "MICROGEN BALANCE SMOKE READY" "$log"; then ready=0; fi
@@ -239,10 +239,10 @@ jobs:
                 test "$(grep -c "MICROGEN HYBRID CONTROL SUMMARY" "$log")" -eq 3
                 test "$(grep -c "MICROGEN EVOLUTION BALANCE RUN" "$log")" -eq 36
                 test "$(grep -c "MICROGEN EVOLUTION BALANCE SUMMARY" "$log")" -eq 6
-                test "$(grep -c "MICROGEN SPECIALIZATION RUN" "$log")" -eq 18
-                test "$(grep -c "MICROGEN SPECIALIZATION SUMMARY" "$log")" -eq 9
-                test "$(grep -c "MICROGEN PAIRED RESULT" "$log")" -eq 39
-                test "$(grep -c "MICROGEN PAIRED SUMMARY" "$log")" -eq 12
+                test "$(grep -c "MICROGEN SPECIALIZATION RUN" "$log")" -eq 24
+                test "$(grep -c "MICROGEN SPECIALIZATION SUMMARY" "$log")" -eq 12
+                test "$(grep -c "MICROGEN PAIRED RESULT" "$log")" -eq 45
+                test "$(grep -c "MICROGEN PAIRED SUMMARY" "$log")" -eq 15
                 grep -Fq "MICROGEN STAGE SIX BALANCE READY" "$log"
                 grep -Fq "MICROGEN CONTACT BALANCE READY" "$log"
                 grep -Fq "MICROGEN COLONY COVERAGE READY" "$log"
