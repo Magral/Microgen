@@ -48,7 +48,7 @@ function Combat:hit_enemy(enemy, amount, source, maximum_damage)
     local raw = max(0, amount) * (1 + build:passive("catalysis")) * build:power(source)
     if source == "devour" then
         raw = raw * self:marked_bite_multiplier(enemy)
-        if (self.cooldowns.predator_frenzy_active or 0) > 0 then
+        if (self.form_action.kind~="dash" and (self.cooldowns.predator_frenzy_active or 0)>0 then
             raw = raw * (Catalog.FORM_SPECIALIZATIONS.predator.ability.frenzy_multiplier or 1)
         end
     elseif source == "division" and (self.cooldowns.colony_swarm_active or 0) > 0 then
@@ -311,7 +311,8 @@ function Combat:activate_form_defense()
         local radius=self:body_radius()*defense.clear_radius_multiplier
         for i=#self.fields,1,-1 do
             local field=self.fields[i]
-            if field.hostile and distance_squared(field.pos,self.player)<(radius+field.r)^2 then
+            local poison=field.kind=="enemy_toxin" or field.kind=="enemy_spore"
+            if field.hostile and poison and distance_squared(field.pos,self.player)<(radius+field.r)^2 then
                 table.remove(self.fields,i)
             end
         end
