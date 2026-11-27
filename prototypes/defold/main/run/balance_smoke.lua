@@ -566,9 +566,10 @@ local function validate_contact_balance()
         assert(math.abs(evolved:contact_impact(below_large_rules, false) - below_large_rules.impact) < .00001,
             "Evolved protection must not affect amoebas at the large-size threshold: "..form)
         local large_label_rules = Size.profile(100, 120, 1, 0, 0, false)
-        local large_label_multiplier = form == "predator" and 1 or .85
+        local large_label_multiplier = form == "predator" and 1
+            or 1 - (0.15 + 0.30 * Size.smoothstep(1.08, 2.4, large_label_rules.ratio))
         assert(math.abs(evolved:contact_impact(large_label_rules, false) - large_label_rules.impact * large_label_multiplier) < .00001,
-            "Evolved glandular and colony forms must protect against large-label contact: "..form)
+            "Evolved glandular and colony forms must scale protection with large-label size: "..form)
     end
     for _, kind in ipairs({"hunter", "spitter", "prey", "miniboss", "boss"}) do
         local enemy = {kind=kind, rupture_slow=1.5, rupture_strength=.40}
