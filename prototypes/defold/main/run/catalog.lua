@@ -92,8 +92,9 @@ M.FORM_SPECIALIZATIONS = {
             duration = 6, damage_reduction = 0.75, clear_radius_multiplier = 2.5, active_key = "toxic_cocoon_active",
         },
         passive = {
-            id = "toxic_regulation", name = "Токсикорегуляция", desc = "Контактный урон от отравленных врагов −8%, от боссов −4%.",
-            enemy_contact_reduction = 0.08, boss_contact_reduction = 0.04,
+            id = "toxic_regulation", name = "Токсикорегуляция", desc = "Контактный урон обычных врагов −6%, от отравленных −18%; от боссов −3% и −9%.",
+            base_enemy_contact_reduction = 0.06, base_boss_contact_reduction = 0.03,
+            enemy_contact_reduction = 0.12, boss_contact_reduction = 0.06,
         },
         evolution = {
             id = "living_reactor", name = "Живой реактор",
