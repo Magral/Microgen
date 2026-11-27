@@ -30,6 +30,15 @@ local Simulation = require "main.run.simulation"
 local Tissue = require "main.tissue_motion"
 
 local WIDTH, HEIGHT = Interface.width, Interface.height
+local UPDATE_NOTES = {
+    {version="1.5.14",y=615,title="Больше ясности при развитии",
+        body="Проще понять, какие органы и улучшения подходят твоей форме. Карточки цист яснее показывают награду и замену органа."},
+    {version="1.5.13",y=500,title="Новые боевые стили трёх форм",
+        body="Хищник, железистая и колониальная формы получили свои приёмы. Сигнатурные органы, высшие эволюции и гибридные сочетания открывают новые тактики."},
+    {version="1.5.12",y=385,title="Справедливее столкновения с амёбами",
+        body="Крупные обычные амёбы стали менее опасны при контакте. Ядовитые облака одного противника больше не складывают свой урон."}
+}
+
 local App = {}
 App.__index = App
 local DIRECTIONS = {[hash("up")]="up",[hash("down")]="down",[hash("left")]="left",[hash("right")]="right"}
@@ -453,33 +462,27 @@ function App:updates()
     ui:fit_text(left+33,828,"Установлена версия "..updater.installed,1,ui.colors.pale,width,56)
     ui:fit_text(left+33,754,captions[updater.state],.91,ui.colors.dim,width,78)
     ui:fit_text(left+33,665,"Последние обновления",.94,ui.colors.mint,width,42)
-    local notes = {
-        {version="1.5.14", y=608, title="Больше ясности при развитии",
-            body="При повышении уровня и открытии цист проще понять, какие органы и улучшения подходят твоей форме. Карточки цист понятнее показывают награду и позволяют заменить орган."},
-        {version="1.5.13", y=470, title="Новые боевые стили трёх форм",
-            body="Хищник, железистая и колониальная формы получили собственные активные приёмы. Сигнатурные органы, высшие эволюции и сочетания органов открывают новые тактики боя."},
-        {version="1.5.12", y=332, title="Справедливее столкновения с амёбами",
-            body="Крупные обычные амёбы наносят меньше контактного урона. Перекрывающиеся ядовитые облака одного противника больше не складывают свой урон друг на друга."}
-    }
-    for _,note in ipairs(notes) do
-        ui:fit_text(left+33,note.y,note.version.." · "..note.title,.82,ui.colors.mint,width,36)
-        ui:fit_text(left+42,note.y-47,note.body,.72,ui.colors.pale,width-18,78)
+    self.update_note_nodes={}
+    for _,note in ipairs(UPDATE_NOTES) do
+        local version_node=ui:fit_text(left+33,note.y,note.version.." · "..note.title,.82,ui.colors.mint,width,34)
+        ui:fit_text(left+42,note.y-37,note.body,.70,ui.colors.pale,width-18,54)
+        self.update_note_nodes[#self.update_note_nodes+1]=version_node
     end
     if updater.state == "ready" then
-        ui:button(1230,414,1479,76,"Открыть установщик",function() updater:install() end,true)
+        ui:button(1230,270,1479,62,"Открыть установщик",function() updater:install() end,true)
         if updater.needs_permission then
-            ui:button(1230,322,1479,76,"Разрешение Android",function() updater.native.allow() end)
+            ui:button(1230,195,1479,62,"Разрешение Android",function() updater.native.allow() end)
         end
     elseif updater.state ~= "checking" and updater.state ~= "downloading" then
-        ui:button(1230,414,1479,76,updater.state=="download_error" and "Повторить загрузку" or "Проверить обновления",function() updater:check() end,true)
+        ui:button(1230,270,1479,62,updater.state=="download_error" and "Повторить загрузку" or "Проверить обновления",function() updater:check() end,true)
     end
     if not updater.needs_permission or updater.asset then
-        ui:button(1230,updater.needs_permission and 230 or 322,1479,76,
+        ui:button(1230,updater.needs_permission and 120 or 195,1479,62,
             updater.asset and "Скачать APK через браузер" or "Открыть выпуски на GitHub",function()
                 sys.open_url(updater.asset and updater.asset.url or "https://github.com/Magral/Microgen/releases")
             end)
     end
-    ui:button(1230,132,1479,76,"Назад",back)
+    ui:button(1230,45,1479,62,"Назад",back)
 end
 
 local function part_caption(part)
@@ -849,7 +852,9 @@ function App:start(seed)
     self:show_run()
     self:save_run()
     local ability=self.sim:form_ability()
-    self:notice(ability.id and (ability.name..": "..ability.desc) or "Веди палец по свободной части экрана")
+    local defense=self.sim:form_defense()
+    self:notice(ability.id and (ability.name.." · "..defense.name..". "..ability.desc)
+        or "Развивай сигнатурный орган до VI ранга и соответствующую адаптацию до III, чтобы открыть две способности.")
     print("MICROGEN RUN READY " .. tostring(self.sim.world.seed_value))
 end
 
@@ -882,8 +887,7 @@ function App:ability_pointer(id,x,y,pressed,released)
     end
     if self.screen~="run" or not pressed or id==self.touch_id then return false end
     local targets={
-        {button=self.defense_button, action=function() self:use_defensive_ability("defense") end},
-        {button=self.regen_button, action=function() self:use_defensive_ability("emergency_regen") end},
+        {button=self.defense_button, action=function() self:use_form_defense() end},
         {button=self.ability_button, action=function() self:use_form_ability() end},
     }
     for _,target in ipairs(targets) do
@@ -896,9 +900,9 @@ function App:ability_pointer(id,x,y,pressed,released)
     return false
 end
 
-function App:use_defensive_ability(id)
+function App:use_form_defense()
     if self.screen~="run" then return false end
-    local used=self.sim:activate_defensive_ability(id)
+    local used=self.sim:activate_form_defense()
     if used then self:draw_hud() end
     return used
 end
@@ -940,25 +944,17 @@ function App:show_run()
     end)
     ui:button(control_x,bottom+47,288,75,"Ⅱ  Пауза",function() self:pause() end)
     self.ability_button,self.defense_button,self.regen_button=nil,nil,nil
+    local defense=self.sim:form_defense()
     local defensive_x,defensive_y,dw,dh=ScreenLayout.defensive_slot(safe_left,right,top,bottom)
-    if defensive_x then
-        self.defense_button=ui:button(defensive_x,defensive_y,dw,dh,"",function() self:use_defensive_ability("defense") end)
-        self.defense_icon=ui:image("icons","icon_barrier",defensive_x-86,defensive_y,64,64)
+    if defensive_x and defense.id then
+        self.defense_button=ui:button(defensive_x,defensive_y,dw,dh,"",function() self:use_form_defense() end)
+        self.defense_icon=ui:image("icons","icon_"..defense.icon,defensive_x-86,defensive_y,64,64)
         self.defense_ring=ui:remember(gui.new_pie_node(vmath.vector3(defensive_x-86,defensive_y,0),vmath.vector3(92,92,0)))
-        gui.set_color(self.defense_ring,color("64b9ef"))
+        gui.set_color(self.defense_ring,color(defense.color))
         gui.set_inner_radius(self.defense_ring,39)
         gui.set_perimeter_vertices(self.defense_ring,48)
-        self.defense_name=ui:fit_text(defensive_x-35,defensive_y+22,"Защита",.74,color("64b9ef"),167,42)
+        self.defense_name=ui:fit_text(defensive_x-35,defensive_y+22,defense.name,.72,color(defense.color),167,42)
         self.defense_status=ui:fit_text(defensive_x-35,defensive_y-22,"Готово",.68,ui.colors.pale,167,44)
-        local regen_y=defensive_y+142
-        self.regen_button=ui:button(defensive_x,regen_y,dw,dh,"",function() self:use_defensive_ability("emergency_regen") end)
-        self.regen_icon=ui:image("icons","icon_regen",defensive_x-86,regen_y,64,64)
-        self.regen_ring=ui:remember(gui.new_pie_node(vmath.vector3(defensive_x-86,regen_y,0),vmath.vector3(92,92,0)))
-        gui.set_color(self.regen_ring,color("78d9bd"))
-        gui.set_inner_radius(self.regen_ring,39)
-        gui.set_perimeter_vertices(self.regen_ring,48)
-        self.regen_name=ui:fit_text(defensive_x-35,regen_y+22,"Регенерация",.70,color("78d9bd"),167,42)
-        self.regen_status=ui:fit_text(defensive_x-35,regen_y-22,"При ранении",.68,ui.colors.pale,167,44)
     end
     local ability=self.sim:form_ability()
     local ax,ay,aw,ah=ScreenLayout.ability_slot(safe_left,right,top,bottom)
@@ -970,8 +966,8 @@ function App:show_run()
         gui.set_color(self.ability_ring,accent)
         gui.set_inner_radius(self.ability_ring,39)
         gui.set_perimeter_vertices(self.ability_ring,48)
-        self.ability_name=ui:fit_text(ax-35,ay+22,ability.name,.74,accent,167,42)
-        self.ability_status=ui:fit_text(ax-35,ay-22,"Нет цели / органа",.68,ui.colors.pale,167,44)
+        self.ability_name=ui:fit_text(ax-35,ay+22,ability.name,.72,accent,167,42)
+        self.ability_status=ui:fit_text(ax-35,ay-22,"Готово",.68,ui.colors.pale,167,44)
     end
     self.reward_x,self.reward_y=control_x,top-250
     self.reward_button=false
@@ -1023,29 +1019,30 @@ function App:draw_hud()
             or ("Щит · восстановление %.1f с"):format(cooldown))
         gui.set_size(self.shield,vmath.vector3(math.max(.01,720*(1-math.min(1,cooldown/8))),10,0))
     end
-    local defense_cd=math.max(0,sim.cooldowns.defense_cooldown or 0)
-    local defense_active=math.max(0,sim.cooldowns.defense_active or 0)
     if self.defense_button then
-        local ready=sim:defensive_ability_ready("defense")
-        gui.set_fill_angle(self.defense_ring,math.max(.01,360*(1-math.min(1,defense_cd/70))))
+        local defense=sim:form_defense()
+        local cd=math.max(0,sim.cooldowns.special_defense or 0)
+        local active=math.max(0,sim.cooldowns[defense.active_key] or 0)
+        local ready=sim:form_defense_ready()
+        gui.set_fill_angle(self.defense_ring,math.max(.01,360*(1-math.min(1,cd/defense.cooldown))))
         gui.set_color(self.defense_icon,ready and vmath.vector4(1,1,1,1) or vmath.vector4(.55,.55,.55,.8))
-        gui.set_text(self.defense_status,defense_active>0 and ("%.1f с"):format(defense_active)
-            or defense_cd>0 and ("%.0f с"):format(defense_cd) or "Готово")
-        local regen_cd=math.max(0,sim.cooldowns.emergency_regen_cooldown or 0)
-        local regen_ready=sim:defensive_ability_ready("emergency_regen")
-        gui.set_fill_angle(self.regen_ring,math.max(.01,360*(1-math.min(1,regen_cd/65))))
-        gui.set_color(self.regen_icon,regen_ready and vmath.vector4(1,1,1,1) or vmath.vector4(.55,.55,.55,.8))
-        gui.set_text(self.regen_status,regen_cd>0 and ("%.0f с"):format(regen_cd)
-            or regen_ready and "Готово" or "Здоровье полное")
+        gui.set_color(self.defense_name,ready and Interface.color(defense.color) or self.hud.colors.dim)
+        local status=cd>0 and ("%.0f с"):format(cd) or ready and "Готово" or "Недоступно"
+        if active>0 then
+            status=defense.id=="colony_living_bastion"
+                and ("Оболочка %.0f"):format(sim.colony_bastion_hp or 0)
+                or ("%.1f с"):format(active)
+        end
+        gui.set_text(self.defense_status,status)
     end
     if self.ability_button then
         local ability=sim:form_ability()
-        local cd=math.max(0,sim.cooldowns.form_ability or 0)
+        local cd=math.max(0,sim.cooldowns.special_attack or 0)
         local ready=sim:form_ability_ready()
         gui.set_fill_angle(self.ability_ring,math.max(.01,360*(1-math.min(1,cd/ability.cooldown))))
         gui.set_color(self.ability_icon,ready and vmath.vector4(1,1,1,1) or vmath.vector4(.55,.55,.55,.8))
         gui.set_color(self.ability_name,ready and Interface.color(ability.color) or self.hud.colors.dim)
-        gui.set_text(self.ability_status,cd>0 and ("%.1f с"):format(cd) or ready and "Готово" or "Нет цели / органа")
+        gui.set_text(self.ability_status,cd>0 and ("%.0f с"):format(cd) or ready and "Готово" or "Недоступно")
     end
     local biome=sim.world:biome(sim.player.x,sim.player.y)
     gui.set_text(self.biome_caption,sim.world:biome_name(biome).." · "..sim.world:condition_name(biome))
