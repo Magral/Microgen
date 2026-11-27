@@ -643,7 +643,7 @@ local function validate_toxic_combat_pilot()
     local sim=Simulation.new(147,nil,nil,"toxic",{form="toxic",branch="toxic",seed=147})
     local radius=sim:body_radius()
     local target=assert(sim:spawn_enemy({x=sim.player.x+40,y=sim.player.y},"hunter"))
-    target.r=math.min(target.r,radius*1.1)
+    target.r=radius*.8
     sim.enemies={target}
     assert(sim:interaction(target).eligible,"Toxic pilot fixture must be a valid small enemy")
     local x,y=direction(sim,1)
