@@ -87,7 +87,7 @@ M.FORM_SPECIALIZATIONS = {
             fields_do_not_stack = true,
         },
         defense = {
-            id = "toxic_osmotic_cocoon", name = "Осмотический кокон", cooldown = 75, icon = "acid", color = "b2dd75",
+            id = "toxic_osmotic_cocoon", name = "Осмотический кокон", cooldown = 75, icon = "barrier", color = "83d5c9",
             desc = "На 6 секунд снижает входящий урон на 75% и уничтожает опасные ядовитые облака рядом.",
             duration = 6, damage_reduction = 0.75, clear_radius_multiplier = 2.5, active_key = "toxic_cocoon_active",
         },
