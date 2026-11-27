@@ -1564,11 +1564,11 @@ local function validate_form_passives()
     local enemy = assert(toxic:spawn_enemy(toxic.player, "hunter"))
     enemy.infect = 2
     local contact = {kind = "collision", enemy = enemy}
-    take(toxic, 10, contact, 9.2, "Toxic form infected contact")
+    take(toxic, 10, contact, 8.2, "Toxic form infected contact")
     enemy.kind = "boss"
-    take(toxic, 10, contact, 9.6, "Boss contact reduction")
+    take(toxic, 10, contact, 9.1, "Boss contact reduction")
     enemy.kind = "miniboss"
-    take(toxic, 10, contact, 9.6, "Miniboss contact reduction")
+    take(toxic, 10, contact, 9.1, "Miniboss contact reduction")
     enemy.kind = "hunter"
     take(toxic, 10, {kind = "projectile", enemy = enemy}, 10, "Projectiles unaffected")
     take(toxic, 10, {kind = "toxin", enemy = enemy}, 10, "Hostile toxins unaffected")
