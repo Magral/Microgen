@@ -128,7 +128,8 @@ public final class Updater {
               }
               }
               throw new IOException("Too many redirects");
-            } catch (UpdateFailure rejected) {
+            } 
+            catch (UpdateFailure rejected) {
                 throw rejected;
             } catch (IOException transientFailure) {
                 lastFailure = transientFailure;
