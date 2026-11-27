@@ -747,7 +747,6 @@ function Simulation:_die(index, absorbed)
         self:gain_xp(prey and 4 or floor(6 * scale))
         self.build.biomass = self.build.biomass + (prey and 1 or floor(3 * scale))
         self:heal_player(self.build:rank("devour") * 0.8)
-        self:_refund_dash(enemy)
         if enemy.meal_infected then self:_infected_meal() end
         if enemy.infect > 0 and contains(self.build:active_synergies(), "spore_feast") then self:_field(enemy.pos, 100, 14, 2.5, "spore") end
     elseif enemy.kind ~= "boss" then
