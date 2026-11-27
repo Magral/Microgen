@@ -1098,7 +1098,9 @@ local function validate_signature_organs()
 
     local toxic=fresh("toxic")
     toxic.build.organs.osmotic_vacuole=6
+    toxic.build.adaptations.catalysis=3
     toxic.build.specializations.osmotic_vacuole="vacuole_stable_chamber"
+    assert(toxic.build:evolve("osmotic_vacuole"),"Vacuole charge fixture must receive its own ultimate evolution")
     local a=enemy(toxic,30,"hunter",100,10)
     toxic:hit_enemy(a,1,"acid")
     toxic:hit_enemy(a,1,"acid")
@@ -1111,10 +1113,10 @@ local function validate_signature_organs()
     toxic.build.specializations.osmotic_vacuole="vacuole_hyperosmotic_sac"
     assert(toxic:activate_form_ability())
     local f=toxic.fields[1]
-    near(f.life,4,"Charged duration")
-    local base=(75+9)*toxic.build:specialization_value("acid","radius_mult")*toxic:ability_scale()*1.35
-    near(f.r,base*1.32*1.15,"Charged radius")
-    near(f.damage,Catalog.scaled_damage(7,1)*.6,"Charges do not amplify DPS")
+    near(f.life,9,"Cataclysm duration includes four stored charges")
+    local base=(75+9)*toxic.build:specialization_value("acid","radius_mult")*toxic:ability_scale()
+    near(f.r,base*2.0*1.32*1.15,"Cataclysm radius includes ability and vacuole charge multipliers")
+    near(f.damage,Catalog.scaled_damage(7,1)*1.35,"Cataclysm damage multiplier")
     assert(toxic:vacuole_charge_count()==0,"Activation consumes charges")
     toxic.elapsed=8
     toxic:_vacuole_charge(a)
