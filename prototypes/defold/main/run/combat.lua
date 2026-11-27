@@ -295,6 +295,7 @@ end
 function Combat:form_defense_ready()
     local defense=self:form_defense()
     if not defense.id or self.hp<=0 or self.paused or self.stage_transition or self.outcome~="" then return false end
+    if defense.id=="colony_living_bastion" and self:active_clone_count()<=0 then return false end
     return (self.cooldowns.special_defense or 0)<=0
 end
 
