@@ -754,14 +754,6 @@ function Combat:_advance_dash(dt)
     if action.age >= ability.duration - .000001 then self.form_action = {} end
 end
 
-function Combat:_refund_dash(enemy)
-    local ability = self:form_ability()
-    if ability.id ~= "predator_dash" or enemy.kind == "boss" or not enemy.form_dash_until or enemy.form_dash_until < self.elapsed then return end
-    local cd = self.cooldowns.special_attack or 0
-    self.cooldowns.special_attack = cd - min(ability.absorb_refund or 0, max(0, cd - (ability.minimum_cooldown or 0)))
-    enemy.form_dash_until = nil
-end
-
 function Combat:_advance_rally(dt)
     local action, ability = self.form_action, self:form_ability()
     local target
