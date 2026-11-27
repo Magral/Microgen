@@ -233,16 +233,16 @@ jobs:
                 grep -Fq "MICROGEN BALANCE SMOKE READY" "$log"
                 test "$(grep -c "MICROGEN BALANCE RUN" "$log")" -eq 18
                 test "$(grep -c "MICROGEN BALANCE SUMMARY" "$log")" -eq 3
-                test "$(grep -c "MICROGEN BALANCE CONTROL RUN" "$log")" -eq 18
-                test "$(grep -c "MICROGEN BALANCE CONTROL SUMMARY" "$log")" -eq 3
                 test "$(grep -c "MICROGEN HYBRID BALANCE RUN" "$log")" -eq 9
                 test "$(grep -c "MICROGEN HYBRID BALANCE SUMMARY" "$log")" -eq 3
                 test "$(grep -c "MICROGEN HYBRID CONTROL RUN" "$log")" -eq 9
                 test "$(grep -c "MICROGEN HYBRID CONTROL SUMMARY" "$log")" -eq 3
                 test "$(grep -c "MICROGEN EVOLUTION BALANCE RUN" "$log")" -eq 36
                 test "$(grep -c "MICROGEN EVOLUTION BALANCE SUMMARY" "$log")" -eq 6
+                test "$(grep -c "MICROGEN SPECIALIZATION RUN" "$log")" -eq 27
+                test "$(grep -c "MICROGEN SPECIALIZATION SUMMARY" "$log")" -eq 9
                 test "$(grep -c "MICROGEN PAIRED RESULT" "$log")" -eq 45
-                test "$(grep -c "MICROGEN PAIRED SUMMARY" "$log")" -eq 9
+                test "$(grep -c "MICROGEN PAIRED SUMMARY" "$log")" -eq 12
                 grep -Fq "MICROGEN STAGE SIX BALANCE READY" "$log"
                 grep -Fq "MICROGEN CONTACT BALANCE READY" "$log"
                 grep -Fq "MICROGEN COLONY COVERAGE READY" "$log"
@@ -250,15 +250,15 @@ jobs:
                 grep -Fq "MICROGEN SAVE RECOVERY READY" "$log"
                 grep -Fq "MICROGEN FORM SPECIALIZATION DATA READY" "$log"
                 grep -Fq "MICROGEN FORM PASSIVES READY" "$log"
-                grep -Fq "MICROGEN FORM ABILITIES READY" "$log"
+                grep -Fq "MICROGEN FORM ULTIMATE ABILITIES READY" "$log"
                 grep -Fq "MICROGEN SIGNATURE ORGANS READY" "$log"
                 grep -Fq "MICROGEN FORM EVOLUTIONS SYNERGIES READY" "$log"
                 grep -Fq "MICROGEN STAGE SIX BALANCE READY" "$log"
                 grep -F "MICROGEN FORM EVOLUTIONS SYNERGIES READY" "$log"
                 grep -F "MICROGEN SIGNATURE ORGANS READY" "$log"
-                grep -F "MICROGEN FORM ABILITIES READY" "$log"
+                grep -F "MICROGEN FORM ULTIMATE ABILITIES READY" "$log"
                 grep -Fq "MICROGEN ENEMY MARKERS READY" "$log"
-                grep -E "MICROGEN (BALANCE (RUN|SUMMARY|CONTROL RUN|CONTROL SUMMARY)|HYBRID (BALANCE|CONTROL) (RUN|SUMMARY)|EVOLUTION BALANCE (RUN|SUMMARY)|PAIRED (RESULT|SUMMARY))" "$log"
+                grep -E "MICROGEN (BALANCE (RUN|SUMMARY)|HYBRID (BALANCE|CONTROL) (RUN|SUMMARY)|EVOLUTION BALANCE (RUN|SUMMARY)|SPECIALIZATION (RUN|SUMMARY)|PAIRED (RESULT|SUMMARY))" "$log"
               fi
               if grep -E "ERROR:SCRIPT|ERROR:RENDER|FATAL" "$log"; then exit 1; fi
               kill -0 "$pid"
