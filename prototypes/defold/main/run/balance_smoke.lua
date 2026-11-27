@@ -599,6 +599,9 @@ local function validate_colony_combat_pilot()
     assert(dx>0 and dx*dx+dy*dy>.5,"Colony pilot must approach a distant clone target")
     sim.enemies={giant}
     assert(not colony_attack_target(sim),"Colony pilot must not chase a giant that clones cannot damage")
+    local flee_x,flee_y=colony_direction(sim,1)
+    assert(flee_x and flee_x<0 and flee_x*flee_x+flee_y*flee_y>.5,
+        "Colony pilot must evade a giant when no clone-attack target exists")
     print("MICROGEN COLONY COMBAT PILOT READY")
 end
 
