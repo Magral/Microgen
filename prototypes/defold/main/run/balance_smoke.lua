@@ -369,10 +369,12 @@ end
 local function run_batch(marker,scenario,seeds)
     local seconds,levels,kills,absorbed,dealt,damage,stages,survivors=0,0,0,0,0,0,0,0
     local acid_triggers,enzyme_triggers,shell_triggers=0,0,0
+    local results={}
     for _,seed in ipairs(seeds) do
         local config=Util.copy(scenario)
         config.run_marker=marker
         local result=run(seed,config)
+        results[seed]=result
         seconds,levels,kills,absorbed,dealt,damage,stages=seconds+result.seconds,levels+result.level,
             kills+result.kills,absorbed+result.absorbed,dealt+result.damage_dealt,
             damage+result.damage_taken,stages+result.stage
@@ -387,6 +389,28 @@ local function run_batch(marker,scenario,seeds)
         summary,scenario.form,scenario.name or "base",#seeds,seconds/#seeds,stages/#seeds,
         levels/#seeds,kills/#seeds,absorbed/#seeds,dealt/#seeds,damage/#seeds,survivors,
         acid_triggers/#seeds,enzyme_triggers/#seeds,shell_triggers/#seeds))
+    return results
+end
+
+local function print_pair_comparison(label,with_effect,without_effect,seeds)
+    local totals={seconds=0,stage=0,level=0,kills=0,absorbed=0,damage_dealt=0,damage_taken=0,hp=0}
+    local wins=0
+    for _,seed in ipairs(seeds) do
+        local a,b=assert(with_effect[seed],"Missing paired run with effect"),assert(without_effect[seed],"Missing paired control run")
+        local delta={}
+        for key in pairs(totals) do
+            delta[key]=a[key]-b[key]
+            totals[key]=totals[key]+delta[key]
+        end
+        if a.alive and not b.alive then wins=wins+1 elseif b.alive and not a.alive then wins=wins-1 end
+        print(string.format("MICROGEN PAIRED RESULT comparison=%s seed=%d delta_seconds=%.1f delta_stage=%.2f delta_level=%.2f delta_kills=%.2f delta_absorbed=%.2f delta_damage_dealt=%.1f delta_damage_taken=%.1f delta_hp=%.1f outcome_with=%s outcome_without=%s",
+            label,seed,delta.seconds,delta.stage,delta.level,delta.kills,delta.absorbed,delta.damage_dealt,
+            delta.damage_taken,delta.hp,a.alive and "alive" or "death",b.alive and "alive" or "death"))
+    end
+    local n=#seeds
+    print(string.format("MICROGEN PAIRED SUMMARY comparison=%s pairs=%d mean_delta_seconds=%.1f mean_delta_stage=%.2f mean_delta_level=%.2f mean_delta_kills=%.2f mean_delta_absorbed=%.2f mean_delta_damage_dealt=%.1f mean_delta_damage_taken=%.1f mean_delta_hp=%.1f survival_pair_wins=%d",
+        label,n,totals.seconds/n,totals.stage/n,totals.level/n,totals.kills/n,totals.absorbed/n,
+        totals.damage_dealt/n,totals.damage_taken/n,totals.hp/n,wins))
 end
 
 local function validate_resident_start_safety()
@@ -1202,16 +1226,20 @@ function M.run()
     validate_contact_balance()
     validate_resident_start_safety()
     validate_combat_checkpoint()
+    local active_form_results={}
     for _,scenario in ipairs(BRANCHES) do
         local seconds,levels,kills,absorbed,dealt,damage,stages,survivors=0,0,0,0,0,0,0,0
+        local paired={}
         for _,seed in ipairs(SEEDS) do
             local result=run(seed,scenario)
+            paired[seed]=result
             seconds,levels,kills,absorbed,dealt,damage,stages=seconds+result.seconds,levels+result.level,
                 kills+result.kills,absorbed+result.absorbed,dealt+result.damage_dealt,
                 damage+result.damage_taken,stages+result.stage
             if result.alive then survivors=survivors+1 end
             collectgarbage("collect")
         end
+        active_form_results[scenario.form]=paired
         print(string.format("MICROGEN BALANCE SUMMARY branch=%s maps=%d mean_seconds=%.1f mean_stage=%.2f mean_level=%.2f mean_kills=%.2f mean_absorbed=%.2f mean_damage_dealt=%.1f mean_damage_taken=%.1f survivors=%d",
             scenario.form,#SEEDS,seconds/#SEEDS,stages/#SEEDS,levels/#SEEDS,kills/#SEEDS,
             absorbed/#SEEDS,dealt/#SEEDS,damage/#SEEDS,survivors))
@@ -1220,25 +1248,28 @@ function M.run()
         local control=Util.copy(scenario)
         control.name="без активной способности"
         control.use_ability=false
-        run_batch("MICROGEN BALANCE CONTROL RUN",control,SEEDS)
+        local controls=run_batch("MICROGEN BALANCE CONTROL RUN",control,SEEDS)
+        print_pair_comparison("способность_"..scenario.form,active_form_results[scenario.form],controls,SEEDS)
     end
     for _,scenario in ipairs(HYBRID_SCENARIOS) do
-        run_batch("MICROGEN HYBRID BALANCE RUN",scenario,HYBRID_SEEDS)
+        local active=run_batch("MICROGEN HYBRID BALANCE RUN",scenario,HYBRID_SEEDS)
         local control=Util.copy(scenario)
         control.name=scenario.name.." · без эффекта синергии"
         control.expected_synergies=nil
         control.disabled_synergy=scenario.expected_synergies[1]
-        run_batch("MICROGEN HYBRID CONTROL RUN",control,HYBRID_SEEDS)
+        local controls=run_batch("MICROGEN HYBRID CONTROL RUN",control,HYBRID_SEEDS)
+        print_pair_comparison("синергия_"..scenario.name,active,controls,HYBRID_SEEDS)
     end
     for _,scenario in ipairs(EVOLUTION_SCENARIOS) do
         local control=Util.copy(scenario)
         control.name="без высшей эволюции"
         control.block_evolution=true
-        run_batch("MICROGEN EVOLUTION BALANCE RUN",control,SEEDS)
+        local controls=run_batch("MICROGEN EVOLUTION BALANCE RUN",control,SEEDS)
         local evolved=Util.copy(scenario)
         evolved.name="с высшей эволюцией"
         evolved.evolve=true
-        run_batch("MICROGEN EVOLUTION BALANCE RUN",evolved,SEEDS)
+        local active=run_batch("MICROGEN EVOLUTION BALANCE RUN",evolved,SEEDS)
+        print_pair_comparison("высшая_эволюция_"..scenario.name,active,controls,SEEDS)
     end
     print("MICROGEN STAGE SIX BALANCE READY")
     print("MICROGEN BALANCE SMOKE READY")
