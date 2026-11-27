@@ -539,7 +539,10 @@ function Combat:_update_enemy_status(enemy, dt, radius)
         self:hit_enemy(enemy, Catalog.scaled_damage(4 + rank * 3, rank) * dt, "infection")
     end
     if enemy.kind ~= "miniboss" and contains(enemy.traits, "regen") then
-        enemy.hp = min(enemy.max_hp, enemy.hp + enemy.max_hp * 0.012 * dt)
+        -- Главный босс не должен полностью нивелировать стабильный урон колонии.
+        -- Обычные амёбы сохраняют прежнюю регенерацию; у босса она вдвое ниже.
+        local regen_rate = enemy.kind == "boss" and 0.006 or 0.012
+        enemy.hp = min(enemy.max_hp, enemy.hp + enemy.max_hp * regen_rate * dt)
     end
     if (enemy.enzyme_time or 0) > 0 then
         enemy.enzyme_time = max(0, enemy.enzyme_time - dt)
