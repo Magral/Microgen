@@ -106,7 +106,7 @@ M.FORM_SPECIALIZATIONS = {
     },
     colony = {
         research = "colony", branch = "colony", signature_organ = "synaptic_node",
-        attack = { sources = { division = true }, damage_multiplier = 1.20 },
+        attack = { sources = { division = true }, damage_multiplier = 1.80 },
         ability = {
             id = "colony_great_swarm", name = "Великий рой", cooldown = 65, icon = "division", color = "e7a7f5",
             desc = "На 10 секунд появляются две дополнительные боевые копии, а урон всех копий повышается на 60%.",

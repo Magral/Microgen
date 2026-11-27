@@ -1814,7 +1814,7 @@ local function validate_form_abilities()
         "Toxic form increases spore infection damage by 15%")
     near(probe_form_attack("toxic","division"),10,
         "Toxic bonus does not leak into colony clone damage")
-    near(probe_form_attack("colony","division"),12,
+    near(probe_form_attack("colony","division"),18,
         "Colony form increases coordinated clone damage by 20%")
     near(probe_form_attack("colony","devour"),10,
         "Colony bonus does not leak into unrelated predator bites")
