@@ -1796,6 +1796,8 @@ local function validate_form_abilities()
 
     local function probe_form_attack(form,source)
         local sim=fresh(form)
+        -- Исключаем отдельную адаптацию катализатора из проверки бонуса формы.
+        if form=="toxic" then sim.build.adaptations.catalysis=0 end
         local target=assert(sim:spawn_enemy(Util.copy(sim.player),"prey"))
         target.r,target.hp,target.max_hp,target.tissue_budget=12,1000,1000,1000
         return sim:hit_enemy(target,10,source)
