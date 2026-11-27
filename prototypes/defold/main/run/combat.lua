@@ -40,6 +40,10 @@ function Combat:contact_impact(rules, elite)
         elseif evolution.id == "living_reactor" then
             reduction = 0.15 + 0.30 * Size.smoothstep(1.08, 2.4, rules.ratio)
         end
+    elseif self.run_loadout.form == "colony" and rules.ratio > 1.08 then
+        -- Базовая колония получает защиту раньше высшей эволюции:
+        -- 10% от крупных целей с плавным ростом до прежнего предела 25%.
+        reduction = max(reduction, 0.10 + 0.15 * Size.smoothstep(1.08, 2.4, rules.ratio))
     end
     return rules.impact * (1 - reduction)
 end
@@ -282,9 +286,14 @@ end
 function Combat:damage_reduction(source)
     local passive = self:form_passive()
     local bonus = 0
-    if passive.id == "toxic_regulation" and source.kind == "collision" and self:_player_poisoned(source.enemy) then
-        local kind = source.enemy.kind
-        bonus = (kind == "boss" or kind == "miniboss") and passive.boss_contact_reduction or passive.enemy_contact_reduction
+    if passive.id == "toxic_regulation" and source.kind == "collision" then
+        local kind = source.enemy and source.enemy.kind
+        local elite = kind == "boss" or kind == "miniboss"
+        bonus = elite and (passive.base_boss_contact_reduction or 0)
+            or (passive.base_enemy_contact_reduction or 0)
+        if self:_player_poisoned(source.enemy) then
+            bonus = bonus + (elite and passive.boss_contact_reduction or passive.enemy_contact_reduction)
+        end
     elseif passive.id == "shared_membrane" then
         local cap=passive.maximum_reduction
         local per_clone=passive.reduction_per_clone
