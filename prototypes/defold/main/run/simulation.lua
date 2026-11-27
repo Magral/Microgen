@@ -1241,6 +1241,20 @@ function Simulation.restore(saved)
         local value=self.cooldowns[entry[1]]
         if value then self.cooldowns[entry[1]]=min(value,entry[2]) end
     end
+    -- Эффекты принадлежат только форме, получившей соответствующую эволюцию.
+    local form=self.run_loadout.form
+    if not self:form_evolution() or form~="predator" then
+        self.cooldowns.predator_frenzy_active=nil
+        self.cooldowns.predator_escape_active=nil
+    end
+    if not self:form_evolution() or form~="toxic" then
+        self.cooldowns.toxic_cocoon_active=nil
+    end
+    if not self:form_evolution() or form~="colony" then
+        self.cooldowns.colony_swarm_active=nil
+        self.cooldowns.colony_bastion_active=nil
+        self.colony_bastion_hp=0
+    end
     local action=self.form_action
     local valid=type(action)=="table" and finite(action.age) and action.age>=0 and type(action.hit)=="boolean"
         and ability.id=="predator_primordial_rage" and action.kind=="dash" and finite(action.dx) and finite(action.dy)
