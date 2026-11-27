@@ -69,7 +69,7 @@ M.FORM_SPECIALIZATIONS = {
         evolution = {
             id = "apex_predator", name = "Вершинный хищник",
             organ = "chemoreceptor_ridge", organ_rank = 6, passive = "magnet", passive_rank = 3,
-            ability_cooldown = 12.5, marked_bite_bonus = 0.12,
+            ability_cooldown = 14, marked_bite_bonus = 0.12,
         },
     },
     toxic = {
@@ -87,7 +87,7 @@ M.FORM_SPECIALIZATIONS = {
         evolution = {
             id = "living_reactor", name = "Живой реактор",
             organ = "osmotic_vacuole", organ_rank = 6, passive = "catalysis", passive_rank = 3,
-            duration_bonus = 0.5, slow = 0.20,
+            duration_bonus = 1, slow = 0.20,
         },
     },
     colony = {
