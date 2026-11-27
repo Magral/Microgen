@@ -644,6 +644,7 @@ local function validate_toxic_combat_pilot()
     local radius=sim:body_radius()
     local target=assert(sim:spawn_enemy({x=sim.player.x+40,y=sim.player.y},"hunter"))
     target.r=radius*.8
+    target.hp=target.max_hp*.4
     sim.enemies={target}
     assert(sim:interaction(target).eligible,"Toxic pilot fixture must be a valid small enemy")
     local x,y=direction(sim,1)
