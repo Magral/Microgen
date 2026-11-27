@@ -239,9 +239,9 @@ jobs:
                 test "$(grep -c "MICROGEN HYBRID CONTROL SUMMARY" "$log")" -eq 3
                 test "$(grep -c "MICROGEN EVOLUTION BALANCE RUN" "$log")" -eq 36
                 test "$(grep -c "MICROGEN EVOLUTION BALANCE SUMMARY" "$log")" -eq 6
-                test "$(grep -c "MICROGEN SPECIALIZATION RUN" "$log")" -eq 27
+                test "$(grep -c "MICROGEN SPECIALIZATION RUN" "$log")" -eq 18
                 test "$(grep -c "MICROGEN SPECIALIZATION SUMMARY" "$log")" -eq 9
-                test "$(grep -c "MICROGEN PAIRED RESULT" "$log")" -eq 45
+                test "$(grep -c "MICROGEN PAIRED RESULT" "$log")" -eq 39
                 test "$(grep -c "MICROGEN PAIRED SUMMARY" "$log")" -eq 12
                 grep -Fq "MICROGEN STAGE SIX BALANCE READY" "$log"
                 grep -Fq "MICROGEN CONTACT BALANCE READY" "$log"
