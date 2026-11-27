@@ -48,7 +48,7 @@ function Combat:hit_enemy(enemy, amount, source, maximum_damage)
     local raw = max(0, amount) * (1 + build:passive("catalysis")) * build:power(source)
     if source == "devour" then
         raw = raw * self:marked_bite_multiplier(enemy)
-        if (self.form_action.kind~="dash" and (self.cooldowns.predator_frenzy_active or 0)>0 then
+        if self.form_action.kind~="dash" and (self.cooldowns.predator_frenzy_active or 0)>0 then
             raw = raw * (Catalog.FORM_SPECIALIZATIONS.predator.ability.frenzy_multiplier or 1)
         end
     elseif source == "division" and (self.cooldowns.colony_swarm_active or 0) > 0 then
