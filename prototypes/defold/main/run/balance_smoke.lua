@@ -663,6 +663,27 @@ local function validate_objective_combat_range()
     print("MICROGEN OBJECTIVE COMBAT RANGE READY")
 end
 
+-- Регенерация главного босса ограничена отдельно от обычных амёб:
+-- снижение не должно случайно ослабить весь набор противников.
+local function validate_boss_regeneration()
+    local sim=Simulation.new(147,nil,nil,"colony",{form="colony",branch="colony",seed=147})
+    assert(type(sim._update_enemy_status)=="function",
+        "Combat status update must be available for regeneration checks")
+    local function regenerated_hp(kind)
+        local enemy={kind=kind,r=40,hp=500,max_hp=1000,traits={"regen"},infect=0,
+            slow=0,rupture_slow=0,grasp=0,crown_time=0,enzyme_time=0,tissue_budget=0}
+        sim:_update_enemy_status(enemy,1,sim:body_radius())
+        return enemy.hp
+    end
+    local boss_hp=regenerated_hp("boss")
+    local common_hp=regenerated_hp("common")
+    assert(math.abs(boss_hp-506)<0.001,
+        "Boss regeneration must remain at 0.6% max HP per second")
+    assert(math.abs(common_hp-512)<0.001,
+        "Common amoeba regeneration must remain at 1.2% max HP per second")
+    print("MICROGEN BOSS REGENERATION BALANCE READY")
+end
+
 -- Катаклизм не должен тратить перезарядку на безвредную добычу или уже
 -- захваченную цель: способность предназначена для сдерживания угроз.
 local function toxic_ability_target(sim)
@@ -1997,6 +2018,7 @@ function M.run()
     validate_stage_progression()
     validate_progression_pilot()
     validate_objective_combat_range()
+    validate_boss_regeneration()
     validate_form_specialization_data()
     validate_form_evolutions_and_synergies()
     validate_signature_organs()
