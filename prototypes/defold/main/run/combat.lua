@@ -35,7 +35,8 @@ function Combat:contact_impact(rules, elite)
     -- Эти формы получают базовую защиту от контакта с амёбами крупнее организма.
     -- Порог 1.08 совпадает с игровой классификацией «Крупная амёба»;
     -- к соотношению радиусов 2.4 защита плавно достигает 45%.
-    if evolution and (evolution.id == "living_reactor" or evolution.id == "collective_mind") then
+    if evolution and (evolution.id == "living_reactor" or evolution.id == "collective_mind")
+        and rules.ratio > 1.08 then
         reduction = 0.15 + 0.30 * Size.smoothstep(1.08, 2.4, rules.ratio)
     end
     return rules.impact * (1 - reduction)
