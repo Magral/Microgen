@@ -642,9 +642,10 @@ end
 local function validate_toxic_combat_pilot()
     local sim=Simulation.new(147,nil,nil,"toxic",{form="toxic",branch="toxic",seed=147})
     local radius=sim:body_radius()
-    local target={id=9911,kind="hostile",r=math.min(20,radius*1.1),
-        pos={x=sim.player.x+40,y=sim.player.y},hp=100,max_hp=100}
+    local target=assert(sim:spawn_enemy({x=sim.player.x+40,y=sim.player.y},"hunter"))
+    target.r=math.min(target.r,radius*1.1)
     sim.enemies={target}
+    assert(sim:interaction(target).eligible,"Toxic pilot fixture must be a valid small enemy")
     local x,y=direction(sim,1)
     assert(x<0 and x*x+y*y>.5,
         "Toxic pilot must retreat when a target enters the acid aura's safe orbit")
