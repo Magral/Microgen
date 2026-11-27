@@ -263,6 +263,7 @@ end
 
 local function colony_attack_target(sim)
     local radius=sim:body_radius()
+    local health=sim.hp/math.max(1,sim.max_hp)
     local best,best_score
     for _,enemy in ipairs(sim.enemies) do
         if enemy.hp>0 and not enemy.captured and enemy.kind~="prey" then
@@ -270,9 +271,13 @@ local function colony_attack_target(sim)
             local giant=enemy.kind=="boss" or ratio>=1.6
             local vulnerable=enemy.fractured or (enemy.enzyme_time or 0)>0
                 or (enemy.boss_exposed or 0)>0
-            if not giant or vulnerable then
+            local critical_large=health<.42 and ratio>1.08 and not vulnerable
+            if (not giant or vulnerable) and not critical_large then
                 local d=distance(sim.player,enemy.pos)
-                local score=d-(enemy.kind=="miniboss" and 55 or 0)
+                -- Сначала выбираем небольшие цели, чтобы не входить в контакт с крупными амёбами.
+                local size_penalty=ratio>1.08 and (220+(ratio-1.08)*180) or 0
+                if health<.55 and ratio>1.08 then size_penalty=size_penalty+150 end
+                local score=d+size_penalty-(enemy.kind=="miniboss" and 55 or 0)
                 if not best or score<best_score then best,best_score=enemy,score end
             end
         end
@@ -282,7 +287,7 @@ end
 
 local function colony_attack_range(sim,enemy)
     local radius=sim:body_radius()
-    return math.max(enemy.r+radius*.75+35,enemy.r+111)
+    return math.max(enemy.r+radius*.75+40,enemy.r+111)
 end
 
 colony_direction=function(sim,tick)
@@ -308,19 +313,32 @@ colony_direction=function(sim,tick)
         local next_distance=distance(next_pos,target.pos)
         local score=candidate[1]*desired_x+candidate[2]*desired_y
         score=score-math.abs(next_distance-range)*.0015
-        score=score-math.max(0,target.r+radius*.75+34-next_distance)*.16
+        score=score-math.max(0,target.r+radius*.75+40-next_distance)*.16
         if not sim.world:walkable(nx,ny,math.min(26,radius*.65)) then score=score-100 end
         for _,other in ipairs(sim.enemies) do
             if other~=target and other.hp>0 and not other.captured and other.kind~="prey" then
-                local safe=other.r+radius*.75+38
-                score=score-math.max(0,safe-distance(next_pos,other.pos))*.04
+                local current=distance(player,other.pos)
+                local next_enemy=distance(next_pos,other.pos)
+                local safe=other.r+radius*.75+115
+                score=score+(next_enemy-current)*.045-math.max(0,safe-next_enemy)*.055
+            end
+        end
+        if sim.elapsed>=8 then
+            for _,resident in ipairs(sim.residents) do
+                if not resident.dead and not resident.active then
+                    local safe=resident.r+radius+65
+                    score=score-math.max(0,safe-distance(next_pos,resident.pos))*.045
+                end
             end
         end
         for _,field in ipairs(sim.fields) do
             if field.hostile then
-                local safe=field.r+radius*.65+42
-                score=score-math.max(0,safe-distance(next_pos,field.pos))*.045
+                local safe=field.r+radius*.65+90
+                score=score-math.max(0,safe-distance(next_pos,field.pos))*.04
             end
+        end
+        for _,colony in ipairs(sim.world.colonies) do
+            if distance(next_pos,colony.pos)<150 then score=score+.08 end
         end
         for _,shot in ipairs(sim.shots) do
             if shot.hostile then
@@ -705,7 +723,17 @@ local function run(seed, scenario, horizon_seconds)
 
     local pilot_cache={}
     local nests_seen,minibosses,boss_damage,exposed_damage,boss_hp_remaining=0,0,0,0,0
+    local boss_healing,boss_regen=0,false
     if scenario.progression then
+        local original_status=sim._update_enemy_status
+        sim._update_enemy_status=function(self,enemy,dt,radius)
+            local hp_before=enemy.hp
+            original_status(self,enemy,dt,radius)
+            if enemy.kind=="boss" then
+                if Util.index(enemy.traits or {},"regen") then boss_regen=true end
+                boss_healing=boss_healing+math.max(0,enemy.hp-hp_before)
+            end
+        end
         local original_hit=sim.hit_enemy
         sim.hit_enemy=function(self,enemy,...)
             local exposed=(enemy.boss_exposed or 0)>0
@@ -775,6 +803,12 @@ local function run(seed, scenario, horizon_seconds)
             for _,nest in ipairs(sim.world.nests) do if nest.used then visited=visited+1 end end
             nests_seen=math.max(nests_seen,visited)
             minibosses=math.max(minibosses,sim.minibosses_defeated)
+            for _,enemy in ipairs(sim.enemies) do
+                if enemy.kind=="boss" then
+                    boss_hp_remaining=enemy.hp
+                    if Util.index(enemy.traits or {},"regen") then boss_regen=true end
+                end
+            end
         end
         if not first_hit and sim.hp < health_before then
             local hit = sim.last_damage
@@ -841,8 +875,8 @@ local function run(seed, scenario, horizon_seconds)
             "Disabled synergy unexpectedly affected combat: "..scenario.disabled_synergy)
     end
     if scenario.progression then
-        print(string.format("MICROGEN OBJECTIVE RESULT form=%s seed=%d build=%s nests=%d minibosses=%d boss_damage=%.1f boss_hp=%.1f exposed_damage=%.1f boss_contact=%.1f miniboss_contact=%.1f clone_damage=%.1f clone_hits=%d swarm_damage=%.1f swarm_hits=%d reached_two=%d seconds=%.1f contact_damage=%.1f contact_hits=%d attack_uses=%d defense_uses=%d outcome=%s",
-            branch,seed,scenario.evolve and "evolved" or "base",nests_seen,minibosses,boss_damage,boss_hp_remaining,
+        print(string.format("MICROGEN OBJECTIVE RESULT form=%s seed=%d build=%s nests=%d minibosses=%d boss_damage=%.1f boss_hp=%.1f boss_healing=%.1f boss_regen=%d exposed_damage=%.1f boss_contact=%.1f miniboss_contact=%.1f clone_damage=%.1f clone_hits=%d swarm_damage=%.1f swarm_hits=%d reached_two=%d seconds=%.1f contact_damage=%.1f contact_hits=%d attack_uses=%d defense_uses=%d outcome=%s",
+            branch,seed,scenario.evolve and "evolved" or "base",nests_seen,minibosses,boss_damage,boss_hp_remaining,boss_healing,boss_regen and 1 or 0,
             exposed_damage,boss_contact_damage,miniboss_contact_damage,clone_damage,clone_hits,clone_swarm_damage,clone_swarm_hits,
             sim.stage_index>=2 and 1 or 0,sim.elapsed,contact_damage,contact_hits,attack_uses,defense_uses,
             sim.stage_index>=2 and "stage2" or (sim.outcome=="" and "timeout" or sim.outcome)))
@@ -862,7 +896,8 @@ local function run(seed, scenario, horizon_seconds)
         clone_damage=clone_damage,clone_hits=clone_hits,clone_swarm_damage=clone_swarm_damage,clone_swarm_hits=clone_swarm_hits,
         blocked=sim.combat_stats.blocked,healed=sim.combat_stats.healed,
         attack_uses=attack_uses,defense_uses=defense_uses,synergy_triggers=synergy_triggers,
-        boss_damage=boss_damage,boss_contact_damage=boss_contact_damage,miniboss_contact_damage=miniboss_contact_damage}
+        boss_damage=boss_damage,boss_healing=boss_healing,boss_regen=boss_regen,
+        boss_contact_damage=boss_contact_damage,miniboss_contact_damage=miniboss_contact_damage}
 end
 
 local function run_batch(marker,scenario,seeds)
@@ -872,6 +907,7 @@ local function run_batch(marker,scenario,seeds)
     local contact_damage,contact_hits=0,0
     local clone_damage,clone_hits,clone_swarm_damage,clone_swarm_hits=0,0,0,0
     local boss_damage,boss_contact_damage,miniboss_contact_damage=0,0,0
+    local boss_healing,regen_bosses=0,0
     local results={}
     for _,seed in ipairs(seeds) do
         local config=Util.copy(scenario)
@@ -886,6 +922,8 @@ local function run_batch(marker,scenario,seeds)
         contact_damage=contact_damage+result.contact_damage
         contact_hits=contact_hits+result.contact_hits
         boss_damage=boss_damage+(result.boss_damage or 0)
+        boss_healing=boss_healing+(result.boss_healing or 0)
+        if result.boss_regen then regen_bosses=regen_bosses+1 end
         boss_contact_damage=boss_contact_damage+(result.boss_contact_damage or 0)
         miniboss_contact_damage=miniboss_contact_damage+(result.miniboss_contact_damage or 0)
         clone_damage=clone_damage+(result.clone_damage or 0)
@@ -899,11 +937,11 @@ local function run_batch(marker,scenario,seeds)
         collectgarbage("collect")
     end
     local summary=marker:gsub(" RUN$"," SUMMARY")
-    print(string.format("%s form=%s scenario=%s maps=%d mean_seconds=%.1f mean_stage=%.2f mean_level=%.2f mean_kills=%.2f mean_absorbed=%.2f mean_damage_dealt=%.1f mean_damage_taken=%.1f mean_contact_damage=%.1f mean_contact_hits=%.1f mean_clone_damage=%.1f mean_clone_hits=%.1f mean_swarm_damage=%.1f mean_swarm_hits=%.1f mean_boss_damage=%.1f mean_boss_contact=%.1f mean_miniboss_contact=%.1f mean_damage_blocked=%.1f mean_healed=%.1f survivors=%d attack_uses=%d defense_uses=%d mean_synergy_triggers=acid:%.2f,enzyme:%.2f,shell:%.2f",
+    print(string.format("%s form=%s scenario=%s maps=%d mean_seconds=%.1f mean_stage=%.2f mean_level=%.2f mean_kills=%.2f mean_absorbed=%.2f mean_damage_dealt=%.1f mean_damage_taken=%.1f mean_contact_damage=%.1f mean_contact_hits=%.1f mean_clone_damage=%.1f mean_clone_hits=%.1f mean_swarm_damage=%.1f mean_swarm_hits=%.1f mean_boss_damage=%.1f mean_boss_healing=%.1f regen_bosses=%d mean_boss_contact=%.1f mean_miniboss_contact=%.1f mean_damage_blocked=%.1f mean_healed=%.1f survivors=%d attack_uses=%d defense_uses=%d mean_synergy_triggers=acid:%.2f,enzyme:%.2f,shell:%.2f",
         summary,scenario.form,scenario.name or "base",#seeds,seconds/#seeds,stages/#seeds,
         levels/#seeds,kills/#seeds,absorbed/#seeds,dealt/#seeds,damage/#seeds,contact_damage/#seeds,contact_hits/#seeds,
         clone_damage/#seeds,clone_hits/#seeds,clone_swarm_damage/#seeds,clone_swarm_hits/#seeds,
-        boss_damage/#seeds,boss_contact_damage/#seeds,miniboss_contact_damage/#seeds,blocked/#seeds,healed/#seeds,
+        boss_damage/#seeds,boss_healing/#seeds,regen_bosses,boss_contact_damage/#seeds,miniboss_contact_damage/#seeds,blocked/#seeds,healed/#seeds,
         survivors,attack_uses,defense_uses,acid_triggers/#seeds,enzyme_triggers/#seeds,shell_triggers/#seeds))
     return results
 end
