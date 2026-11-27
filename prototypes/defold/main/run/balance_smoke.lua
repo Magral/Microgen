@@ -329,7 +329,8 @@ local function run(seed, scenario, horizon_seconds)
     end
 
     assert(finite(sim.elapsed) and finite(sim.build.biomass) and finite(sim.kills) and finite(sim.absorbed)
-        and finite(sim.combat_stats.damage_dealt) and finite(sim.combat_stats.damage_taken),
+        and finite(sim.combat_stats.damage_dealt) and finite(sim.combat_stats.damage_taken)
+        and finite(sim.combat_stats.blocked) and finite(sim.combat_stats.healed),
         "Balance run ended with invalid summary values")
     local history = sim.combat_stats.history
     local last_hit = history[#history]
@@ -1040,6 +1041,14 @@ local function validate_form_abilities()
     assert(not hybrid.build:evolved("osmotic_vacuole") and not hybrid:form_ability().id
         and not hybrid:form_defense().id,
         "A foreign signature organ never unlocks another form's ultimate buttons")
+    local hollow_colony=fresh("colony")
+    hollow_colony.build.organs.synaptic_node=6
+    hollow_colony.build.adaptations.armor=3
+    assert(hollow_colony.build:evolve("synaptic_node"),"Colony evolution fixture")
+    hollow_colony.build.organs.division=0
+    assert(hollow_colony:form_defense().id=="colony_living_bastion"
+        and not hollow_colony:form_defense_ready() and not hollow_colony:activate_form_defense(),
+        "Living bastion remains unlocked but cannot activate without living copies")
     print("MICROGEN FORM ULTIMATE ABILITIES READY")
 end
 
