@@ -245,6 +245,11 @@ jobs:
                 test "$(grep -c "MICROGEN EVOLUTION BALANCE SUMMARY" "$log")" -eq 6
                 test "$(grep -c "MICROGEN SPECIALIZATION RUN" "$log")" -eq 24
                 test "$(grep -c "MICROGEN SPECIALIZATION SUMMARY" "$log")" -eq 12
+                test "$(grep -c "MICROGEN OBJECTIVE RESULT" "$log")" -eq 12
+                test "$(grep -c "MICROGEN OBJECTIVE RUN" "$log")" -eq 12
+                test "$(grep -c "MICROGEN OBJECTIVE SUMMARY" "$log")" -eq 6
+                grep -Fq "MICROGEN OBJECTIVE PILOT READY" "$log"
+                grep -Fq "MICROGEN OBJECTIVE MATRIX READY" "$log"
                 test "$(grep -c "MICROGEN PAIRED RESULT" "$log")" -eq 45
                 test "$(grep -c "MICROGEN PAIRED SUMMARY" "$log")" -eq 15
                 grep -Fq "MICROGEN STAGE SIX BALANCE READY" "$log"
@@ -262,7 +267,7 @@ jobs:
                 grep -F "MICROGEN SIGNATURE ORGANS READY" "$log"
                 grep -F "MICROGEN FORM ULTIMATE ABILITIES READY" "$log"
                 grep -Fq "MICROGEN ENEMY MARKERS READY" "$log"
-                grep -E "MICROGEN (BALANCE (RUN|SUMMARY)|HYBRID (BALANCE|CONTROL) (RUN|SUMMARY)|EVOLUTION BALANCE (RUN|SUMMARY)|SPECIALIZATION (RUN|SUMMARY)|PAIRED (RESULT|SUMMARY))" "$log"
+                grep -E "MICROGEN (BALANCE (RUN|SUMMARY)|HYBRID (BALANCE|CONTROL) (RUN|SUMMARY)|EVOLUTION BALANCE (RUN|SUMMARY)|SPECIALIZATION (RUN|SUMMARY)|OBJECTIVE (RESULT|RUN|SUMMARY)|PAIRED (RESULT|SUMMARY))" "$log"
               fi
               if grep -Eq "ERROR:(SCRIPT|GAMESYS|RENDER)|FATAL" "$log"; then exit 1; fi
               kill -0 "$pid"
