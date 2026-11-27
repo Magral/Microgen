@@ -344,9 +344,13 @@ function Simulation:enter_next_stage(prepared_world)
     self.player, self.previous_player, self.player_velocity = self.world.start, self.world.start, point()
     self.last_damage, self._danger_at = {}, -10
     self.enemies, self.remains, self.fields, self.shots, self.effects, self.damage_markers = {}, {}, {}, {}, {}, {}
-    local feast_cd, ability_cd, mark_cd, bite_cd = self.cooldowns.form_feast, self.cooldowns.form_ability, self.cooldowns.chemoreceptor_mark, self.cooldowns.acid_bite
+    local preserved_cooldowns={}
+    for _,id in ipairs({"form_feast","form_ability","chemoreceptor_mark","acid_bite",
+        "defense_active","defense_cooldown","emergency_regen_cooldown"}) do
+        preserved_cooldowns[id]=self.cooldowns[id]
+    end
     self.cooldowns, self.explored, self.events, self.current_offers, self.offer_quality = {}, {}, {}, {}, {}
-    self.cooldowns.form_feast, self.cooldowns.form_ability, self.cooldowns.chemoreceptor_mark, self.cooldowns.acid_bite = feast_cd, ability_cd, mark_cd, bite_cd
+    for id,value in pairs(preserved_cooldowns) do self.cooldowns[id]=value end
     self.form_action = {}
     self.rally_echo = nil
     self.signature_mark_id,self.signature_mark_until=nil,nil
