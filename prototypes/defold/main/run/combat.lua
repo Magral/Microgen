@@ -41,9 +41,13 @@ function Combat:contact_impact(rules, elite)
             reduction = 0.15 + 0.30 * Size.smoothstep(1.08, 2.4, rules.ratio)
         end
     elseif self.run_loadout.form == "colony" and rules.ratio > 1.25 then
-        -- Базовая колония получает защиту раньше высшей эволюции:
-        -- 10% от крупных целей с плавным ростом до прежнего предела 25%.
-        reduction = max(reduction, 0.08 + 0.17 * Size.smoothstep(1.25, 2.4, rules.ratio))
+        -- Ранней колонии нужна заметная защита от контакта с крупными амёбами:
+        -- 16% на пороге крупного размера, плавный рост до 35%.
+        reduction = max(reduction, 0.16 + 0.19 * Size.smoothstep(1.25, 2.4, rules.ratio))
+    elseif self.run_loadout.form == "toxic" and rules.ratio > 1.08 then
+        -- Токсичная форма часто погибает от серии контактов до накопления яда.
+        -- Даём ей 12–30% защиты только от крупных обычных амёб.
+        reduction = max(reduction, 0.12 + 0.18 * Size.smoothstep(1.08, 2.4, rules.ratio))
     end
     return rules.impact * (1 - reduction)
 end
