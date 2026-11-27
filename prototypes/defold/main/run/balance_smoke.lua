@@ -214,6 +214,14 @@ local function ability_trigger_radius(sim)
     return field_radius*sim.build:specialization_value("osmotic_vacuole","field_radius_mult",1)
 end
 
+-- Катаклизм не должен тратить перезарядку на безвредную добычу или уже
+-- захваченную цель: способность предназначена для сдерживания угроз.
+local function toxic_ability_target(sim)
+    return sim:_nearest(ability_trigger_radius(sim), function(enemy)
+        return enemy.kind ~= "prey" and not sim:_is_engulfing(enemy)
+    end)
+end
+
 local function run(seed, scenario, horizon_seconds)
     horizon_seconds = horizon_seconds or HORIZON_SECONDS
     local branch, starter = scenario.form, scenario.starter
@@ -327,7 +335,7 @@ local function run(seed, scenario, horizon_seconds)
                 local target=sim:_nearest(110,function(e) return not e.captured and sim:_can_be_absorbed(e) end)
                 if target then sim:activate_form_ability(target.pos.x-sim.player.x,target.pos.y-sim.player.y) end
             elseif branch=="toxic" then
-                if sim:_nearest(ability_trigger_radius(sim)) then sim:activate_form_ability() end
+                if toxic_ability_target(sim) then sim:activate_form_ability() end
             else sim:activate_form_ability() end
         end
         -- Защита применяется отдельно от атаки, только после реального урона.
@@ -1484,6 +1492,8 @@ function M.run()
             attack_count=attack_count+(combined[seed].attack_uses or 0)+(attack_only[seed].attack_uses or 0)
             defense_count=defense_count+(combined[seed].defense_uses or 0)+(defense_only[seed].defense_uses or 0)
         end
+        assert(attack_count>0,"Evolved form attack ability was never activated: "..scenario.form)
+        assert(defense_count>0,"Evolved form defense ability was never activated: "..scenario.form)
         print(string.format("MICROGEN FORM ABILITY COUNTERS form=%s attack_id=%s attack_uses=%d defense_id=%s defense_uses=%d",
             scenario.form,ability.ability.id,attack_count,ability.defense.id,defense_count))
 
