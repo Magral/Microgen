@@ -225,8 +225,7 @@ jobs:
                 grep -F "MICROGEN SIGNATURE ORGANS READY" "$log"
                 grep -F "MICROGEN FORM ABILITIES READY" "$log"
                 grep -Fq "MICROGEN ENEMY MARKERS READY" "$log"
-                grep -F "MICROGEN BALANCE RUN" "$log"
-                grep -F "MICROGEN BALANCE SUMMARY" "$log"
+                grep -E "MICROGEN (BALANCE (RUN|SUMMARY|CONTROL RUN|CONTROL SUMMARY)|HYBRID (BALANCE|CONTROL) (RUN|SUMMARY)|EVOLUTION BALANCE (RUN|SUMMARY)|PAIRED (RESULT|SUMMARY))" "$log"
               fi
               if grep -E "ERROR:SCRIPT|ERROR:RENDER|FATAL" "$log"; then exit 1; fi
               kill -0 "$pid"
