@@ -302,19 +302,22 @@ end
 
 local function objective_attack_range(sim,enemy)
     local radius=sim:body_radius()
-    local contact=sim:_contact_radius(enemy,radius)
+    -- Повреждающее столкновение начинается на enemy.r + radius*0.75,
+    -- а не на меньшем радиусе блокирования тел.
+    local damage_contact=enemy.r+radius*0.75
     local form=sim.run_loadout.form
     if form=="predator" then
-        return math.max(contact+28,enemy.r+radius*1.05)
+        -- Рывок пересекает запас дистанции и всё ещё достигает рта цели.
+        return damage_contact+35
     elseif form=="toxic" then
         local rank=sim.build:rank("acid")
         local acid=(75+rank*9)*sim.build:specialization_value("acid","radius_mult")*sim:ability_scale()
-        return math.max(contact+38,math.min(enemy.r*.78+acid*.90,enemy.r+acid))
+        return math.max(damage_contact+35,math.min(enemy.r*.78+acid*.90,enemy.r+acid))
     elseif form=="colony" then
         -- Копии вращаются на радиусе 105 и наносят контактный урон в пределах r+18.
-        return math.max(contact+35,enemy.r+105+18-12)
+        return math.max(damage_contact+35,enemy.r+105+18-12)
     end
-    return contact+32
+    return damage_contact+35
 end
 
 local function progression_direction(sim,tick,cache)
@@ -373,7 +376,7 @@ local function progression_direction(sim,tick,cache)
             local score=candidate[1]*dx+candidate[2]*dy
             if enemy then
                 local next_distance=distance(next_pos,enemy.pos)
-                local safe_distance=sim:_contact_radius(enemy,r)+32
+                local safe_distance=enemy.r+r*.75+24
                 score=score-math.max(0,safe_distance-next_distance)*.14
                 if enemy.kind=="boss" and (enemy.boss_windup or 0)>0 then
                     local angle=enemy.boss_angle or 0
@@ -445,6 +448,34 @@ local function ability_trigger_radius(sim)
     local cfg=Catalog.SIGNATURE_ORGANS.osmotic_vacuole
     local field_radius=radius*(ability.radius_multiplier or 1)*(1+charges*(cfg.radius_per_charge or 0))
     return field_radius*sim.build:specialization_value("osmotic_vacuole","field_radius_mult",1)
+end
+
+local function validate_objective_combat_range()
+    for _,scenario in ipairs(EVOLUTION_SCENARIOS) do
+        local sim=Simulation.new(147,nil,nil,scenario.form,
+            {form=scenario.form,branch=scenario.form,seed=147})
+        for id,rank in pairs(scenario.seed_organs or {}) do sim.build.organs[id]=rank end
+        for id,rank in pairs(scenario.seed_adaptations or {}) do sim.build.adaptations[id]=rank end
+        sim.build._synergy_signature=nil
+        assert(sim.build:evolve(Catalog.signature_organ(scenario.form)),
+            "Combat-range fixture must reach its form evolution: "..scenario.form)
+        local boss={kind="boss",r=140,pos={x=sim.player.x+140,y=sim.player.y}}
+        local range=objective_attack_range(sim,boss)
+        local damage_contact=boss.r+sim:body_radius()*.75
+        assert(range>=damage_contact+34,
+            "Objective pilot must remain outside actual collision damage range: "..scenario.form)
+        if scenario.form=="predator" then
+            assert(range<boss.r+sim:body_radius()*1.18+64,
+                "Predator dash must still reach the boss from its safe ring")
+        elseif scenario.form=="toxic" then
+            assert(range<ability_trigger_radius(sim)+boss.r*.5,
+                "Toxic field must reach the boss from its safe ring")
+        elseif scenario.form=="colony" then
+            assert(range-105<boss.r+18,
+                "Colony copies must reach the boss from their safe ring")
+        end
+    end
+    print("MICROGEN OBJECTIVE COMBAT RANGE READY")
 end
 
 -- Катаклизм не должен тратить перезарядку на безвредную добычу или уже
@@ -1742,6 +1773,7 @@ end
 function M.run()
     validate_stage_progression()
     validate_progression_pilot()
+    validate_objective_combat_range()
     validate_form_specialization_data()
     validate_form_evolutions_and_synergies()
     validate_signature_organs()
