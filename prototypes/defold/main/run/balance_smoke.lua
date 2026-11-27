@@ -123,6 +123,9 @@ end
 
 local function direction(sim, tick)
     local player, radius = sim.player, sim:body_radius()
+    local colony_pilot=sim.run_loadout.form=="colony"
+    local threat_radius=colony_pilot and 500 or 380
+    local danger_radius=colony_pilot and 650 or 520
     local away_x, away_y, nearest_target, target_score = 0, 0, nil, math.huge
     for _, enemy in ipairs(sim.enemies) do
         if enemy.hp > 0 and not enemy.captured then
@@ -133,8 +136,8 @@ local function direction(sim, tick)
             if edible then
                 local cost = distance + (enemy.kind == "prey" and 0 or 80)
                 if cost < target_score then nearest_target, target_score = enemy, cost end
-            elseif distance < 380 then
-                local weight = (380 - distance) / 380 / math.max(40, distance)
+            elseif distance < threat_radius then
+                local weight = (threat_radius - distance) / threat_radius / math.max(40, distance)
                 away_x, away_y = away_x + dx * weight, away_y + dy * weight
             end
         end
@@ -144,8 +147,8 @@ local function direction(sim, tick)
             if not resident.dead and not resident.active then
                 local dx, dy = player.x - resident.pos.x, player.y - resident.pos.y
                 local distance = math.sqrt(dx * dx + dy * dy)
-                if distance < 380 then
-                    local weight = (380 - distance) / 380 / math.max(40, distance)
+                if distance < threat_radius then
+                    local weight = (threat_radius - distance) / threat_radius / math.max(40, distance)
                     away_x, away_y = away_x + dx * weight, away_y + dy * weight
                 end
             end
@@ -179,10 +182,12 @@ local function direction(sim, tick)
                 local next_x, next_y = nx - enemy.pos.x, ny - enemy.pos.y
                 local current_distance = math.sqrt(current_x * current_x + current_y * current_y)
                 local next_distance = math.sqrt(next_x * next_x + next_y * next_y)
-                if current_distance < 520 or next_distance < 520 then
-                    local clearance = enemy.r + radius * 0.75 + 65
-                    score = score + (next_distance - current_distance) * 0.025
-                        - math.max(0, clearance - next_distance) * 0.03
+                if current_distance < danger_radius or next_distance < danger_radius then
+                    local clearance = enemy.r + radius * 0.75 + (colony_pilot and 115 or 65)
+                    local separation_weight=colony_pilot and 0.045 or 0.025
+                    local collision_weight=colony_pilot and 0.055 or 0.03
+                    score = score + (next_distance - current_distance) * separation_weight
+                        - math.max(0, clearance - next_distance) * collision_weight
                 end
             end
         end
@@ -190,8 +195,8 @@ local function direction(sim, tick)
             if field.hostile then
                 local fx, fy = nx - field.pos.x, ny - field.pos.y
                 local distance = math.sqrt(fx * fx + fy * fy)
-                local clearance = field.r + radius * 0.65 + 60
-                score = score - math.max(0, clearance - distance) * 0.025
+                local clearance = field.r + radius * 0.65 + (colony_pilot and 90 or 60)
+                score = score - math.max(0, clearance - distance) * (colony_pilot and 0.04 or 0.025)
             end
         end
         for _, colony in ipairs(sim.world.colonies) do
@@ -853,7 +858,7 @@ local function validate_contact_balance()
         evolved.build.adaptations[cfg.passive] = cfg.passive_rank
         assert(evolved.build:evolve(cfg.organ), "Contact fixture must unlock form evolution")
         local rules = Size.profile(100, 240, 1, 0, 0, false)
-        local multiplier = form == "predator" and .75 or .55
+        local multiplier = form == "predator" and .75 or (form=="colony" and .45 or .55)
         assert(math.abs(evolved:contact_impact(rules, false) - rules.impact * multiplier) < .00001,
             "Large ordinary contact protection must match evolved form: "..form)
         assert(math.abs(evolved:contact_impact(rules, true) - rules.impact * 1.2) < .00001,
@@ -862,8 +867,14 @@ local function validate_contact_balance()
         assert(math.abs(evolved:contact_impact(below_large_rules, false) - below_large_rules.impact) < .00001,
             "Evolved protection must not affect amoebas at the large-size threshold: "..form)
         local large_label_rules = Size.profile(100, 120, 1, 0, 0, false)
-        local large_label_multiplier = form == "predator" and 1
-            or 1 - (0.15 + 0.30 * Size.smoothstep(1.08, 2.4, large_label_rules.ratio))
+        local large_label_multiplier
+        if form=="predator" then
+            large_label_multiplier=1
+        elseif form=="colony" then
+            large_label_multiplier=1-(0.20+0.35*Size.smoothstep(1.08,2.4,large_label_rules.ratio))
+        else
+            large_label_multiplier=1-(0.15+0.30*Size.smoothstep(1.08,2.4,large_label_rules.ratio))
+        end
         assert(math.abs(evolved:contact_impact(large_label_rules, false) - large_label_rules.impact * large_label_multiplier) < .00001,
             "Evolved glandular and colony forms must scale protection with large-label size: "..form)
     end
@@ -1241,12 +1252,12 @@ local function validate_form_passives()
 
     local colony = new("colony", "predator")
     local projectile = {kind = "projectile"}
-    take(colony, 10, projectile, 9.76, "Two starter copies protect")
+    take(colony, 10, projectile, 9.7, "Two starter copies protect at three percent")
     colony.build.organs.division = 4
-    take(colony, 10, projectile, 9.4, "Five copies protect at six percent")
+    take(colony, 10, projectile, 9.25, "Five copies protect at seven and a half percent")
     colony.build.specializations.division = "division_hunter_buds"
     assert(colony:active_clone_count() == 6, "Existing specialization still grants sixth copy")
-    take(colony, 10, projectile, 9.4, "Sixth copy cannot exceed defense cap")
+    take(colony, 10, projectile, 9.25, "Sixth copy cannot exceed defense cap")
     colony.build.adaptations.armor = 6
     take(colony, 10, projectile, 4, "Colony and armor obey shared cap")
     colony.build.adaptations.armor = nil
@@ -1408,7 +1419,7 @@ local function validate_form_abilities()
     colony.build.organs.division=4
     local base_clones=#colony:clone_positions()
     assert(colony:activate_form_defense(),"Living bastion activates")
-    assert(colony.cooldowns.colony_bastion_active==8 and colony.colony_bastion_hp==colony.max_hp*.55
+    assert(colony.cooldowns.colony_bastion_active==8 and colony.colony_bastion_hp==colony.max_hp*.70
         and colony.cooldowns.special_defense==80,"Living bastion has limited durability and long cooldown")
     assert(colony:activate_form_ability(),"Great swarm activates")
     assert(colony.cooldowns.colony_swarm_active==10 and colony.cooldowns.special_attack==65
@@ -1426,7 +1437,7 @@ local function validate_form_abilities()
     local swarm_clone_damage=colony_swarm:hit_enemy(swarm_target,10,"division")
     near(swarm_clone_damage,base_clone_damage*1.60,"Great swarm increases real clone damage by 60%")
     local restored_colony=assert(Simulation.restore(colony:snapshot()))
-    near(restored_colony.colony_bastion_hp,colony.max_hp*.55,"Living bastion durability survives checkpoint")
+    near(restored_colony.colony_bastion_hp,colony.max_hp*.70,"Living bastion durability survives checkpoint")
     assert(restored_colony.cooldowns.colony_bastion_active==8 and restored_colony.cooldowns.colony_swarm_active==10
         and restored_colony.cooldowns.special_attack==65 and restored_colony.cooldowns.special_defense==80
         and #restored_colony:clone_positions()==base_clones+2,
@@ -1434,7 +1445,7 @@ local function validate_form_abilities()
     restored_colony.stage_transition=true
     restored_colony.pending_stage_seed=restored_colony.world.seed_value+100
     assert(restored_colony:enter_next_stage(),"Colony can enter next stage")
-    near(restored_colony.colony_bastion_hp,colony.max_hp*.55,"Living bastion durability survives stage transition")
+    near(restored_colony.colony_bastion_hp,colony.max_hp*.70,"Living bastion durability survives stage transition")
     assert(restored_colony.cooldowns.colony_bastion_active==8 and restored_colony.cooldowns.colony_swarm_active==10
         and restored_colony.cooldowns.special_attack==65 and restored_colony.cooldowns.special_defense==80,
         "Colony shield, swarm and both cooldowns survive stage transition")
@@ -1447,7 +1458,7 @@ local function validate_form_abilities()
     local expected1,absorbed1=expected_bastion_damage(20)
     colony:hurt_player(20,{kind="projectile",name="Проверка бастиона"})
     near(colony.hp,hp_before-expected1,"Living bastion absorbs 85% of first hit")
-    near(colony.colony_bastion_hp,colony.max_hp*.55-absorbed1,"Living bastion spends limited durability")
+    near(colony.colony_bastion_hp,colony.max_hp*.70-absorbed1,"Living bastion spends limited durability")
     local hp_before_second=colony.hp
     local expected2=expected_bastion_damage(1000)
     colony:hurt_player(1000,{kind="projectile",name="Проверка бастиона"})
@@ -1468,9 +1479,9 @@ local function validate_form_abilities()
     assert(hollow_colony:form_defense().id=="colony_living_bastion"
         and not hollow_colony:form_defense_ready() and not hollow_colony:activate_form_defense(),
         "Living bastion remains unlocked but cannot activate without living copies")
-    assert(Catalog.FORM_SPECIALIZATIONS.colony.defense.capacity_fraction==.55,
+    assert(Catalog.FORM_SPECIALIZATIONS.colony.defense.capacity_fraction==.70,
         "Colony bastion capacity is raised to 55 percent after balance review")
-    assert(Catalog.FORM_SPECIALIZATIONS.colony.evolution.maximum_reduction==.09,
+    assert(Catalog.FORM_SPECIALIZATIONS.colony.evolution.maximum_reduction==.12,
         "Collective mind membrane reduction cap is raised to nine percent")
     print("MICROGEN FORM ULTIMATE ABILITIES READY")
     print("MICROGEN COLONY BALANCE READY")
@@ -1645,7 +1656,7 @@ local function validate_form_evolutions_and_synergies()
     evolve(colony,"synaptic_node","armor")
     colony.build.organs.division=4
     near(colony:form_ability().cooldown,65,"Great swarm cooldown")
-    near(colony:damage_reduction({kind="projectile"}),colony.build:passive("armor")+.09,"Collective defense")
+    near(colony:damage_reduction({kind="projectile"}),colony.build:passive("armor")+.12,"Collective defense")
     colony.build.adaptations.armor=6
     near(colony:damage_reduction({kind="projectile"}),.60,"Armor cap")
     equipment_roundtrip(colony,"synaptic_node","armor","colony")

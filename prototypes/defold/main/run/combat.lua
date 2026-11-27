@@ -32,12 +32,14 @@ function Combat:contact_impact(rules, elite)
     if elite then return rules.impact * 1.2 end
     local reduction = 0.25 * Size.smoothstep(1.25, 2.4, rules.ratio)
     local evolution = self:form_evolution()
-    -- Эти формы получают базовую защиту от контакта с амёбами крупнее организма.
-    -- Порог 1.08 совпадает с игровой классификацией «Крупная амёба»;
-    -- к соотношению радиусов 2.4 защита плавно достигает 45%.
-    if evolution and (evolution.id == "living_reactor" or evolution.id == "collective_mind")
-        and rules.ratio > 1.08 then
-        reduction = 0.15 + 0.30 * Size.smoothstep(1.08, 2.4, rules.ratio)
+    -- Высшие формы получают защиту от обычных крупных амёб; элитные столкновения не меняются.
+    -- Железистая мембрана достигает 45%, коллективная — 55% при отношении радиусов 2.4.
+    if evolution and rules.ratio > 1.08 then
+        if evolution.id == "collective_mind" then
+            reduction = 0.20 + 0.35 * Size.smoothstep(1.08, 2.4, rules.ratio)
+        elseif evolution.id == "living_reactor" then
+            reduction = 0.15 + 0.30 * Size.smoothstep(1.08, 2.4, rules.ratio)
+        end
     end
     return rules.impact * (1 - reduction)
 end

@@ -110,17 +110,17 @@ M.FORM_SPECIALIZATIONS = {
         },
         defense = {
             id = "colony_living_bastion", name = "Живой бастион", cooldown = 80, icon = "barrier", color = "c5a0f5",
-            desc = "Копии окружают организм и поглощают до 85% входящего урона, пока хватает прочности оболочки.",
-            duration = 8, damage_absorption = 0.85, capacity_fraction = 0.55, active_key = "colony_bastion_active",
+            desc = "Копии окружают организм и поглощают до 85% входящего урона; прочность оболочки — 70% максимального здоровья.",
+            duration = 8, damage_absorption = 0.85, capacity_fraction = 0.70, active_key = "colony_bastion_active",
         },
         passive = {
-            id = "shared_membrane", name = "Общая мембрана", desc = "Защита +1,2% за копию, до 6%; высшая эволюция повышает предел до 9%.",
-            reduction_per_clone = 0.012, maximum_clones = 5, maximum_reduction = 0.06,
+            id = "shared_membrane", name = "Общая мембрана", desc = "Защита +1,5% за копию, до 7,5%; высшая эволюция повышает предел до 12%.",
+            reduction_per_clone = 0.015, maximum_clones = 5, maximum_reduction = 0.075,
         },
         evolution = {
             id = "collective_mind", name = "Коллективный разум",
             organ = "synaptic_node", organ_rank = 6, passive = "armor", passive_rank = 3,
-            maximum_reduction = 0.09,
+            maximum_reduction = 0.12,
         },
     },
 }
