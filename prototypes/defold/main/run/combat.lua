@@ -91,7 +91,7 @@ function Combat:heal_player(amount)
     Stats.record_heal(self.combat_stats, actual)
     for _, effect in ipairs(self.effects) do
         if effect.type == "heal" and effect.life > 0.65 then
-            effect.amount = effect.amount + actual
+            effect.amount = (effect.amount or 0) + actual
             return
         end
     end
@@ -306,7 +306,7 @@ function Combat:activate_form_defense()
     if form=="predator" then
         self:heal_player(self.max_hp*defense.heal_fraction)
         self.cooldowns.predator_escape_active=defense.duration
-        self:_effect("heal",self.player,self:body_radius()*2.2,.9)
+        self:_effect("pulse",self.player,self:body_radius()*2.2,.9)
     elseif form=="toxic" then
         self.cooldowns.toxic_cocoon_active=defense.duration
         local radius=self:body_radius()*defense.clear_radius_multiplier
