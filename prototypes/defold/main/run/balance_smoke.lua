@@ -809,6 +809,64 @@ local function toxic_ability_target(sim)
     end)
 end
 
+-- Измеряем ресурсы с карты отдельно от опыта за врагов,
+-- регенерации и покупок. Счётчики существуют только в smoke test.
+local function install_pickup_metrics(sim)
+    local metrics={dna=0,dna_xp=0,early_dna=0,heal=0,heal_hp=0}
+    local collecting=false
+    local collect,gain_xp,heal_pickup=sim._collect,sim.gain_xp,sim._heal_pickup
+    sim._collect=function(self,dt)
+        collecting=true
+        collect(self,dt)
+        collecting=false
+    end
+    sim.gain_xp=function(self,amount)
+        gain_xp(self,amount)
+        if collecting then
+            metrics.dna=metrics.dna+1
+            metrics.dna_xp=metrics.dna_xp+amount
+            if self.elapsed<=120 then metrics.early_dna=metrics.early_dna+1 end
+        end
+    end
+    sim._heal_pickup=function(self,amount)
+        local before=self.hp
+        heal_pickup(self,amount)
+        if collecting and self.hp>before then
+            metrics.heal=metrics.heal+1
+            metrics.heal_hp=metrics.heal_hp+self.hp-before
+        end
+    end
+    return metrics
+end
+
+local function validate_pickup_metrics()
+    local sim=Simulation.new(147,nil,nil,"colony",{form="colony",branch="colony",seed=147})
+    local metrics=install_pickup_metrics(sim)
+    sim.hp=sim.max_hp*.5
+    sim:gain_xp(1)
+    sim:_heal_pickup(1)
+    assert(metrics.dna==0 and metrics.heal==0,"Non-pickup XP and healing must not count")
+    local function pickup(kind,amount)
+        return {type=kind,amount=amount,pos={x=sim.player.x,y=sim.player.y},
+            captured=true,internal=true,entry_angle=0,progress=.9,duration=.5}
+    end
+    sim.pickups={pickup("dna",3),pickup("heal",10)}
+    local hp_before=sim.hp
+    sim:_collect(.1)
+    assert(#sim.pickups==0 and metrics.dna==1 and metrics.dna_xp==3 and metrics.early_dna==1,
+        "Collected DNA must count exactly once and as early growth")
+    assert(metrics.heal==1 and metrics.heal_hp>0 and math.abs(metrics.heal_hp-(sim.hp-hp_before))<.00001,
+        "Pickup healing must report actual restored HP")
+    sim:_collect(.1)
+    assert(metrics.dna==1 and metrics.heal==1,"Collected pickups must not count twice")
+    sim.elapsed=121
+    sim.pickups={pickup("dna",2)}
+    sim:_collect(.1)
+    assert(metrics.dna==2 and metrics.dna_xp==5 and metrics.early_dna==1,
+        "Late DNA must not count as early growth")
+    print("MICROGEN PICKUP METRICS READY")
+end
+
 local function run(seed, scenario, horizon_seconds)
     horizon_seconds = horizon_seconds or HORIZON_SECONDS
     local branch, starter = scenario.form, scenario.starter
@@ -850,6 +908,7 @@ local function run(seed, scenario, horizon_seconds)
         assert(not Util.index(sim.build:active_synergies(),scenario.disabled_synergy),
             "Hybrid control must actually disable "..scenario.disabled_synergy)
     end
+    local pickups=install_pickup_metrics(sim)
     local synergy_triggers={acid_bite=0,enzyme_target=0,shared_shell=0}
     local track_acid=Util.index(scenario.expected_synergies or {},"acid_bite")~=nil or scenario.disabled_synergy=="acid_bite"
     local track_enzyme=Util.index(scenario.expected_synergies or {},"enzyme_target")~=nil or scenario.disabled_synergy=="enzyme_target"
@@ -1090,21 +1149,23 @@ local function run(seed, scenario, horizon_seconds)
             "Disabled synergy unexpectedly affected combat: "..scenario.disabled_synergy)
     end
     if scenario.progression then
-        print(string.format("MICROGEN OBJECTIVE RESULT form=%s seed=%d build=%s nests=%d minibosses=%d boss_damage=%.1f boss_hp=%.1f boss_healing=%.1f boss_regen=%d exposed_damage=%.1f boss_contact=%.1f miniboss_contact=%.1f clone_damage=%.1f clone_hits=%d swarm_damage=%.1f swarm_hits=%d reached_two=%d seconds=%.1f contact_damage=%.1f contact_hits=%d attack_uses=%d defense_uses=%d outcome=%s",
+        print(string.format("MICROGEN OBJECTIVE RESULT form=%s seed=%d build=%s nests=%d minibosses=%d boss_damage=%.1f boss_hp=%.1f boss_healing=%.1f boss_regen=%d exposed_damage=%.1f boss_contact=%.1f miniboss_contact=%.1f clone_damage=%.1f clone_hits=%d swarm_damage=%.1f swarm_hits=%d reached_two=%d seconds=%.1f contact_damage=%.1f contact_hits=%d attack_uses=%d defense_uses=%d dna_pickups=%d dna_xp=%.1f early_dna=%d heal_pickups=%d pickup_heal_hp=%.1f outcome=%s",
             branch,seed,scenario.evolve and "evolved" or "base",nests_seen,minibosses,boss_damage,boss_hp_remaining,boss_healing,boss_regen and 1 or 0,
             exposed_damage,boss_contact_damage,miniboss_contact_damage,clone_damage,clone_hits,clone_swarm_damage,clone_swarm_hits,
             sim.stage_index>=2 and 1 or 0,sim.elapsed,contact_damage,contact_hits,attack_uses,defense_uses,
+            pickups.dna,pickups.dna_xp,pickups.early_dna,pickups.heal,pickups.heal_hp,
             sim.stage_index>=2 and "stage2" or (sim.outcome=="" and "timeout" or sim.outcome)))
     end
     local marker=scenario.run_marker or "MICROGEN BALANCE RUN"
     print(string.format(
-        "%s seed=%d branch=%s starter=%s signature=%s signature_rank=%d scenario=%s pilot=%s seconds=%.1f stage=%d level=%d kills=%d absorbed=%d hp=%.1f damage_dealt=%.1f damage_taken=%.1f contact_damage=%.1f contact_hits=%d clone_damage=%.1f clone_hits=%d swarm_damage=%.1f swarm_hits=%d damage_blocked=%.1f healed=%.1f attack_uses=%d defense_uses=%d first_hit=%s last_hit=%s damage_sources=%s toxin_sources=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d synergy_triggers=acid:%d,enzyme:%d,shell:%d",
+        "%s seed=%d branch=%s starter=%s signature=%s signature_rank=%d scenario=%s pilot=%s seconds=%.1f stage=%d level=%d kills=%d absorbed=%d hp=%.1f damage_dealt=%.1f damage_taken=%.1f contact_damage=%.1f contact_hits=%d clone_damage=%.1f clone_hits=%d swarm_damage=%.1f swarm_hits=%d damage_blocked=%.1f healed=%.1f attack_uses=%d defense_uses=%d first_hit=%s last_hit=%s damage_sources=%s toxin_sources=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d synergy_triggers=acid:%d,enzyme:%d,shell:%d dna_pickups=%d dna_xp=%.1f early_dna=%d heal_pickups=%d pickup_heal_hp=%.1f",
         marker,seed,branch,starter,signature,sim.build:rank(signature),scenario.name or "base",scenario.progression and "objective" or "kite",sim.elapsed,sim.stage_index,sim.level,sim.kills,
         sim.absorbed or 0,sim.hp,sim.combat_stats.damage_dealt,sim.combat_stats.damage_taken,contact_damage,contact_hits,
         clone_damage,clone_hits,clone_swarm_damage,clone_swarm_hits,
         sim.combat_stats.blocked,sim.combat_stats.healed,attack_uses,defense_uses,first_hit or "none",cause,source_summary,toxin_source_summary,
         sim.outcome=="" and "alive" or sim.outcome,steps,max_enemies,max_fields,max_remains,
-        synergy_triggers.acid_bite,synergy_triggers.enzyme_target,synergy_triggers.shared_shell))
+        synergy_triggers.acid_bite,synergy_triggers.enzyme_target,synergy_triggers.shared_shell,
+        pickups.dna,pickups.dna_xp,pickups.early_dna,pickups.heal,pickups.heal_hp))
     return {alive=sim.outcome=="",seconds=sim.elapsed,hp=sim.hp,level=sim.level,kills=sim.kills,
         absorbed=sim.absorbed or 0,stage=sim.stage_index,damage_dealt=sim.combat_stats.damage_dealt,
         damage_taken=sim.combat_stats.damage_taken,contact_damage=contact_damage,contact_hits=contact_hits,
@@ -2166,6 +2227,7 @@ local function validate_stage_progression()
 end
 
 function M.run()
+    validate_pickup_metrics()
     validate_colony_combat_pilot()
     validate_toxic_combat_pilot()
     validate_stage_progression()
