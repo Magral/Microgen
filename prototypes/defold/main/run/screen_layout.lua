@@ -31,6 +31,12 @@ function M.ability_slot(left,right,top,bottom)
     return right-144,bottom+174,288,118
 end
 
+-- Защитная способность располагается слева, атакующая способность формы — справа.
+function M.defensive_slot(left,right,top,bottom)
+    if right-left < 600 or top-bottom < 530 then return nil end
+    return left+144,bottom+174,288,118
+end
+
 function M.test()
     local function near(actual, expected)
         assert(math.abs(actual - expected) < 0.001,
@@ -84,8 +90,12 @@ function M.test()
     near(bottom, 33)
 
     local x,y,w,h = M.ability_slot(90,2346,1007,65)
-    assert(x+w/2<=2346 and y-h/2>65+85 and y+h/2<1007-291,"Ability slot overlaps HUD")
+    assert(x+w/2<=2346 and y-h/2>65+85 and y+h/2<1007-291,"Attack ability slot overlaps HUD")
+    local dx,dy,dw,dh = M.defensive_slot(90,2346,1007,65)
+    assert(dx-dw/2>=90 and dy-dh/2>65+85 and dy+dh/2<1007-291,
+        "Defensive ability slot must stay on the left inside the safe area")
     assert(not M.ability_slot(1230,1230,540,540),"Collapsed area must hide ability")
+    assert(not M.defensive_slot(1230,1230,540,540),"Collapsed area must hide defensive ability")
     return true
 end
 
