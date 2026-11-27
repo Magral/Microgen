@@ -30,13 +30,15 @@ end
 -- Урон мини-боссов и боссов сохраняет исходный множитель.
 function Combat:contact_impact(rules, elite)
     if elite then return rules.impact * 1.2 end
-    local reduction = 0.25
+    local reduction = 0.25 * Size.smoothstep(1.25, 2.4, rules.ratio)
     local evolution = self:form_evolution()
-    -- Высшие железистая и колониальная формы получают запас времени для выхода из контакта.
+    -- Эти формы получают базовую защиту от контакта с амёбами крупнее организма.
+    -- Порог 1.08 совпадает с игровой классификацией «Крупная амёба»;
+    -- к соотношению радиусов 2.4 защита плавно достигает 45%.
     if evolution and (evolution.id == "living_reactor" or evolution.id == "collective_mind") then
-        reduction = 0.45
+        reduction = 0.15 + 0.30 * Size.smoothstep(1.08, 2.4, rules.ratio)
     end
-    return rules.impact * (1 - reduction * Size.smoothstep(1.25, 2.4, rules.ratio))
+    return rules.impact * (1 - reduction)
 end
 
 -- Обычные враги получают полное замедление катаклизма, элитные сохраняют сопротивление.
