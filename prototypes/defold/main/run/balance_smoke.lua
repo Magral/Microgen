@@ -1577,19 +1577,19 @@ local function validate_form_passives()
     enemy.enzyme_time = 2
     toxic.fields = {}
     toxic:_field(enemy.pos, 48, 6, 2, "enemy_toxin", true)
-    take(toxic, 10, contact, 10, "Enemy toxin and enzymes alone do not qualify")
+    take(toxic, 10, contact, 9.4, "Enemy toxin and enzymes alone do not qualify for poison bonus")
     toxic:_field(enemy.pos, 48, 6, 2, "poison")
     toxic:_field(enemy.pos, 48, 6, 2, "spore")
-    take(toxic, 10, contact, 9.2, "Overlapping player poison does not stack defense")
+    take(toxic, 10, contact, 8.2, "Overlapping player poison does not stack defense")
     enemy.infect = 2
-    take(toxic, 10, contact, 9.2, "Infection and fields do not stack defense")
+    take(toxic, 10, contact, 8.2, "Infection and fields do not stack defense")
     enemy.infect = 0
     toxic.fields[2].life, toxic.fields[3].life = 0, 0
-    take(toxic, 10, contact, 10, "Expired player poison does not qualify")
+    take(toxic, 10, contact, 9.4, "Expired player poison does not qualify for poison bonus")
     toxic.build.organs.acid = 1
-    take(toxic, 10, contact, 9.2, "Active acid aura counts as player poison")
-    toxic.build.adaptations.armor = 4
-    take(toxic, 10, contact, 4.4, "Toxic defense adds to armor")
+    take(toxic, 10, contact, 8.2, "Active acid aura counts as player poison")
+    toxic.build.adaptations.armor = 3
+    take(toxic, 10, contact, 4.6, "Toxic defense adds to armor")
     toxic.build.adaptations.armor = 6
     take(toxic, 10, contact, 4, "Toxic defense obeys 60 percent cap")
 
