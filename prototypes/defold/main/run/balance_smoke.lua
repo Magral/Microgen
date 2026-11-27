@@ -203,6 +203,148 @@ local function direction(sim, tick)
     return best_x, best_y
 end
 
+-- Маршрутный пилот используется только в отдельной матрице прохождения.
+-- Поиск пути по сетке мира; никакого изменения координат или здоровья объектов.
+local function route_waypoint(world, from, goal, clearance, cache)
+    local tile=world.tile_size
+    local w,h=world.w,world.h
+    local function cell(p)
+        local x,y=math.floor(p.x/tile),math.floor(p.y/tile)
+        if x<0 or y<0 or x>=w or y>=h then return nil end
+        return y*w+x+1
+    end
+    local function center(i)
+        return {x=((i-1)%w+.5)*tile,y=(math.floor((i-1)/w)+.5)*tile}
+    end
+    local start,finish=cell(from),cell(goal)
+    if not start or not finish then return nil end
+    if start==finish then return goal end
+    if cache.world==world and cache.start==start and cache.finish==finish and cache.clearance==clearance then
+        return cache.next
+    end
+    local queue,seen,first={start},{[start]=true},{}
+    local head=1
+    local next_point
+    while head<=#queue do
+        local current=queue[head];head=head+1
+        if current==finish then next_point=center(first[current]);break end
+        local x,y=(current-1)%w,math.floor((current-1)/w)
+        for _,delta in ipairs({{1,0},{0,1},{-1,0},{0,-1}}) do
+            local nx,ny=x+delta[1],y+delta[2]
+            local id=ny*w+nx+1
+            if nx>=0 and ny>=0 and nx<w and ny<h and not seen[id] then
+                seen[id]=true
+                local p=center(id)
+                if world:walkable(p.x,p.y,clearance) then
+                    first[id]=first[current] or id
+                    queue[#queue+1]=id
+                end
+            end
+        end
+    end
+    cache.world,cache.start,cache.finish,cache.clearance,cache.next=world,start,finish,clearance,next_point
+    return next_point
+end
+
+local function distance(a,b)
+    return math.sqrt((a.x-b.x)^2+(a.y-b.y)^2)
+end
+
+local function progression_target(sim)
+    local best,best_d
+    for _,enemy in ipairs(sim.enemies) do
+        if enemy.hp>0 and not enemy.captured and (enemy.kind=="boss" or enemy.kind=="miniboss") then
+            local d=distance(sim.player,enemy.pos)
+            if not best or d<best_d then best,best_d=enemy,d end
+        end
+    end
+    if best then return best.pos,best,best.kind end
+    for _,nest in ipairs(sim.world.nests) do
+        if not nest.used then
+            local d=distance(sim.player,nest.pos)
+            if not best or d<best_d then best,best_d=nest,d end
+        end
+    end
+    if best then return best.pos,nil,"nest" end
+    if sim.boss_spawned then return sim.boss_marker,nil,"boss_marker" end
+    return nil,nil,"search"
+end
+
+local function progression_direction(sim,tick,cache)
+    local goal,enemy,kind=progression_target(sim)
+    if not goal then return direction(sim,tick) end
+    local p,r=sim.player,sim:body_radius()
+    local clearance=math.min(26,r*.65)
+    local d=distance(p,goal)
+    local dx,dy=0,0
+    -- В пределах боя держим рабочую дистанцию органов и обходим телеграф.
+    local reach=enemy and (enemy.r+(sim.run_loadout.form=="colony" and 90 or r*.95)) or 0
+    local direct=true
+    local samples=math.max(1,math.ceil(d/30))
+    if d>450 then direct=false else
+        for i=1,samples do
+            if not sim.world:walkable(p.x+(goal.x-p.x)*i/samples,p.y+(goal.y-p.y)*i/samples,clearance) then
+                direct=false;break
+            end
+        end
+    end
+    if enemy and direct and d<reach+90 then
+        local ux,uy=(goal.x-p.x)/math.max(d,.001),(goal.y-p.y)/math.max(d,.001)
+        local radial=math.max(-1,math.min(1,(d-reach)/25))
+        local tangent=.24
+        if enemy.kind=="boss" and (enemy.boss_windup or 0)>0 then
+            tangent=1;radial=math.min(0,radial)
+        elseif enemy.kind=="boss" and (enemy.boss_exposed or 0)>0 then
+            radial=math.max(radial,.35);tangent=.1
+        end
+        dx,dy=ux*radial-uy*tangent,uy*radial+ux*tangent
+    else
+        local waypoint=direct and goal or route_waypoint(sim.world,p,goal,clearance,cache)
+        if not waypoint then return direction(sim,tick) end
+        dx,dy=waypoint.x-p.x,waypoint.y-p.y
+    end
+    local len=math.sqrt(dx*dx+dy*dy)
+    if len>.001 then dx,dy=dx/len,dy/len end
+    local best_x,best_y,best_score=0,0,-math.huge
+    for _,candidate in ipairs(DIRECTIONS) do
+        local nx,ny=p.x+candidate[1]*22,p.y+candidate[2]*22
+        if sim.world:walkable(nx,ny,clearance) then
+            local next_pos={x=nx,y=ny}
+            local score=candidate[1]*dx+candidate[2]*dy
+            for _,other in ipairs(sim.enemies) do
+                if other~=enemy and other.hp>0 and not other.captured and other.kind~="prey" then
+                    score=score-math.max(0,other.r+r*.75+35-distance(next_pos,other.pos))*.035
+                end
+            end
+            for _,field in ipairs(sim.fields) do
+                if field.hostile then score=score-math.max(0,field.r+r*.65+20-distance(next_pos,field.pos))*.045 end
+            end
+            for _,shot in ipairs(sim.shots) do
+                if shot.hostile then
+                    local future={x=shot.pos.x+shot.vel.x*.22,y=shot.pos.y+shot.vel.y*.22}
+                    score=score-math.max(0,r*.78+22-distance(next_pos,future))*.09
+                end
+            end
+            if score>best_score then best_x,best_y,best_score=candidate[1],candidate[2],score end
+        end
+    end
+    return best_x,best_y
+end
+
+local function validate_progression_pilot()
+    for _,seed in ipairs(SPECIALIZATION_SEEDS) do
+        local sim=Simulation.new(seed,nil,nil,"colony",{form="colony",branch="colony",seed=seed})
+        local p=sim.player
+        for _,nest in ipairs(sim.world.nests) do
+            assert(route_waypoint(sim.world,p,nest.pos,14,{}),"No walkable route to nest")
+        end
+        assert(route_waypoint(sim.world,p,sim.world.boss_pos,14,{}),"No walkable route to boss")
+        local goal,enemy,kind=progression_target(sim)
+        assert(goal and not enemy and kind=="nest","Progression pilot must seek undiscovered nests")
+    end
+    print("MICROGEN OBJECTIVE PILOT READY")
+end
+
 -- Катаклизм применяется на входе врагов в фактический радиус поля,
 -- а не после того, как они подошли вплотную к организму.
 local function ability_trigger_radius(sim)
@@ -324,17 +466,38 @@ local function run(seed, scenario, horizon_seconds)
         end
     end
 
+    local pilot_cache={}
+    local nests_seen,minibosses,boss_damage,exposed_damage=0,0,0,0
+    if scenario.progression then
+        local original_hit=sim.hit_enemy
+        sim.hit_enemy=function(self,enemy,...)
+            local exposed=(enemy.boss_exposed or 0)>0
+            local dealt=original_hit(self,enemy,...)
+            if enemy.kind=="boss" then
+                boss_damage=boss_damage+dealt
+                if exposed then exposed_damage=exposed_damage+dealt end
+            end
+            return dealt
+        end
+    end
     for tick = 1, horizon_seconds * 60 do
-        if sim.outcome ~= "" then break end
+        if sim.outcome ~= "" or (scenario.progression and sim.stage_index>=2) then break end
         settle_stage(sim)
         settle_levels(sim)
         settle_rewards(sim)
 
-        local move_x, move_y = direction(sim, tick)
+        local move_x, move_y
+        if scenario.progression then move_x,move_y=progression_direction(sim,tick,pilot_cache)
+        else move_x,move_y=direction(sim,tick) end
         local health_before = sim.hp
         if scenario.use_ability ~= false and sim:form_ability_ready() and tick % 30 == 0 then
             if branch=="predator" then
                 local target=sim:_nearest(110,function(e) return not e.captured and sim:_can_be_absorbed(e) end)
+                if scenario.progression then
+                    local _,elite=progression_target(sim)
+                    if elite and distance(sim.player,elite.pos)<sim:body_radius()+elite.r+64
+                        and (elite.kind~="boss" or (elite.boss_exposed or 0)>0) then target=elite end
+                end
                 if target then sim:activate_form_ability(target.pos.x-sim.player.x,target.pos.y-sim.player.y) end
             elseif branch=="toxic" then
                 if toxic_ability_target(sim) then sim:activate_form_ability() end
@@ -347,6 +510,12 @@ local function run(seed, scenario, horizon_seconds)
             sim:activate_form_defense()
         end
         sim:step(STEP, move_x, move_y)
+        if scenario.progression then
+            local visited=0
+            for _,nest in ipairs(sim.world.nests) do if nest.used then visited=visited+1 end end
+            nests_seen=math.max(nests_seen,visited)
+            minibosses=math.max(minibosses,sim.minibosses_defeated)
+        end
         if not first_hit and sim.hp < health_before then
             local hit = sim.last_damage
             if hit then first_hit = string.format("%.1f/%s/%s", hit.time, hit.kind, hit.name) end
@@ -411,10 +580,16 @@ local function run(seed, scenario, horizon_seconds)
         assert(synergy_triggers[scenario.disabled_synergy]==0,
             "Disabled synergy unexpectedly affected combat: "..scenario.disabled_synergy)
     end
+    if scenario.progression then
+        print(string.format("MICROGEN OBJECTIVE RESULT form=%s seed=%d build=%s nests=%d minibosses=%d boss_damage=%.1f exposed_damage=%.1f reached_two=%d seconds=%.1f contact_damage=%.1f contact_hits=%d attack_uses=%d defense_uses=%d outcome=%s",
+            branch,seed,scenario.evolve and "evolved" or "base",nests_seen,minibosses,boss_damage,exposed_damage,
+            sim.stage_index>=2 and 1 or 0,sim.elapsed,contact_damage,contact_hits,attack_uses,defense_uses,
+            sim.stage_index>=2 and "stage2" or (sim.outcome=="" and "timeout" or sim.outcome)))
+    end
     local marker=scenario.run_marker or "MICROGEN BALANCE RUN"
     print(string.format(
-        "%s seed=%d branch=%s starter=%s signature=%s signature_rank=%d scenario=%s pilot=kite seconds=%.1f stage=%d level=%d kills=%d absorbed=%d hp=%.1f damage_dealt=%.1f damage_taken=%.1f contact_damage=%.1f contact_hits=%d damage_blocked=%.1f healed=%.1f attack_uses=%d defense_uses=%d first_hit=%s last_hit=%s damage_sources=%s toxin_sources=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d synergy_triggers=acid:%d,enzyme:%d,shell:%d",
-        marker,seed,branch,starter,signature,sim.build:rank(signature),scenario.name or "base",sim.elapsed,sim.stage_index,sim.level,sim.kills,
+        "%s seed=%d branch=%s starter=%s signature=%s signature_rank=%d scenario=%s pilot=%s seconds=%.1f stage=%d level=%d kills=%d absorbed=%d hp=%.1f damage_dealt=%.1f damage_taken=%.1f contact_damage=%.1f contact_hits=%d damage_blocked=%.1f healed=%.1f attack_uses=%d defense_uses=%d first_hit=%s last_hit=%s damage_sources=%s toxin_sources=%s outcome=%s steps=%d peak_enemies=%d peak_fields=%d peak_remains=%d synergy_triggers=acid:%d,enzyme:%d,shell:%d",
+        marker,seed,branch,starter,signature,sim.build:rank(signature),scenario.name or "base",scenario.progression and "objective" or "kite",sim.elapsed,sim.stage_index,sim.level,sim.kills,
         sim.absorbed or 0,sim.hp,sim.combat_stats.damage_dealt,sim.combat_stats.damage_taken,contact_damage,contact_hits,
         sim.combat_stats.blocked,sim.combat_stats.healed,attack_uses,defense_uses,first_hit or "none",cause,source_summary,toxin_source_summary,
         sim.outcome=="" and "alive" or sim.outcome,steps,max_enemies,max_fields,max_remains,
@@ -1429,6 +1604,7 @@ end
 
 function M.run()
     validate_stage_progression()
+    validate_progression_pilot()
     validate_form_specialization_data()
     validate_form_evolutions_and_synergies()
     validate_signature_organs()
@@ -1516,6 +1692,22 @@ function M.run()
         local neither=run_batch("MICROGEN SPECIALIZATION RUN",no_abilities,SPECIALIZATION_SEEDS)
         print_pair_comparison("обе_способности_"..scenario.name,combined,neither,SPECIALIZATION_SEEDS)
     end
+    -- Не заменяем контрольную матрицу: ещё 12 честных прогонов на тех же seed.
+    -- Обычный старт и подготовленная высшая форма измеряются отдельно.
+    for _,scenario in ipairs(BRANCHES) do
+        local objective=Util.copy(scenario)
+        objective.progression=true
+        objective.name="прохождение со старта"
+        run_batch("MICROGEN OBJECTIVE RUN",objective,SPECIALIZATION_SEEDS)
+    end
+    for _,scenario in ipairs(EVOLUTION_SCENARIOS) do
+        local objective=Util.copy(scenario)
+        objective.progression=true
+        objective.evolve=true
+        objective.name="прохождение высшей формой"
+        run_batch("MICROGEN OBJECTIVE RUN",objective,SPECIALIZATION_SEEDS)
+    end
+    print("MICROGEN OBJECTIVE MATRIX READY")
     print("MICROGEN STAGE SIX BALANCE READY")
     print("MICROGEN BALANCE SMOKE READY")
 end
