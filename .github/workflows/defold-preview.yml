@@ -269,6 +269,7 @@ jobs:
                 grep -Fq "MICROGEN FORM PASSIVES READY" "$log"
                 grep -Fq "MICROGEN FORM ULTIMATE ABILITIES READY" "$log"
                 grep -Fq "MICROGEN SIGNATURE ORGANS READY" "$log"
+                grep -Fq "MICROGEN TISSUE DAMAGE CAP READY" "$log"
                 grep -Fq "MICROGEN FORM EVOLUTIONS SYNERGIES READY" "$log"
                 grep -Fq "MICROGEN STAGE SIX BALANCE READY" "$log"
                 grep -F "MICROGEN FORM EVOLUTIONS SYNERGIES READY" "$log"

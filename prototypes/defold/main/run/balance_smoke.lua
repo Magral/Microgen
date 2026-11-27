@@ -2189,6 +2189,10 @@ local function validate_form_evolutions_and_synergies()
     cap_target.tissue_budget=1
     local swarm_actual=colony:hit_enemy(cap_target,100,"division")
     near(swarm_actual,1.8,"Great swarm respects the colony form-specific tissue damage budget")
+    near(colony:hit_enemy(cap_target,100,"division"),0,
+        "Repeated clone hits cannot bypass an exhausted tissue budget")
+    near(cap_target.tissue_budget,0,"Great swarm consumes only the shared form-specific tissue budget")
+    print("MICROGEN TISSUE DAMAGE CAP READY")
 
     pred.build.organs.enzymes=1
     local marked=target(pred)
