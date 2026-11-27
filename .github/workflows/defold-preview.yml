@@ -200,7 +200,7 @@ jobs:
               }
               trap dump_on_failure EXIT
               for attempt in {1..60}; do
-                if grep -Eq "ERROR:(SCRIPT|GAMESYS)" "$log"; then exit 1; fi
+                if grep -Eq "ERROR:(SCRIPT|GAMESYS|RENDER)|FATAL" "$log"; then exit 1; fi
                 if grep -Fq "MICROGEN PREVIEW READY" "$log"; then break; fi
                 kill -0 "$pid"
                 sleep 0.2
@@ -208,7 +208,7 @@ jobs:
               for attempt in {1..4200}; do
                 # Defold keeps the process alive after some GUI script errors.
                 # Detect them directly instead of waiting for the readiness timeout.
-                if grep -Eq "ERROR:(SCRIPT|GAMESYS)" "$log"; then exit 1; fi
+                if grep -Eq "ERROR:(SCRIPT|GAMESYS|RENDER)|FATAL" "$log"; then exit 1; fi
                 ready=1
                 grep -Fq "MICROGEN MEMBRANE HIT RESPONSE READY" "$log" || ready=0
                 if [[ "$profile" == standard ]] && ! grep -Fq "MICROGEN BALANCE SMOKE READY" "$log"; then ready=0; fi
@@ -264,7 +264,7 @@ jobs:
                 grep -Fq "MICROGEN ENEMY MARKERS READY" "$log"
                 grep -E "MICROGEN (BALANCE (RUN|SUMMARY)|HYBRID (BALANCE|CONTROL) (RUN|SUMMARY)|EVOLUTION BALANCE (RUN|SUMMARY)|SPECIALIZATION (RUN|SUMMARY)|PAIRED (RESULT|SUMMARY))" "$log"
               fi
-              if grep -E "ERROR:SCRIPT|ERROR:RENDER|FATAL" "$log"; then exit 1; fi
+              if grep -Eq "ERROR:(SCRIPT|GAMESYS|RENDER)|FATAL" "$log"; then exit 1; fi
               kill -0 "$pid"
               kill -KILL "$pid" 2>/dev/null || true
               wait "$pid" 2>/dev/null || true
