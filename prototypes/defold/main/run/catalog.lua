@@ -81,7 +81,8 @@ M.FORM_SPECIALIZATIONS = {
     },
     toxic = {
         research = "toxic", branch = "toxic", signature_organ = "osmotic_vacuole",
-        attack = { sources = { acid = true, trail = true, infection = true }, damage_multiplier = 1.15 },
+        -- Усиление основного токсичного урона: кислота, ядовитый след и инфекция.
+        attack = { sources = { acid = true, trail = true, infection = true }, damage_multiplier = 1.35 },
         ability = {
             id = "toxic_cataclysm", name = "Токсический катаклизм", cooldown = 60, icon = "acid", color = "b2dd75",
             desc = "Создаёт большое кислотное поле на 8 секунд с усиленным уроном и замедлением врагов на 40%.",

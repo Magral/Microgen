@@ -1806,16 +1806,16 @@ local function validate_form_abilities()
         "Predator form increases its signature bite damage by 10%")
     near(probe_form_attack("predator","acid"),10,
         "Predator bonus does not leak into unrelated acid damage")
-    near(probe_form_attack("toxic","acid"),11.5,
-        "Toxic form increases direct acid damage by 15%")
-    near(probe_form_attack("toxic","trail"),11.5,
-        "Toxic form increases poison field damage by 15%")
-    near(probe_form_attack("toxic","infection"),11.5,
-        "Toxic form increases spore infection damage by 15%")
+    near(probe_form_attack("toxic","acid"),13.5,
+        "Toxic form increases direct acid damage by 35%")
+    near(probe_form_attack("toxic","trail"),13.5,
+        "Toxic form increases poison field damage by 35%")
+    near(probe_form_attack("toxic","infection"),13.5,
+        "Toxic form increases spore infection damage by 35%")
     near(probe_form_attack("toxic","division"),10,
         "Toxic bonus does not leak into colony clone damage")
     near(probe_form_attack("colony","division"),18,
-        "Colony form increases coordinated clone damage by 20%")
+        "Colony form increases coordinated clone damage by 80%")
     near(probe_form_attack("colony","devour"),10,
         "Colony bonus does not leak into unrelated predator bites")
 
