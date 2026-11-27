@@ -1262,7 +1262,8 @@ function Simulation.restore(saved)
     local bastion_hp=self.colony_bastion_hp
     if not finite(bastion_hp) or bastion_hp<=0 or (self.cooldowns.colony_bastion_active or 0)<=0 then
         self.colony_bastion_hp=0
-        self.cooldowns.colony_bastion_active=0
+        -- Не возвращаем чужой эффект в таблицу после его удаления выше.
+        self.cooldowns.colony_bastion_active=nil
     else
         self.colony_bastion_hp=min(bastion_hp,self.max_hp*Catalog.FORM_SPECIALIZATIONS.colony.defense.capacity_fraction)
     end
