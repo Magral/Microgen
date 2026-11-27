@@ -333,6 +333,31 @@ colony_direction=function(sim,tick)
             end
         end
     end
+    -- Раннее развитие требует не только ДНК с карты, но и поглощения добычи.
+    -- Не держим боевую орбиту вокруг уже доступной для поглощения амёбы.
+    local edible,edible_distance
+    if health>=.68 then
+        for _,enemy in ipairs(sim.enemies) do
+            if enemy.hp>0 and not enemy.captured and enemy.kind~="boss"
+                and enemy.kind~="miniboss" and enemy.r<=radius*1.25
+                and sim:_can_be_absorbed(enemy,radius) then
+                local d=distance(player,enemy.pos)
+                if d<=180 and (not edible or d<edible_distance) then
+                    local safe=true
+                    for _,other in ipairs(sim.enemies) do
+                        if other~=enemy and other.hp>0 and not other.captured and other.kind~="prey"
+                            and not sim:_can_be_absorbed(other,radius)
+                            and distance(enemy.pos,other.pos)<other.r+radius*.75+50 then
+                            safe=false
+                            break
+                        end
+                    end
+                    if safe then edible,edible_distance=enemy,d end
+                end
+            end
+        end
+    end
+    if edible then target=nil end
     if not target then
         -- Если все противники слишком велики для копий, не отдаём управление
         -- общему автопилоту: тот мог выбирать сближение с добычей прямо под телами врагов.
@@ -352,8 +377,11 @@ colony_direction=function(sim,tick)
             end
         end
         local dx,dy=0,0
+        local collecting=not supply and edible or nil
         if supply then
             dx,dy=supply.pos.x-player.x,supply.pos.y-player.y
+        elseif collecting then
+            dx,dy=collecting.pos.x-player.x,collecting.pos.y-player.y
         else
             for _,enemy in ipairs(sim.enemies) do
                 if enemy.hp>0 and not enemy.captured and enemy.kind~="prey" then
@@ -385,7 +413,7 @@ colony_direction=function(sim,tick)
             local score=candidate[1]*dx+candidate[2]*dy
             if not sim.world:walkable(nx,ny,math.min(26,radius*.65)) then score=score-100 end
             for _,enemy in ipairs(sim.enemies) do
-                if enemy.hp>0 and not enemy.captured and enemy.kind~="prey" then
+                if enemy~=collecting and enemy.hp>0 and not enemy.captured and enemy.kind~="prey" then
                     local current=distance(player,enemy.pos)
                     local next_d=distance({x=nx,y=ny},enemy.pos)
                     local safe=enemy.r+radius*.75+150
@@ -665,6 +693,14 @@ local function validate_colony_combat_pilot()
     local dna_x,dna_y=colony_direction(sim,4)
     assert(dna_x<0 and dna_x*dna_x+dna_y*dna_y>.5,
         "Early colony must collect nearby DNA instead of chasing a distant enemy")
+    sim.pickups={}
+    local prey=assert(sim:spawn_enemy({x=sim.player.x-120,y=sim.player.y},"prey"))
+    prey.r=radius*.5
+    sim.enemies={target,prey}
+    assert(sim:_can_be_absorbed(prey,radius),"Prey fixture must be edible")
+    local prey_x,prey_y=colony_direction(sim,5)
+    assert(prey_x<0 and prey_x*prey_x+prey_y*prey_y>.5,
+        "Colony pilot must absorb safe nearby prey instead of orbiting a distant target")
     print("MICROGEN COLONY COMBAT PILOT READY")
 end
 
