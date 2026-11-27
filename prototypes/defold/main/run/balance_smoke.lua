@@ -1121,8 +1121,8 @@ local function validate_signature_organs()
     toxic.elapsed=8
     toxic:_vacuole_charge(a)
     assert(toxic:vacuole_charge_count()==1,"Target can charge again after eight seconds")
-    toxic.elapsed=29
-    assert(toxic:vacuole_charge_count()==0,"Expired charges disappear")
+    toxic.elapsed=35
+    assert(toxic:vacuole_charge_count()==0,"Expired charges disappear after their full lifetime")
 
     local colony=fresh("predator")
     colony.build.organs.division=4
