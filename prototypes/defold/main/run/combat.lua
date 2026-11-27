@@ -74,8 +74,10 @@ function Combat:hit_enemy(enemy, amount, source, maximum_damage)
     local raw = max(0, amount) * (1 + build:passive("catalysis")) * build:power(source)
     -- Каждая форма усиливает именно свой базовый атакующий механизм.
     local form_attack = Catalog.form_specialization(self.run_loadout.form).attack
+    local form_attack_multiplier = 1
     if form_attack and form_attack.sources and form_attack.sources[source] then
-        raw = raw * (form_attack.damage_multiplier or 1)
+        form_attack_multiplier = max(0.01, form_attack.damage_multiplier or 1)
+        raw = raw * form_attack_multiplier
     end
     if source == "devour" then
         raw = raw * self:marked_bite_multiplier(enemy)
@@ -94,9 +96,20 @@ function Combat:hit_enemy(enemy, amount, source, maximum_damage)
     if giant and not (weak or piercing or enemy.fractured) then return 0 end
     if exposed then raw = raw * 1.6 end
     local budget = enemy.tissue_budget or enemy.max_hp * 0.01
+    -- Общий тканевой лимит раньше обрезал усиленные атаки колонии до прежнего
+    -- значения: частые попадания копий исчерпывали бюджет раньше, чем сказывался
+    -- множитель формы. Для division масштабируем доступную долю бюджета тем же
+    -- коэффициентом и списываем его пропорционально фактически нанесённому урону.
+    -- Так усиление работает и при высокой частоте попаданий, не меняя лимит
+    -- для атак других форм и источников.
+    local budget_multiplier = source == "division" and form_attack_multiplier or 1
+    if source == "division" and (self.cooldowns.colony_swarm_active or 0) > 0 then
+        budget_multiplier = budget_multiplier * (Catalog.FORM_SPECIALIZATIONS.colony.ability.clone_damage_multiplier or 1)
+    end
+    local damage_budget = budget * budget_multiplier
     local damage_cap = maximum_damage and max(0, maximum_damage) or math.huge
-    local dealt = min(enemy.hp, raw, budget, damage_cap)
-    enemy.tissue_budget = max(0, budget - dealt)
+    local dealt = min(enemy.hp, raw, damage_budget, damage_cap)
+    enemy.tissue_budget = max(0, budget - dealt / budget_multiplier)
     enemy.hp = enemy.hp - dealt
     if dealt <= 0 then return 0 end
     if enemy.hp > 0 and piercing and ratio >= 0.9 and not enemy.fractured and (weak or enemy.hp <= enemy.max_hp * 0.48) then

@@ -1799,7 +1799,7 @@ local function validate_form_abilities()
         -- Исключаем отдельную адаптацию катализатора из проверки бонуса формы.
         if form=="toxic" then sim.build.adaptations.catalysis=0 end
         local target=assert(sim:spawn_enemy(Util.copy(sim.player),"prey"))
-        target.r,target.hp,target.max_hp,target.tissue_budget=12,1000,1000,1000
+        target.r,target.hp,target.max_hp,target.tissue_budget=12,1000,1000,budget or 1000
         return sim:hit_enemy(target,10,source)
     end
     near(probe_form_attack("predator","devour"),11,
@@ -1816,6 +1816,12 @@ local function validate_form_abilities()
         "Toxic bonus does not leak into colony clone damage")
     near(probe_form_attack("colony","division"),18,
         "Colony form increases coordinated clone damage by 80%")
+    near(probe_form_attack("colony","division",1),1.8,
+        "Colony damage bonus must pass through the shared tissue budget")
+    near(probe_form_attack("colony","acid",1),1,
+        "Colony tissue-budget bonus must not affect unrelated damage sources")
+    near(probe_form_attack("predator","division",1),1,
+        "Colony tissue-budget bonus must not leak into other forms")
     near(probe_form_attack("colony","devour"),10,
         "Colony bonus does not leak into unrelated predator bites")
 
