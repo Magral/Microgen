@@ -1110,7 +1110,7 @@ local function validate_combat_checkpoint()
 end
 
 local function validate_contact_balance()
-    local sim = Simulation.new(147, nil, nil, "colony")
+    local sim = Simulation.new(147, nil, nil, "colony", {form="colony",branch="colony",seed=147})
     local function impact(ratio, elite)
         local rules = Size.profile(100, 100 * ratio, 1, 0, 0, false)
         return sim:contact_impact(rules, elite), rules.impact
@@ -1124,6 +1124,24 @@ local function validate_contact_balance()
     assert(math.abs(large - original_large * 0.75) < 0.00001 and large > medium,
         "Largest ordinary amoebas must deal 25 percent less contact damage")
     assert(math.abs(elite - original_elite * 1.2) < 0.00001, "Elite contact damage must remain unchanged")
+    local predator = Simulation.new(147, nil, nil, "predator", {form="predator",branch="predator",seed=147})
+    local predator_medium = predator:contact_impact(Size.profile(100,180,1,0,0,false),false)
+    assert(medium < predator_medium,
+        "Base colony must reduce medium-large contact damage before its evolution")
+    local toxic = Simulation.new(147,nil,nil,"toxic",{form="toxic",branch="toxic",seed=147})
+    local target = {kind="hunter",hp=100,max_hp=100,captured=false,infect=0,
+        pos={x=toxic.player.x+10000,y=toxic.player.y}}
+    assert(math.abs(toxic:damage_reduction({kind="collision",enemy=target})-0.06)<0.00001,
+        "Toxic form must reduce ordinary contact damage even before poisoning")
+    target.pos={x=toxic.player.x,y=toxic.player.y}
+    assert(math.abs(toxic:damage_reduction({kind="collision",enemy=target})-0.18)<0.00001,
+        "Toxic regulation must stack its poison-specific protection")
+    target.kind="boss"
+    assert(math.abs(toxic:damage_reduction({kind="collision",enemy=target})-0.09)<0.00001,
+        "Boss contact protection must remain lower than ordinary enemy protection")
+    assert(math.abs(toxic:damage_reduction({kind="projectile",enemy=target}))<0.00001,
+        "Toxic contact protection must not reduce projectile damage")
+    print("MICROGEN EARLY FORM DEFENSE READY")
     -- Проверяем отдельную защиту высших форм, не меняя обычные формы и элиту.
     for _, form in ipairs({"predator", "toxic", "colony"}) do
         local evolved = Simulation.new(147, nil, nil, form, {form=form, branch=form, seed=147})
