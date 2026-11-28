@@ -287,6 +287,41 @@ jobs:
             done
           ' bash "${executables[0]}" "$RUNNER_TEMP/defold-smoke"
 
+      # Внутренняя сборка для проверки на устройстве. Не создаёт тег или публичный релиз.
+      - name: Prepare verified Android candidate for Poco X8 Pro acceptance
+        if: >-
+          startsWith(github.ref, 'refs/heads/preview/defold') &&
+          github.event_name == 'push' &&
+          contains(github.event.head_commit.message, '[device-acceptance-defold]')
+        run: |
+          version=$(sed -n 's/^version = //p' prototypes/defold/game.project)
+          version_code=$(sed -n 's/^version_code = //p' prototypes/defold/game.project)
+          test "$version" = "1.5.15"
+          test "$version_code" = "165"
+          source="$RUNNER_TEMP/defold-preview/Microgen-Defold-Preview.apk"
+          target="Microgen-Defold-${version}-Poco-X8-Pro-Acceptance.apk"
+          test -s "$source"
+          cp "$source" "$RUNNER_TEMP/defold-preview/$target"
+          (cd "$RUNNER_TEMP/defold-preview" && sha256sum "$target" > DEVICE_ACCEPTANCE_SHA256SUMS.txt)
+
+      - name: Upload signed Android candidate for Poco X8 Pro acceptance
+        if: >-
+          startsWith(github.ref, 'refs/heads/preview/defold') &&
+          github.event_name == 'push' &&
+          contains(github.event.head_commit.message, '[device-acceptance-defold]')
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Microgen-Defold-1.5.15-Poco-X8-Pro-Acceptance
+          path: |
+            ${{ runner.temp }}/defold-preview/Microgen-Defold-1.5.15-Poco-X8-Pro-Acceptance.apk
+            ${{ runner.temp }}/defold-preview/DEVICE_ACCEPTANCE_SHA256SUMS.txt
+            ${{ runner.temp }}/defold-preview/APK_SIGNATURE.txt
+            ${{ runner.temp }}/defold-preview/APK_SIZE.txt
+            ${{ runner.temp }}/defold-preview/APK_MANIFEST.txt
+            ${{ runner.temp }}/defold-preview/SOURCE_COMMIT.txt
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Upload native smoke results
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
