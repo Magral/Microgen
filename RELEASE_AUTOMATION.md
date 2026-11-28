@@ -16,7 +16,7 @@
 
 ## Как запустить релиз
 
-1. Подготовить версию в `prototypes/defold/game.project` и заметки в `prototypes/defold/RELEASE_NOTES.md`.
+1. Сверить эталон обновления `STABLE_UPDATE_VERSION`, `STABLE_UPDATE_CODE` и `STABLE_UPDATE_SHA256` в `.github/workflows/defold-preview.yml` с предыдущим стабильным APK. Подготовить версию в `prototypes/defold/game.project` и заметки в `prototypes/defold/RELEASE_NOTES.md`.
 2. Создать ветку `release/defold-<версия>` от проверенного кандидата.
 3. Добавить в корень ветки файл `release-request.json`:
    ```json

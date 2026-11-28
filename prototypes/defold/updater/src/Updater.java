@@ -12,11 +12,11 @@ import java.io.File;
 import java.io.IOException;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.net.SocketTimeoutException;
 import java.net.URL;
 import javax.net.ssl.HttpsURLConnection;
 import java.security.MessageDigest;
 import java.util.Arrays;
-import java.net.SocketTimeoutException;
 import javax.net.ssl.SSLException;
 
 public final class Updater {
@@ -26,7 +26,17 @@ public final class Updater {
 
     private static final class UpdateFailure extends IOException {
         final int code;
-        UpdateFailure(int code, String message) { super(message); this.code = code; }
+        final boolean retryable;
+
+        UpdateFailure(int code, String message) {
+            this(code, message, false);
+        }
+
+        UpdateFailure(int code, String message, boolean retryable) {
+            super(message);
+            this.code = code;
+            this.retryable = retryable;
+        }
     }
 
     public static synchronized void download(Activity activity, String url, String sha, int size) {
@@ -65,28 +75,46 @@ public final class Updater {
                     : failure instanceof SocketTimeoutException ? -7
                     : failure instanceof SSLException ? -8 : -1;
                 Log.w("MicrogenUpdater", "Update failed, code " + state + ": "
-                    + failure.getClass().getSimpleName() + ": " + failure.getMessage(), failure);
+                    + failure.getClass().getSimpleName()
+                    + (failure instanceof UpdateFailure ? ": " + failure.getMessage() : ""));
             }
         }, "microgen-verify-update").start();
     }
 
-    private static void fetch(String address, File source, int size, MessageDigest digest) throws IOException {
+    static void fetch(String address, File source, int size, MessageDigest digest) throws IOException {
         URL initial = new URL(address);
-        URL url = initial;
-        if (!"github.com".equals(url.getHost())
-                || !url.getPath().startsWith("/Magral/Microgen/releases/download/defold-")) throw new IOException();
-        IOException lastFailure = null;
-        for (int retry = 0; retry < 3; retry++) {
-            url = initial;
+        if (!"github.com".equals(initial.getHost())
+                || !initial.getPath().startsWith("/Magral/Microgen/releases/download/defold-")) {
+            throw new UpdateFailure(-1, "Unexpected release URL");
+        }
+        for (int attempt = 1; ; attempt++) {
             digest.reset();
-            source.delete();
             try {
-              for (int redirect = 0; redirect < 8; redirect++) {
-                if (!"https".equals(url.getProtocol())) throw new IOException("HTTPS redirect required");
-                String host = url.getHost();
-            if (!"github.com".equals(host) && !"release-assets.githubusercontent.com".equals(host)
-                    && !"objects.githubusercontent.com".equals(host)
-                    && !"github-releases.githubusercontent.com".equals(host)) throw new IOException();
+                fetchOnce(initial, source, size, digest);
+                return;
+            } catch (IOException failure) {
+                source.delete();
+                if (attempt == 3 || (failure instanceof UpdateFailure && !((UpdateFailure) failure).retryable)) {
+                    throw failure;
+                }
+                try {
+                    Thread.sleep(700L * attempt);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("Download retry interrupted", interrupted);
+                }
+            }
+        }
+    }
+
+    private static void fetchOnce(URL url, File source, int size, MessageDigest digest) throws IOException {
+        for (int redirect = 0; redirect < 8; redirect++) {
+            String host = url.getHost();
+            if (!"https".equals(url.getProtocol())
+                    || !("github.com".equals(host) || "release-assets.githubusercontent.com".equals(host)
+                    || "objects.githubusercontent.com".equals(host) || "github-releases.githubusercontent.com".equals(host))) {
+                throw new UpdateFailure(-1, "Untrusted release URL");
+            }
             HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
             connection.setInstanceFollowRedirects(false);
             connection.setRequestProperty("Accept-Encoding", "identity");
@@ -95,21 +123,16 @@ public final class Updater {
             connection.setReadTimeout(30000);
             try {
                 int code = connection.getResponseCode();
-                if (code >= 300 && code < 400) {
+                if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
                     String location = connection.getHeaderField("Location");
-                    if (location == null) throw new IOException("Redirect without Location");
-                    URL redirected = new URL(url, location);
-                    String nextHost = redirected.getHost();
-                    if (!"https".equals(redirected.getProtocol())
-                        || !("github.com".equals(nextHost)
-                            || "release-assets.githubusercontent.com".equals(nextHost)
-                            || "objects.githubusercontent.com".equals(nextHost)
-                            || "github-releases.githubusercontent.com".equals(nextHost)))
-                        throw new IOException("Untrusted redirect host: " + nextHost);
-                    url = redirected;
+                    if (location == null) throw new UpdateFailure(-6, "Redirect without Location");
+                    url = new URL(url, location);
                     continue;
                 }
-                if (code != 200) throw new UpdateFailure(-6, "HTTP " + code + " from " + host);
+                if (code != 200) {
+                    boolean retryable = code == 408 || code == 429 || code == 500 || code == 502 || code == 503 || code == 504;
+                    throw new UpdateFailure(-6, "HTTP " + code, retryable);
+                }
                 try (InputStream input = connection.getInputStream(); FileOutputStream output = new FileOutputStream(source)) {
                     byte[] buffer = new byte[65536];
                     int total = 0;
@@ -120,29 +143,14 @@ public final class Updater {
                         output.write(buffer, 0, count);
                         digest.update(buffer, 0, count);
                     }
-                    if (total != size) throw new UpdateFailure(-2, "APK size mismatch");
+                    if (total != size) throw new UpdateFailure(-2, "Incomplete APK", true);
                 }
                 return;
-              } finally {
+            } finally {
                 connection.disconnect();
-              }
-              }
-              throw new IOException("Too many redirects");
-            } 
-            catch (UpdateFailure rejected) {
-                throw rejected;
-            } catch (IOException transientFailure) {
-                lastFailure = transientFailure;
-                source.delete();
-                if (retry == 2) throw transientFailure;
-                try { Thread.sleep(700L * (retry + 1)); }
-                catch (InterruptedException interrupted) {
-                    Thread.currentThread().interrupt();
-                    throw new IOException("Download retry interrupted", interrupted);
-                }
             }
         }
-        throw lastFailure == null ? new IOException("Download failed") : lastFailure;
+        throw new UpdateFailure(-6, "Too many redirects");
     }
 
     private static boolean sameSignatures(Signature[] a, Signature[] b) {

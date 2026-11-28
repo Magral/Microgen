@@ -2141,17 +2141,17 @@ function init(self)
             }}}
         end
         local update=Updater.select({
-            update_fixture("1.5.14",false),
             update_fixture("1.5.15",false),
-            update_fixture("1.5.16",true),
-        },"1.5.14")
-        assert(update and update.label=="1.5.15" and update.size==4096
+            update_fixture("1.5.16",false),
+            update_fixture("1.5.17",true),
+        },"1.5.15")
+        assert(update and update.label=="1.5.16" and update.size==4096
             and update.sha==string.rep("a",64)
-            and update.url=="https://github.com/Magral/Microgen/releases/download/defold-1.5.15/Microgen-Defold-1.5.15.apk",
-            "Auto-update must select the verified stable APK newer than 1.5.14")
-        local current=update_fixture("1.5.14",false)
-        local next_release=update_fixture("1.5.15",false)
-        local checked=Updater.new("1.5.14",nil,false,function() end)
+            and update.url=="https://github.com/Magral/Microgen/releases/download/defold-1.5.16/Microgen-Defold-1.5.16.apk",
+            "Auto-update must select the verified stable APK newer than 1.5.15")
+        local current=update_fixture("1.5.15",false)
+        local next_release=update_fixture("1.5.16",false)
+        local checked=Updater.new("1.5.15",nil,false,function() end)
         local requests=0
         checked.request=function(url, method, callback)
             requests=requests+1
@@ -2164,7 +2164,7 @@ function init(self)
             end
         end
         checked:check()
-        assert(requests==2 and checked.state=="desktop" and checked.asset.label=="1.5.15",
+        assert(requests==2 and checked.state=="desktop" and checked.asset.label=="1.5.16",
             "A stale latest response must fall back to the release list")
         next_release.assets[1].digest=nil
         requests=0
@@ -2172,9 +2172,9 @@ function init(self)
         assert(checked.state=="incomplete","A newer release without a verified APK must not report current")
         assert(checked.asset==nil and not checked.needs_permission,
             "Incomplete check must clear stale verified metadata")
-        local malformed=update_fixture("1.5.16",false)
+        local malformed=update_fixture("1.5.17",false)
         table.insert(malformed.assets,1,false)
-        assert(Updater.select({malformed},"1.5.15").label=="1.5.16",
+        assert(Updater.select({malformed},"1.5.16").label=="1.5.17",
             "Malformed asset entries must not block valid assets")
         local installs,downloads,status=0,0,1
         local native={
@@ -2186,9 +2186,9 @@ function init(self)
             status=function() return status end,
             install=function() installs=installs+1; return 3 end,
         }
-        local lifecycle=Updater.new("1.5.14",native,false,function() end)
+        local lifecycle=Updater.new("1.5.15",native,false,function() end)
         lifecycle.request=function(_,_,callback)
-            callback(nil,nil,{status=200,response=json.encode(update_fixture("1.5.15",false))})
+            callback(nil,nil,{status=200,response=json.encode(update_fixture("1.5.16",false))})
         end
         lifecycle:install()
         assert(installs==0,"Unverified APK must not open the installer")
@@ -2220,7 +2220,7 @@ function init(self)
             {state="download_error",failure_code=-5,asset=update},
             {state="current"},
         }) do
-            fixture.installed="1.5.14"
+            fixture.installed="1.5.15"
             app.updater=fixture
             app:updates();check_window()
             local buttons=app.modal.buttons
